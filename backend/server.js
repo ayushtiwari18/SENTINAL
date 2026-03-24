@@ -4,18 +4,26 @@ const express = require('express');
 const cors = require('cors');
 const mongoose = require('mongoose');
 const morgan = require('morgan');
+const helmet = require('helmet');
 const connectDB = require('./src/config/database');
 const { initSocketServer } = require('./src/sockets/socketServer');
 const logger = require('./src/utils/logger');
+const { globalLimiter } = require('./src/middleware/rateLimiter');
 
 const app = express();
 const httpServer = http.createServer(app);
+
+// Security headers
+app.use(helmet());
+
+// Global rate limiter
+app.use(globalLimiter);
 
 // Middleware
 app.use(cors());
 app.use(express.json());
 
-// HTTP request logging via Morgan → Winston
+// HTTP request logging
 if (process.env.NODE_ENV !== 'test') {
   app.use(morgan('combined', { stream: logger.stream }));
 }

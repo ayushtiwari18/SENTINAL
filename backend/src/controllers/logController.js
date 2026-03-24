@@ -1,19 +1,9 @@
 const logService = require('../services/logService');
 
+// Validation now handled by Joi middleware — controller stays thin
 const ingest = async (req, res, next) => {
   try {
-    const { projectId, method, url, ip } = req.body;
-
-    if (!projectId || !method || !url || !ip) {
-      return res.status(400).json({
-        success: false,
-        message: 'projectId, method, url, and ip are required',
-        code: 'VALIDATION_ERROR'
-      });
-    }
-
     const log = await logService.ingestLog(req.body);
-
     res.status(201).json({
       success: true,
       message: 'Log ingested successfully',

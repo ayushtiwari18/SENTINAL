@@ -1,0 +1,15 @@
+Express Router
+│
+├── GET  /health              → healthController.getHealth
+├── POST /api/logs/ingest     → logController.ingest
+├── POST /api/attacks/report  → attackController.report
+└── GET  /api/stats           → statsController.getStats
+         │
+         ▼
+    Controllers (thin — validate, call service, respond)
+         │
+         ▼
+    Services (fat — business logic, DB calls)
+         │
+         ▼
+    Models (SystemLog, AttackEvent, Alert, ServiceStatus)

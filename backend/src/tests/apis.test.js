@@ -55,13 +55,15 @@ describe("POST /api/logs/ingest", () => {
     expect(res.body.code).toBe('VALIDATION_ERROR');
   });
 
-  it("should reject invalid HTTP method", async () => {
-    const res = await request(app).post('/api/logs/ingest').send({
-      projectId: 'proj_x', method: 'HACK', url: '/test', ip: '1.1.1.1'
-    });
-    expect(res.status).toBe(500); // Mongoose enum validation hits global handler
-    expect(res.body.success).toBe(false);
+it("should reject invalid HTTP method", async () => {
+  const res = await request(app).post('/api/logs/ingest').send({
+    projectId: 'proj_x', method: 'HACK', url: '/test', ip: '1.1.1.1'
   });
+  expect(res.status).toBe(400); // Joi catches this before Mongoose
+  expect(res.body.success).toBe(false);
+  expect(res.body.code).toBe('VALIDATION_ERROR');
+});
+
 
 });
 

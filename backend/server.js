@@ -3,8 +3,10 @@ const http = require('http');
 const express = require('express');
 const cors = require('cors');
 const mongoose = require('mongoose');
+const morgan = require('morgan');
 const connectDB = require('./src/config/database');
 const { initSocketServer } = require('./src/sockets/socketServer');
+const logger = require('./src/utils/logger');
 
 const app = express();
 const httpServer = http.createServer(app);
@@ -12,6 +14,11 @@ const httpServer = http.createServer(app);
 // Middleware
 app.use(cors());
 app.use(express.json());
+
+// HTTP request logging via Morgan → Winston
+if (process.env.NODE_ENV !== 'test') {
+  app.use(morgan('combined', { stream: logger.stream }));
+}
 
 // Routes
 app.use('/api/logs',    require('./src/routes/logs'));
@@ -44,7 +51,7 @@ app.use((req, res) => {
 
 // Global Error Handler
 app.use((err, req, res, next) => {
-  console.error(`[ERROR] ${err.message}`);
+  logger.error(err.message);
   res.status(500).json({
     success: false,
     message: 'Internal server error',
@@ -58,10 +65,9 @@ if (process.env.NODE_ENV !== 'test') {
   connectDB().then(() => {
     initSocketServer(httpServer);
     httpServer.listen(PORT, () => {
-      console.log(`[SERVER] SENTINEL Gateway running on port ${PORT}`);
+      logger.info(`SENTINEL Gateway running on port ${PORT}`);
     });
   });
 }
 
-// Export both for tests
 module.exports = { app, httpServer };

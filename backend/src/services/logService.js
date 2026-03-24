@@ -1,6 +1,7 @@
 const SystemLog = require('../models/SystemLog');
 const detectionConnector = require('./detectionConnector');
 const attackService = require('./attackService');
+const logger = require('../utils/logger');
 
 const ingestLog = async (data) => {
   const log = await SystemLog.create({
@@ -15,10 +16,7 @@ const ingestLog = async (data) => {
     processingTimeMs: data.processingTimeMs || 0
   });
 
-  // Skip async detection in test environment to prevent async leaks
-  if (process.env.NODE_ENV === 'test') {
-    return log;
-  }
+  if (process.env.NODE_ENV === 'test') return log;
 
   setImmediate(async () => {
     try {
@@ -39,7 +37,7 @@ const ingestLog = async (data) => {
         });
       }
     } catch (err) {
-      console.error(`[LOG_SERVICE] Post-ingest detection error: ${err.message}`);
+      logger.error(`[LOG_SERVICE] Post-ingest detection error: ${err.message}`);
     }
   });
 

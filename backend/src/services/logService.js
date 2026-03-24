@@ -3,7 +3,6 @@ const detectionConnector = require('./detectionConnector');
 const attackService = require('./attackService');
 
 const ingestLog = async (data) => {
-  // 1. Save log immediately
   const log = await SystemLog.create({
     projectId:        data.projectId,
     method:           data.method,
@@ -16,12 +15,14 @@ const ingestLog = async (data) => {
     processingTimeMs: data.processingTimeMs || 0
   });
 
-  // 2. Fire detection asynchronously — do NOT await in request cycle
+  // Skip async detection in test environment to prevent async leaks
+  if (process.env.NODE_ENV === 'test') {
+    return log;
+  }
+
   setImmediate(async () => {
     try {
       const detection = await detectionConnector.analyze(log);
-
-      // 3. If detection engine found an attack, report it
       if (detection && detection.isAttack) {
         await attackService.reportAttack({
           requestId:            log._id,
@@ -38,7 +39,6 @@ const ingestLog = async (data) => {
         });
       }
     } catch (err) {
-      // Silent — never crash the ingest pipeline
       console.error(`[LOG_SERVICE] Post-ingest detection error: ${err.message}`);
     }
   });

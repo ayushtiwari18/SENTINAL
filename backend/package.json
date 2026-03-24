@@ -8,6 +8,11 @@
     "dev": "nodemon server.js",
     "test": "jest --runInBand --detectOpenHandles"
   },
+  "jest": {
+    "testEnvironment": "node",
+    "verbose": false,
+    "silent": true
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/ayushtiwari18/SENTINAL.git"

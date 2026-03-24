@@ -25,7 +25,7 @@ const getStats = async () => {
     AttackEvent.find({})
       .sort({ createdAt: -1 })
       .limit(10)
-      .select('ip attackType severity status detectedBy confidence createdAt -__v')
+      .select('ip attackType severity status detectedBy confidence createdAt')
   ]);
 
   return {

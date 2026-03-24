@@ -9,7 +9,8 @@ const getStats = async () => {
     totalAlerts,
     unreadAlerts,
     attacksByType,
-    attacksBySeverity
+    attacksBySeverity,
+    recentAttacks
   ] = await Promise.all([
     SystemLog.countDocuments(),
     AttackEvent.countDocuments(),
@@ -20,7 +21,11 @@ const getStats = async () => {
     ]),
     AttackEvent.aggregate([
       { $group: { _id: '$severity', count: { $sum: 1 } } }
-    ])
+    ]),
+    AttackEvent.find({})
+      .sort({ createdAt: -1 })
+      .limit(10)
+      .select('ip attackType severity status detectedBy confidence createdAt -__v')
   ]);
 
   return {
@@ -29,7 +34,8 @@ const getStats = async () => {
     totalAlerts,
     unreadAlerts,
     attacksByType:     Object.fromEntries(attacksByType.map(a => [a._id, a.count])),
-    attacksBySeverity: Object.fromEntries(attacksBySeverity.map(a => [a._id, a.count]))
+    attacksBySeverity: Object.fromEntries(attacksBySeverity.map(a => [a._id, a.count])),
+    recentAttacks
   };
 };
 

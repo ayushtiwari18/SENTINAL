@@ -1,5 +1,5 @@
 const request = require('supertest');
-const app = require('../../server');
+const { app } = require('../../server');   // ← destructure now
 
 describe("Health Check API", () => {
 
@@ -28,7 +28,7 @@ describe("Health Check API", () => {
     const res = await request(app).get('/nonexistent');
     expect(res.status).toBe(404);
     expect(res.body.success).toBe(false);
-    expect(res.body.code).toBe("NOT_FOUND");
+    expect(res.body.code).toBe('NOT_FOUND');
   });
 
 });

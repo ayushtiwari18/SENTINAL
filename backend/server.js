@@ -1,10 +1,13 @@
 require('dotenv').config();
+const http = require('http');
 const express = require('express');
 const cors = require('cors');
 const mongoose = require('mongoose');
 const connectDB = require('./src/config/database');
+const { initSocketServer } = require('./src/sockets/socketServer');
 
 const app = express();
+const httpServer = http.createServer(app);
 
 // Middleware
 app.use(cors());
@@ -22,9 +25,9 @@ app.get('/health', (req, res) => {
     success: true,
     message: 'Operation successful',
     data: {
-      status: 'ok',
-      uptime: process.uptime(),
-      dbStatus: dbState === 1 ? 'connected' : 'disconnected',
+      status:    'ok',
+      uptime:    process.uptime(),
+      dbStatus:  dbState === 1 ? 'connected' : 'disconnected',
       timestamp: new Date().toISOString()
     }
   });
@@ -50,12 +53,15 @@ app.use((err, req, res, next) => {
 });
 
 const PORT = process.env.PORT || 3000;
+
 if (process.env.NODE_ENV !== 'test') {
   connectDB().then(() => {
-    app.listen(PORT, () => {
+    initSocketServer(httpServer);
+    httpServer.listen(PORT, () => {
       console.log(`[SERVER] SENTINEL Gateway running on port ${PORT}`);
     });
   });
 }
 
-module.exports = app;
+// Export both for tests
+module.exports = { app, httpServer };

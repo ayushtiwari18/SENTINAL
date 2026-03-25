@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from app.schemas import AnalyzeRequest
 from app.rules import run_rules
 from app.classifier import score_request
+from app.explainer import explain
 import json
 
 app = FastAPI(title="SENTINEL Detection Engine", version="1.0.0")
@@ -40,6 +41,12 @@ def analyze(request: AnalyzeRequest):
     score = score_request(request_data, rule_match)
 
     if rule_match:
+        explanation = explain(
+            threat_type = rule_match["threat_type"],
+            rule_id     = rule_match["rule_id"],
+            severity    = score["severity"],
+            ip          = request.ip or "unknown"
+        )
         return {
             "logId":            request.logId,
             "threat_detected":  True,
@@ -47,6 +54,7 @@ def analyze(request: AnalyzeRequest):
             "rule_id":          rule_match["rule_id"],
             "confidence":       score["confidence"],
             "severity":         score["severity"],
+            "explanation":      explanation,
             "message":          f"Rule {rule_match['rule_id']} matched: {rule_match['threat_type']}"
         }
 
@@ -57,5 +65,6 @@ def analyze(request: AnalyzeRequest):
         "rule_id":          None,
         "confidence":       0.0,
         "severity":         "none",
+        "explanation":      None,
         "message":          "No threats detected"
     }

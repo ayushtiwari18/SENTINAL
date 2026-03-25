@@ -15,15 +15,15 @@ app = FastAPI(title="SENTINAL PCAP Processor", version="1.0.0")
 
 
 class ProcessRequest(BaseModel):
-    filepath: str          # absolute or relative path to .pcap file on disk
+    filepath: str
     projectId: str = "pcap-upload"
 
 
 class ProcessResponse(BaseModel):
-    analyzed:     int
+    analyzed:      int
     attacks_found: int
-    attacks:      list[dict]
-    skipped:      int       # packets that failed detection call
+    attacks:       list[dict]
+    skipped:       int
 
 
 @app.get("/health")
@@ -36,7 +36,6 @@ async def process_pcap(req: ProcessRequest):
     if not os.path.exists(req.filepath):
         raise HTTPException(status_code=404, detail=f"File not found: {req.filepath}")
 
-    # Step 1 — parse packets
     try:
         http_requests = parse_http_from_pcap(req.filepath)
     except Exception as e:
@@ -45,7 +44,6 @@ async def process_pcap(req: ProcessRequest):
     if not http_requests:
         return ProcessResponse(analyzed=0, attacks_found=0, attacks=[], skipped=0)
 
-    # Step 2 — send each request to Detection Engine concurrently (batches of 20)
     attacks = []
     skipped = 0
     BATCH = 20
@@ -60,8 +58,8 @@ async def process_pcap(req: ProcessRequest):
                 if isinstance(result, Exception):
                     skipped += 1
                     continue
-                if result and result.get("isAttack"):
-                    # Merge source IP + url back into result for Gateway
+                # Detection Engine returns threat_detected, NOT isAttack
+                if result and result.get("threat_detected"):
                     result["ip"]  = batch[i]["ip"]
                     result["url"] = batch[i]["url"]
                     attacks.append(result)
@@ -75,7 +73,6 @@ async def process_pcap(req: ProcessRequest):
 
 
 async def _analyze(client: httpx.AsyncClient, req: dict) -> dict | None:
-    """Send one request dict to Detection Engine. Returns detection result or None."""
     try:
         resp = await client.post(ANALYZE_ENDPOINT, json=req)
         if resp.status_code == 200:

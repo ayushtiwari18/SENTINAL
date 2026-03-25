@@ -12,7 +12,22 @@ const logger      = require('../utils/logger');
 
 const PCAP_SERVICE_URL = process.env.PCAP_SERVICE_URL || 'http://localhost:8001';
 
-// Multer — save to /tmp/uploads, accept only .pcap
+// Same map as logService.js — single source of truth for threat_type → enum
+const ATTACK_TYPE_MAP = {
+  'SQL Injection':            'sqli',
+  'XSS':                      'xss',
+  'Path Traversal':           'traversal',
+  'Command Injection':        'command_injection',
+  'SSRF':                     'ssrf',
+  'LFI/RFI':                  'lfi_rfi',
+  'Brute Force':              'brute_force',
+  'HTTP Parameter Pollution': 'hpp',
+  'XXE':                      'xxe',
+  'Webshell':                 'webshell',
+  'Typosquatting':            'unknown',
+};
+
+// Multer — save to /tmp/sentinal-uploads, accept only .pcap
 const upload = multer({
   dest: path.join('/tmp', 'sentinal-uploads'),
   limits: { fileSize: 100 * 1024 * 1024 }, // 100MB max
@@ -31,9 +46,11 @@ const upload = multer({
  *
  * Flow:
  *   1. multer saves file to /tmp/sentinal-uploads/<uuid>
- *   2. POST filepath to PCAP service  → get { analyzed, attacks_found, attacks[] }
- *   3. For each attack: save SystemLog + AttackEvent to MongoDB
- *   4. Emit attack:new for each confirmed attack (dashboard picks it up live)
+ *   2. POST filepath to PCAP service → { analyzed, attacks_found, attacks[] }
+ *      Each attack in attacks[] is the raw Detection Engine response:
+ *        { threat_detected, threat_type, severity, confidence, status, explanation, ... }
+ *   3. For each where threat_detected === true: save SystemLog + AttackEvent
+ *   4. Emit attack:new per confirmed attack (dashboard live feed picks it up)
  *   5. Delete tmp file
  *   6. Return summary
  */
@@ -45,72 +62,74 @@ router.post('/upload', upload.single('pcap'), async (req, res) => {
   const tmpPath = req.file.path;
 
   try {
-    // Step 2 — ask PCAP service to process the file
+    // Step 2 — send to PCAP service
     const pcapResp = await axios.post(`${PCAP_SERVICE_URL}/process`, {
       filepath:  tmpPath,
       projectId: req.body.projectId || 'pcap-upload',
-    }, { timeout: 120_000 }); // 2 min timeout for large files
+    }, { timeout: 120_000 });
 
     const { analyzed, attacks_found, attacks, skipped } = pcapResp.data;
 
-    // Step 3 + 4 — persist each attack, emit socket event
+    // Step 3 + 4 — persist and emit each confirmed attack
     const savedAttacks = [];
 
     for (const a of attacks) {
+      // Detection Engine uses threat_detected (not isAttack) — match logService.js
+      if (!a.threat_detected) continue;
+
       try {
-        // Save a minimal SystemLog so AttackEvent has a requestId
+        // Save SystemLog so AttackEvent has a valid requestId FK
         const log = await SystemLog.create({
           projectId:    req.body.projectId || 'pcap-upload',
-          method:       a.method  || 'GET',
-          url:          a.url     || '/',
-          ip:           a.ip      || '0.0.0.0',
+          method:       a.method      || 'GET',
+          url:          a.url         || '/',
+          ip:           a.ip          || '0.0.0.0',
           responseCode: a.responseCode ?? null,
           queryParams:  a.queryParams  || {},
           body:         a.body         || {},
           headers:      a.headers      || {},
         });
 
-        // Normalise attackType — Detection Engine may return values not in enum
-        const VALID_TYPES = ['sqli','xss','traversal','command_injection','ssrf','lfi_rfi','brute_force','hpp','xxe','webshell'];
-        const attackType  = VALID_TYPES.includes(a.attackType) ? a.attackType : 'unknown';
+        // Map threat_type string → AttackEvent enum (same as logService.js)
+        const attackType = ATTACK_TYPE_MAP[a.threat_type] || 'unknown';
 
-        // Normalise status from responseCode
+        // Derive status from responseCode
         let status = 'attempt';
         if (a.responseCode) {
           status = (a.responseCode >= 200 && a.responseCode < 400) ? 'successful' : 'blocked';
         }
 
         const attack = await AttackEvent.create({
-          requestId:   log._id,
-          ip:          a.ip          || '0.0.0.0',
+          requestId:    log._id,
+          ip:           a.ip          || '0.0.0.0',
           attackType,
-          severity:    a.severity    || 'medium',
+          severity:     a.severity    || 'medium',
           status,
-          detectedBy:  a.detectedBy  || 'rule',
-          confidence:  a.confidence  ?? 1.0,
-          payload:     a.payload     || '',
-          explanation: a.explanation || '',
+          detectedBy:   'rule',           // PCAP path always goes through rule engine
+          confidence:   a.confidence  ?? 1.0,
+          payload:      a.url          || '',
+          explanation:  a.explanation ? JSON.stringify(a.explanation) : '',
+          mitigationSuggestion: a.explanation?.recommended_action || '',
           responseCode: a.responseCode ?? null,
         });
 
         savedAttacks.push(attack);
 
-        // Emit to dashboard — same event the live feed listens to
+        // Emit — dashboard live feed receives this immediately
         emitter.emit('attack:new', {
-          id:          attack._id,
-          ip:          attack.ip,
-          attackType:  attack.attackType,
-          severity:    attack.severity,
-          status:      attack.status,
-          detectedBy:  attack.detectedBy,
-          confidence:  attack.confidence,
-          url:         log.url,
-          timestamp:   attack.timestamp,
-          source:      'pcap',
+          id:         attack._id,
+          ip:         attack.ip,
+          attackType: attack.attackType,
+          severity:   attack.severity,
+          status:     attack.status,
+          detectedBy: attack.detectedBy,
+          confidence: attack.confidence,
+          url:        log.url,
+          timestamp:  attack.createdAt,
+          source:     'pcap',
         });
 
       } catch (saveErr) {
-        // Don't abort — log and continue
         logger.error(`[PCAP] Failed to save attack: ${saveErr.message}`);
       }
     }
@@ -134,7 +153,7 @@ router.post('/upload', upload.single('pcap'), async (req, res) => {
     });
 
   } finally {
-    // Step 5 — always delete the tmp file
+    // Always delete the tmp file regardless of outcome
     fs.unlink(tmpPath, () => {});
   }
 });

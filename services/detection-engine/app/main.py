@@ -4,17 +4,17 @@ from app.schemas import AnalyzeRequest
 from app.rules import run_rules
 from app.classifier import score_request
 from app.explainer import explain
+from app.decoder import decode_and_scan
+from app.features import extract_features
 import json
 import logging
 import time
 
-# Logger setup
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("detection-engine")
 
 app = FastAPI(title="SENTINEL Detection Engine", version="1.0.0")
 
-# CORS — allow Gateway and Dashboard
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -41,6 +41,7 @@ def health():
 @app.post("/analyze")
 def analyze(request: AnalyzeRequest):
     try:
+        # Build combined string
         parts = []
         if request.url:
             parts.append(request.url)
@@ -52,8 +53,28 @@ def analyze(request: AnalyzeRequest):
             parts.append(json.dumps(request.headers))
 
         combined = " ".join(parts)
-        rule_match = run_rules(combined)
 
+        # Layer 3 — Adversarial decoder + Layer 1 rules
+        scan_result = decode_and_scan(combined, run_rules)
+        rule_match = scan_result["match"]
+        adversarial_decoded = scan_result["adversarial_decoded"]
+
+        # Layer 2 — Feature extraction (ready for ML model)
+        features = extract_features(request.url or "")
+
+        # Layer 4 — Success determination
+        response_code = request.queryParams.get("responseCode") if request.queryParams else None
+        if isinstance(response_code, str):
+            response_code = int(response_code) if response_code.isdigit() else None
+
+        if response_code and 200 <= response_code <= 302:
+            attack_status = "successful"
+        elif response_code and response_code in [403, 404, 500]:
+            attack_status = "blocked"
+        else:
+            attack_status = "unknown"
+
+        # Layer 6 — Scoring
         request_data = {
             "method": request.method,
             "body": request.body
@@ -62,32 +83,41 @@ def analyze(request: AnalyzeRequest):
 
         if rule_match:
             explanation = explain(
-                threat_type = rule_match["threat_type"],
-                rule_id     = rule_match["rule_id"],
-                severity    = score["severity"],
-                ip          = request.ip or "unknown"
+                threat_type=rule_match["threat_type"],
+                rule_id=rule_match["rule_id"],
+                severity=score["severity"],
+                ip=request.ip or "unknown"
             )
-            logger.warning(f"THREAT DETECTED: {rule_match['threat_type']} from {request.ip} confidence={score['confidence']}")
+            logger.warning(
+                f"THREAT: {rule_match['threat_type']} from {request.ip} "
+                f"confidence={score['confidence']} encoded={adversarial_decoded}"
+            )
             return {
-                "logId":           request.logId,
-                "threat_detected": True,
-                "threat_type":     rule_match["threat_type"],
-                "rule_id":         rule_match["rule_id"],
-                "confidence":      score["confidence"],
-                "severity":        score["severity"],
-                "explanation":     explanation,
-                "message":         f"Rule {rule_match['rule_id']} matched: {rule_match['threat_type']}"
+                "logId":               request.logId,
+                "threat_detected":     True,
+                "threat_type":         rule_match["threat_type"],
+                "rule_id":             rule_match["rule_id"],
+                "confidence":          score["confidence"],
+                "severity":            score["severity"],
+                "status":              attack_status,
+                "adversarial_decoded": adversarial_decoded,
+                "features":            features,
+                "explanation":         explanation,
+                "message":             f"Rule {rule_match['rule_id']} matched: {rule_match['threat_type']}"
             }
 
         return {
-            "logId":           request.logId,
-            "threat_detected": False,
-            "threat_type":     None,
-            "rule_id":         None,
-            "confidence":      0.0,
-            "severity":        "none",
-            "explanation":     None,
-            "message":         "No threats detected"
+            "logId":               request.logId,
+            "threat_detected":     False,
+            "threat_type":         None,
+            "rule_id":             None,
+            "confidence":          0.0,
+            "severity":            "none",
+            "status":              attack_status,
+            "adversarial_decoded": False,
+            "features":            features,
+            "explanation":         None,
+            "message":             "No threats detected"
         }
 
     except Exception as e:
@@ -99,6 +129,7 @@ def analyze(request: AnalyzeRequest):
             "rule_id":         None,
             "confidence":      0.0,
             "severity":        "none",
+            "status":          "unknown",
             "explanation":     None,
             "message":         "Analysis error — request logged"
         }

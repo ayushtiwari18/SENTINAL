@@ -14,3 +14,13 @@ export const getRecentLogs     = (n = 50) => api.get(`/api/logs/recent?limit=${n
 export const getServiceStatus  = ()       => api.get('/api/service-status').then(unwrap);
 export const getHealth         = ()       => api.get('/api/health').then(unwrap);
 export const getIpIntel        = (ip)     => api.get(`/api/intel/${ip}`).then(unwrap);
+
+// PCAP upload — multipart/form-data
+export const uploadPcap = (file, projectId = 'pcap-upload') => {
+  const form = new FormData();
+  form.append('pcap', file);
+  form.append('projectId', projectId);
+  return api.post('/api/pcap/upload', form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  }).then(unwrap);
+};

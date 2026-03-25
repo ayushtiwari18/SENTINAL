@@ -1,16 +1,17 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import AppLayout    from './components/AppLayout';
-import Landing      from './pages/Landing';
-import Dashboard   from './pages/Dashboard';
-import Attacks     from './pages/Attacks';
+import AppLayout     from './components/AppLayout';
+import Landing       from './pages/Landing';
+import Dashboard    from './pages/Dashboard';
+import Attacks      from './pages/Attacks';
 import ForensicsPage from './pages/ForensicsPage';
-import Alerts      from './pages/Alerts';
-import Logs        from './pages/Logs';
-import Services    from './pages/Services';
-import Settings    from './pages/Settings';
-import Docs        from './pages/Docs';
-import NotFound    from './pages/NotFound';
+import Alerts       from './pages/Alerts';
+import Logs         from './pages/Logs';
+import Services     from './pages/Services';
+import Settings     from './pages/Settings';
+import Docs         from './pages/Docs';
+import PcapAnalyzer from './pages/PcapAnalyzer';
+import NotFound     from './pages/NotFound';
 
 export default function App() {
   return (
@@ -23,6 +24,7 @@ export default function App() {
           <Route path="/attacks/:id" element={<ForensicsPage />} />
           <Route path="/alerts"    element={<Alerts />} />
           <Route path="/logs"      element={<Logs />} />
+          <Route path="/pcap"      element={<PcapAnalyzer />} />
           <Route path="/services"  element={<Services />} />
           <Route path="/settings"  element={<Settings />} />
           <Route path="/docs"      element={<Docs />} />

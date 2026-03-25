@@ -6,6 +6,7 @@ const LINKS = [
   { to: '/attacks',   label: 'Attacks' },
   { to: '/alerts',    label: 'Alerts' },
   { to: '/logs',      label: 'Logs' },
+  { to: '/pcap',      label: 'PCAP' },
   { to: '/services',  label: 'Services' },
   { to: '/settings',  label: 'Settings' },
   { to: '/docs',      label: 'Docs' },

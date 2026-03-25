@@ -1,125 +1,176 @@
-# Route: `/attacks/:id` — Forensics Report
+# Route: `/attacks/:id` — Forensic Investigation
 
 ## Purpose
 Full forensic investigation page for a single attack event.
-Shows everything: raw request, AI explanation, IP history, attack chain timeline.
+The operator lands here from the Attacks table by clicking "Investigate".
+Shows the complete evidence record: attack metadata, raw request,
+AI explanation, IP intelligence, and attack chain timeline.
+
+## Inspiration
+- https://vercel.com/deployments/:id — tabbed detail page, clear sections
+- https://grafana.com — evidence block layout, timeline visualization
+- Security tool incident report pages — structured evidence sections
 
 ---
 
 ## Layout
 
 ```
-[← Back to Attacks]
+[PageWrapper fade-in]
 
-[Attack header: type badge | severity badge | status | timestamp]
+[Back button]  ← Back to Attacks
 
-Row 1 (2 columns):
-  [Attack Details]           [IP Intelligence]
-  type, severity,            IP, requests 24h,
-  status, confidence,        total attacks ever,
-  detected by,               first/last seen,
-  response code              attack types seen
+Page Title: "Forensic Report"
+Subtitle: Attack ID: <id> | <attackType> | <SeverityBadge>
 
-Row 2 (full width):
-  [Raw Request]
-  method | url | headers | body | query params
+[Section 1: Attack Summary]
+  Panel — title: "Attack Summary"
+  Two-column grid:
+    Left:  Type / Severity / Status / Detected By / Confidence / Timestamp
+    Right: Payload (code block) + AI Explanation (parsed)
 
-Row 3 (full width):
-  [AI Explanation]
-  parsed JSON: summary, what_happened, potential_impact, recommended_action
+[Section 2: AI Explanation]
+  Panel — title: "AI Analysis"
+  Fields from parsed explanation JSON:
+    Summary      — body text
+    What Happened — body text
+    Potential Impact — body text
+    Recommended Action — highlighted box
+    Rule Triggered — mono tag
 
-Row 4 (full width):
-  [Attack Chain Timeline]
-  pattern label
-  timeline table: time | method | url | response code
+[Section 3: Raw HTTP Request]
+  Panel — title: "Raw Request"
+  If null: "Raw request data unavailable."
+  Fields: Method | URL | IP | Response Code
+  Headers: code block
+  Query Params: code block
+  Body: code block
+
+[Section 4: IP Intelligence]
+  Panel — title: "IP Intelligence"
+  Fields: IP | Requests (24h) | Total Attacks | First Attack | Last Attack
+  Attack Types Seen: tag list
+
+[Section 5: Attack Chain]
+  Panel — title: "Attack Chain"
+  Pattern label: highlighted
+  Timeline table: Time | Method | URL | Code
+  If timeline empty: "Single isolated request."
 ```
 
 ---
 
-## Data Source
+## Component Tree
 
-- **API**: `GET /api/attacks/:id/forensics`
-- **URL param**: `:id` is the MongoDB `_id` of the AttackEvent
-- **Full response shape**:
-  ```json
-  {
-    "success": true,
-    "message": "Operation successful",
-    "data": {
-      "attack": {
-        "id":          "ObjectId string",
-        "attackType":  "sqli",
-        "severity":    "high",
-        "confidence":  0.92,
-        "status":      "attempt",
-        "detectedBy":  "rule",
-        "payload":     "' OR 1=1 --",
-        "explanation": "{\"summary\":\"...\",\"what_happened\":\"...\",\"potential_impact\":\"...\",\"recommended_action\":\"...\"}",
-        "timestamp":   "2026-03-25T10:00:00.000Z"
-      },
-      "raw_request": {
-        "method":      "POST",
-        "url":         "/api/login?input=%27+OR+1%3D1+--",
-        "ip":          "192.168.1.101",
-        "headers":     { "userAgent": "...", "contentType": "...", "referer": "" },
-        "body":        {},
-        "queryParams": { "input": "' OR 1=1 --" },
-        "responseCode": 200
-      },
-      "ip_intel": {
-        "ip":                  "192.168.1.101",
-        "total_requests_24h": 14,
-        "total_attacks_ever": 6,
-        "first_attack":       "2026-03-24T08:00:00.000Z",
-        "last_attack":        "2026-03-25T10:00:00.000Z",
-        "attack_types_seen":  ["sqli", "xss", "traversal"]
-      },
-      "attack_chain": {
-        "timeline": [
-          { "time": "2026-03-25T09:55:00.000Z", "method": "GET", "url": "/login", "code": 200 },
-          { "time": "2026-03-25T10:00:00.000Z", "method": "POST", "url": "/api/login", "code": 200 }
-        ],
-        "pattern_label": "Focused single-vector attack",
-        "all_attacks": [ ...AttackEvent objects... ]
-      }
-    }
-  }
-  ```
+```
+ForensicsPage.jsx (page)
+├── PageWrapper
+├── back button + title header
+├── RawRequestBlock.jsx
+├── IpIntelBlock.jsx
+└── AttackChainTimeline.jsx
+```
 
 ---
 
-## Explanation Field Parsing
+## API Call
 
-The `attack.explanation` field is a **JSON string** serialized from the LLM response.
-Always parse it:
+- **Endpoint**: `GET /api/attacks/:id/forensics`
+- **Function**: `getForensics(id)` from `services/api.js`
+- **Trigger**: On mount, using `id` from `useParams()`
+- **No polling** — forensics data is static per attack
+- **No socket** — this is a read-only investigation page
 
-```js
-let explanation = {};
-try {
-  explanation = JSON.parse(data.attack.explanation);
-} catch {
-  explanation = { summary: data.attack.explanation };
+**Response shape** (`response.data.data`):
+```json
+{
+  "attack": {
+    "id":          "ObjectId",
+    "attackType":  "sqli",
+    "severity":    "high",
+    "confidence":  0.92,
+    "status":      "attempt",
+    "detectedBy":  "rule",
+    "payload":     "' OR 1=1 --",
+    "explanation": "{\"summary\":\"...\",\"what_happened\":\"...\",\"potential_impact\":\"...\",\"recommended_action\":\"...\",\"rule_triggered\":\"...\"}",
+    "timestamp":   "ISO timestamp"
+  },
+  "raw_request": {
+    "method":       "POST",
+    "url":          "/api/login",
+    "ip":           "192.168.1.101",
+    "headers":      { "userAgent": "...", "contentType": "...", "referer": "" },
+    "body":         {},
+    "queryParams":  {},
+    "responseCode": 200
+  },
+  "ip_intel": {
+    "ip":                 "192.168.1.101",
+    "total_requests_24h": 14,
+    "total_attacks_ever": 6,
+    "first_attack":       "ISO timestamp or null",
+    "last_attack":        "ISO timestamp or null",
+    "attack_types_seen":  ["sqli", "xss"]
+  },
+  "attack_chain": {
+    "timeline": [
+      { "time": "ISO", "method": "GET", "url": "/login", "code": 200 }
+    ],
+    "pattern_label": "Focused single-vector attack",
+    "all_attacks":   []
+  }
 }
 ```
 
-Expected keys after parse:
-- `explanation.summary`
-- `explanation.what_happened`
-- `explanation.potential_impact`
-- `explanation.recommended_action`
-- `explanation.rule_triggered` (may be absent)
+---
 
-**PITFALL**: Do not render `attack.explanation` as raw string. Always try to parse first.
+## Field Mapping
+
+| UI Element | Source | Notes |
+|-----------|--------|-------|
+| Attack type | `data.attack.attackType` | `<AttackTypeTag>` |
+| Severity | `data.attack.severity` | `<SeverityBadge>` |
+| Status | `data.attack.status` | `STATUS_COLORS[data.attack.status]` |
+| Confidence | `data.attack.confidence` | `formatConf()` |
+| Detected By | `data.attack.detectedBy` | plain text |
+| Timestamp | `data.attack.timestamp` | `formatDate()` |
+| Payload | `data.attack.payload` | `<pre>` block, mono font |
+| Explanation | `data.attack.explanation` | `parseExplanation()` — JSON string |
+| Raw Request | `data.raw_request` | null-check: `data.raw_request ?? null` |
+| Response Code | `data.raw_request?.responseCode` | null → `'—'` |
+| IP | `data.ip_intel.ip` | mono font |
+| Requests 24h | `data.ip_intel.total_requests_24h` | number |
+| Total Attacks | `data.ip_intel.total_attacks_ever` | number |
+| First Attack | `data.ip_intel.first_attack` | `formatDate()`, null → `'—'` |
+| Last Attack | `data.ip_intel.last_attack` | `formatDate()`, null → `'—'` |
+| Types Seen | `data.ip_intel.attack_types_seen` | Tag list |
+| Pattern | `data.attack_chain.pattern_label` | highlighted text |
+| Timeline | `data.attack_chain.timeline[]` | `time/method/url/code` |
 
 ---
 
-## Files
-```
-src/pages/ForensicsPage.jsx
-src/components/forensics/RawRequestBlock.jsx
-src/components/forensics/IpIntelBlock.jsx
-src/components/forensics/AttackChainTimeline.jsx
-```
+## States
+
+| State | Display |
+|-------|---------|
+| Loading | `<LoadingState message="Loading forensic report..." />` |
+| Error | `<ErrorState message="Forensic data unavailable" onRetry={refetch} />` |
+| 404 | Show: "Attack not found." + back button |
+| `raw_request` null | Panel shows: "Raw request data unavailable for this attack." |
+| Timeline empty | "Single isolated request — no chain detected." |
+| `attack_types_seen` empty | Show `'—'` |
+
+---
+
+## ⚠️ Pitfalls
+
+1. `attack.id` on forensics endpoint — NOT `attack._id`
+2. `attack.explanation` is a **JSON string** — ALWAYS use `parseExplanation()` from utils/format.js
+3. `raw_request` can be `null` — check before rendering any field
+4. `timeline[].code` is key `code` NOT `responseCode`
+5. `ip_intel.first_attack` and `last_attack` can be `null`
+6. `id` param from `useParams()` is the `_id` from the REST response (not socket `id`)
+7. No polling, no socket — load once on mount only
 
 ---
 
@@ -127,46 +178,59 @@ src/components/forensics/AttackChainTimeline.jsx
 
 ```
 You are building the Forensics page for SENTINAL.
+
 Route: /attacks/:id
-Data: GET /api/attacks/:id/forensics via getForensics(id) from src/services/api.js
+Get the id with: const { id } = useParams()
+Wrap in PageWrapper. AppLayout wraps via router.
 
-Steps:
-1. Extract id from URL using useParams()
-2. Call getForensics(id) on mount via useApi hook
-3. Parse attack.explanation with JSON.parse, fallback to { summary: raw string }
-4. Render 4 sections: Attack Details, Raw Request, AI Explanation, Attack Chain
+Data:
+1. Call getForensics(id) on mount ONLY — no polling, no socket
+2. API returns { attack, raw_request, ip_intel, attack_chain }
+   All inside response.data.data (NOT response.data)
 
-Key field names (exact):
-- data.attack.id              (NOT _id on this endpoint)
-- data.attack.attackType
-- data.attack.severity
-- data.attack.confidence
-- data.attack.status
-- data.attack.detectedBy
-- data.attack.payload
-- data.attack.explanation     (JSON string — must parse)
-- data.attack.timestamp
-- data.raw_request.method
-- data.raw_request.url
-- data.raw_request.ip
-- data.raw_request.headers    (object: userAgent, contentType, referer)
-- data.raw_request.body       (object)
-- data.raw_request.queryParams (object)
-- data.raw_request.responseCode
-- data.ip_intel.ip
-- data.ip_intel.total_requests_24h
-- data.ip_intel.total_attacks_ever
-- data.ip_intel.first_attack
-- data.ip_intel.last_attack
-- data.ip_intel.attack_types_seen  (array of strings)
-- data.attack_chain.timeline   (array of { time, method, url, code })
-- data.attack_chain.pattern_label
+CRITICAL:
+- attack.explanation is a JSON string — call parseExplanation(data.attack.explanation)
+  parseExplanation is in src/utils/format.js
+  Returns: { summary, what_happened, potential_impact, recommended_action, rule_triggered }
+- attack.id (NOT attack._id) on this endpoint
+- raw_request may be null — null-check everything
+- timeline[].code (NOT responseCode)
 
-Pitfalls:
-- raw_request can be null if the SystemLog was deleted — always null-check
-- headers is { userAgent, contentType, referer } NOT a Headers object
-- timeline is capped at 20 in display, but may have more entries
-- id in URL param matches data.attack.id (ObjectId string)
-- No socket on this page
-- Back button: useNavigate(-1) or Link to /attacks
+Back button:
+  useNavigate() → navigate('/attacks') or navigate(-1)
+  Show: "← Back to Attacks"
+
+Section 1 — Attack Summary (Panel):
+  Left column: Type | Severity | Status | Detected By | Confidence | Time
+  Right column: Payload in <pre> block
+
+Section 2 — AI Analysis (Panel):
+  Render each key from parseExplanation result
+  summary: paragraph
+  what_happened: paragraph
+  potential_impact: paragraph
+  recommended_action: highlighted box (--color-accent-dim border)
+  rule_triggered: mono tag
+  Only render keys that exist (some may be absent)
+
+Section 3 — Raw Request (Panel):
+  if (!data.raw_request) show EmptyState message="Raw request data unavailable."
+  else: table of method/url/ip/responseCode + code blocks for headers/queryParams/body
+  responseCode null → '—'
+  Use fmtJson() for all objects
+
+Section 4 — IP Intelligence (Panel):
+  Table: ip | requests_24h | total_attacks | first_attack | last_attack
+  attack_types_seen: render each as a tag (span with sev-style)
+  All nulls → '—'
+
+Section 5 — Attack Chain (Panel):
+  Pattern label: styled text, --color-accent
+  if timeline.length === 0: EmptyState "Single isolated request — no chain detected."
+  else: table with columns Time | Method | URL | Code
+  Show max 20 rows
+
+Loading: <LoadingState message="Loading forensic report..." />
+Error: <ErrorState message="Forensic data unavailable" onRetry={refetch} />
+404 case: if error includes 'not found', show special message + back button
 ```

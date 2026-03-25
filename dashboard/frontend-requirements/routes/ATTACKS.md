@@ -1,101 +1,188 @@
 # Route: `/attacks` — Attack History
 
 ## Purpose
-Full paginated list of all recorded attack events.
-User can filter, search, and click any row to see forensics.
+Full paginated attack history with filters.
+The operator comes here to audit all detected attacks,
+filter by type/severity/status, and drill into forensics.
+
+## Inspiration
+- https://grafana.com/logs — dense filter bar + table layout
+- https://vercel.com/deployments — status filters above table, row click to detail
+- https://linear.app/issues — filter chips, sortable table
 
 ---
 
 ## Layout
 
 ```
-[Page title: Attack History]
-[Filter bar: severity | type | status | date range | search IP]
-[Attack count: Showing 48 of 50 attacks]
+[PageWrapper fade-in]
+
+Page Title: "Attacks"
+Subtitle: "X total attacks detected"
+
+[Filter Bar]
+  [Search: IP or attack type]
+  [Filter: Severity  (all / low / medium / high / critical)]
+  [Filter: Type      (all / sqli / xss / traversal / ...)]
+  [Filter: Status    (all / attempt / successful / blocked)]
+  [Filter: DetectedBy (all / rule / ml / both)]
+  [Clear Filters button — only visible when filter active]
+
 [Attack Table]
-[Pagination]
+  Time | IP | Attack Type | Severity | Status | Detected By | Confidence | [Investigate]
+
+  - Time: formatDate(a.createdAt)
+  - IP: mono font
+  - Attack Type: <AttackTypeTag> component
+  - Severity: <SeverityBadge>
+  - Status: colored text (attempt / successful / blocked)
+  - Detected By: plain text (rule / ml / both)
+  - Confidence: formatConf(a.confidence)
+  - Investigate button: navigates to /attacks/:id
+
+[Live indicator]
+  Top-right: "Live" dot pulse when new socket row arrives
+
+[Empty State]
+  "No attacks found matching your filters."
+
+[Footer count]
+  "Showing X of Y attacks"
 ```
 
 ---
 
-## Data Source
+## Component Tree
 
-- **API**: `GET /api/attacks/recent?limit=50`
-- **Note**: The current backend only has `/recent` with a `limit` param.
-  Filtering is done client-side until backend adds query params.
-- **Response**: `{ success: true, data: AttackEvent[] }`
-- **AttackEvent fields**:
-  ```
-  _id           string   MongoDB ObjectId
-  ip            string   e.g. "192.168.1.101"
-  attackType    string   enum: sqli|xss|traversal|command_injection|ssrf|lfi_rfi|brute_force|hpp|xxe|webshell|unknown
-  severity      string   enum: low|medium|high|critical
-  status        string   enum: attempt|successful|blocked
-  detectedBy    string   enum: rule|ml|both
-  confidence    number   0.0 to 1.0
-  payload       string   raw attack payload string
-  explanation   string   JSON string from LLM (parse with JSON.parse, fallback to raw string)
-  responseCode  number   HTTP response code e.g. 200 403 500
-  createdAt     string   ISO 8601 datetime
-  ```
-
----
-
-## Filter Bar
-
-| Filter | Type | Values |
-|--------|------|--------|
-| Severity | Multi-select | low, medium, high, critical |
-| Attack Type | Multi-select | all 11 types from enum |
-| Status | Multi-select | attempt, successful, blocked |
-| IP Search | Text input | partial match client-side |
-| Date range | Not needed for MVP | skip |
-
-Filters are applied client-side (no backend query support yet).
-
----
-
-## Attack Table Columns
-
-| Column | Field | Format |
-|--------|-------|--------|
-| Time | `createdAt` | `formatDate(createdAt)` from format.js |
-| IP | `ip` | mono font |
-| Attack Type | `attackType` | `<AttackTypeTag>` component |
-| Severity | `severity` | `<SeverityBadge>` component |
-| Status | `status` | color-coded text |
-| Detected By | `detectedBy` | plain text |
-| Confidence | `confidence` | `formatConfidence(confidence)` → "87%" |
-| Response | `responseCode` | color-coded: 200=muted, 403=green, 500=red |
-| Action | — | [Forensics] button |
-
-Clicking [Forensics] or anywhere on the row navigates to `/attacks/:_id`.
-
----
-
-## Pagination
-
-- Client-side pagination
-- 20 rows per page
-- Show: `< Prev  Page 1 of 3  Next >`
-
----
-
-## Empty / Loading / Error States
-
-- Loading: `<LoadingState />` (from ui/)
-- Error: `<ErrorState message="Failed to fetch attacks" />` (from ui/)
-- Empty: `<EmptyState message="No attacks recorded." />` (from ui/)
-
----
-
-## Files
 ```
-src/pages/Attacks.jsx
-src/components/attacks/AttackTable.jsx
-src/components/attacks/AttackFilters.jsx
-src/components/attacks/AttackTypeTag.jsx
+Attacks.jsx (page)
+├── PageWrapper
+├── AttackFilters.jsx
+│   ├── search input
+│   ├── severity select
+│   ├── type select
+│   ├── status select
+│   └── detectedBy select
+├── Panel (title: "All Attacks")
+│   ├── LoadingState
+│   ├── ErrorState
+│   ├── EmptyState
+│   └── table
+│       └── AttackRow (motion.tr for socket rows)
+│           ├── AttackTypeTag
+│           └── SeverityBadge
+└── "Showing X of Y" footer text
 ```
+
+---
+
+## API Calls
+
+### Primary — Recent Attacks
+- **Endpoint**: `GET /api/attacks/recent?limit=100`
+- **Function**: `getRecentAttacks(100)` from `services/api.js`
+- **Poll interval**: 30 seconds (useInterval)
+- **Socket**: `attack:new` — prepend new attack to top of list
+  - Socket payload: `{ event, timestamp, data: { id, ip, attackType, severity, status, detectedBy, confidence, timestamp } }`
+  - Read `payload.data`, NOT `payload`
+  - Normalize: `{ ...payload.data, _id: payload.data.id }` before adding to state
+
+**Response shape** (`response.data.data` — array):
+```json
+[
+  {
+    "_id":         "ObjectId string",
+    "ip":          "192.168.1.101",
+    "attackType":  "sqli",
+    "severity":    "high",
+    "status":      "attempt",
+    "detectedBy":  "rule",
+    "confidence":  0.92,
+    "payload":     "' OR 1=1 --",
+    "createdAt":   "ISO timestamp"
+  }
+]
+```
+
+---
+
+## Filtering Logic
+
+Filtering is done CLIENT-SIDE on the fetched array.
+Do NOT make a new API call when filter changes.
+
+```js
+const filtered = attacks.filter(a => {
+  if (filters.severity && a.severity !== filters.severity) return false;
+  if (filters.type     && a.attackType !== filters.type)   return false;
+  if (filters.status   && a.status !== filters.status)     return false;
+  if (filters.detectedBy && a.detectedBy !== filters.detectedBy) return false;
+  if (filters.search) {
+    const q = filters.search.toLowerCase();
+    if (!a.ip.includes(q) && !a.attackType.includes(q)) return false;
+  }
+  return true;
+});
+```
+
+---
+
+## Field Mapping
+
+| UI Column | Field | Transform |
+|-----------|-------|----------|
+| Time | `a.createdAt` | `formatDate(a.createdAt)` |
+| IP | `a.ip` | mono font, no transform |
+| Attack Type | `a.attackType` | `<AttackTypeTag type={a.attackType} />` |
+| Severity | `a.severity` | `<SeverityBadge severity={a.severity} />` |
+| Status | `a.status` | Color from `STATUS_COLORS[a.status]` |
+| Detected By | `a.detectedBy` | plain text |
+| Confidence | `a.confidence` | `formatConf(a.confidence)` |
+| Investigate | `a._id` | `navigate(ROUTES.FORENSICS(a._id))` |
+
+---
+
+## States
+
+| State | Display |
+|-------|---------|
+| Loading | `<LoadingState message="Loading attacks..." />` |
+| Error | `<ErrorState message="Failed to load attacks" onRetry={refetch} />` |
+| Empty (no data) | `<EmptyState message="No attacks recorded yet." />` |
+| Empty (filter) | `<EmptyState message="No attacks match your filters." />` |
+| Live new row | Animate in from top: `opacity 0→1`, `y -8→0`, `0.15s` |
+
+---
+
+## AttackTypeTag Spec
+
+```jsx
+// src/components/attacks/AttackTypeTag.jsx
+// Maps attackType to a short uppercase label with color
+const TYPE_COLORS = {
+  sqli:               '#f44747',
+  xss:                '#ce9178',
+  traversal:          '#dcdcaa',
+  command_injection:  '#f44747',
+  ssrf:               '#ce9178',
+  lfi_rfi:            '#dcdcaa',
+  brute_force:        '#9cdcfe',
+  hpp:                '#888888',
+  xxe:                '#ce9178',
+  webshell:           '#f44747',
+  unknown:            '#555555',
+};
+```
+
+---
+
+## ⚠️ Pitfalls
+
+1. Socket rows have `id` not `_id` — normalize on arrival
+2. `confidence` is 0–1 float — always `formatConf()`
+3. Filter state must reset when new data arrives (don't clear filters, just re-apply)
+4. Cap socket feed at 200 rows to prevent memory leak
+5. Navigate to `/attacks/${a._id}` not `${a.id}` for REST rows
 
 ---
 
@@ -104,29 +191,38 @@ src/components/attacks/AttackTypeTag.jsx
 ```
 You are building the Attacks page for SENTINAL.
 
+Route: /attacks
+Wrap in PageWrapper. AppLayout wraps via router (no need to add Navbar).
+
 Data:
-- Call getRecentAttacks(50) from src/services/api.js on mount
-- Store raw data in state
-- Apply filters client-side (filter function over array)
-- Paginate client-side: 20 per page
+1. Call getRecentAttacks(100) on mount + every 30s (useInterval)
+2. Listen to 'attack:new' socket → prepend to top
+   ALWAYS read payload.data (not payload)
+   Normalize: { ...payload.data, _id: payload.data.id }
+   Cap array at 200 rows
 
-Components:
-- AttackTable: receives filtered+paginated array, renders table
-- AttackFilters: controlled inputs, emits filter state up to Attacks.jsx
-- AttackTypeTag: small inline tag showing attackType with color per type
-- SeverityBadge: already built in ui/, import it
+Filtering:
+- 4 filter selects: severity, attackType, status, detectedBy
+- 1 search input: match against ip and attackType
+- Filter is purely client-side on the local array
+- "X of Y attacks" shown below table
 
-Navigation:
-- Clicking a row calls: useNavigate(`/attacks/${attack._id}`)
+Table columns:
+  Time | IP (mono) | Attack Type (AttackTypeTag) | Severity (SeverityBadge) |
+  Status (colored text) | Detected By | Confidence | [Investigate button]
 
-Format:
-- Dates: formatDate from src/utils/format.js
-- Confidence: formatConfidence from src/utils/format.js
-- Severity colors: SEVERITY_COLORS from src/utils/constants.js
+Investigate button:
+  onClick: navigate(`/attacks/${a._id}`) using useNavigate
+  Style: small ghost button, text: "Investigate"
 
-Pitfalls:
-- explanation field is a JSON string — try JSON.parse, catch and use raw string
-- Do not re-fetch on every filter change — fetch once, filter in memory
-- _id is the MongoDB ObjectId string, use it for navigation
-- attackType enum values use underscore: command_injection not command-injection
+Socket new rows animate in:
+  Use motion.tr with initial={{ opacity:0, y:-8 }} animate={{ opacity:1, y:0 }}
+
+Loading: <LoadingState message="Loading attacks..." />
+Error: <ErrorState message="Failed to load attacks" onRetry={refetch} />
+Empty: <EmptyState message="No attacks recorded yet." />
+Empty after filter: <EmptyState message="No attacks match your filters." />
+
+Never hardcode colors. Use SEVERITY_COLORS and STATUS_COLORS from constants.js.
+Never format dates inline. Use formatDate() from utils/format.js.
 ```

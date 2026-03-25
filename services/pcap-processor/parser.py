@@ -19,21 +19,27 @@ def parse_http_from_pcap(filepath: str) -> list[dict]:
         except Exception:
             continue
 
-        # Only process packets that look like HTTP requests
-        first_line = payload.split("\r\n")[0] if "\r\n" in payload else payload.split("\n")[0]
+        # Split on real CRLF or LF
+        lines = payload.split("\r\n") if "\r\n" in payload else payload.split("\n")
+        first_line = lines[0]
         parts = first_line.split(" ")
+
         if len(parts) < 2 or parts[0] not in ("GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"):
             continue
 
         method = parts[0]
-        raw_url = parts[1] if len(parts) > 1 else "/"
+        # Join everything between method and protocol version to handle spaces in URLs/params
+        # e.g. "GET /login?id=1 OR 1=1-- HTTP/1.1" -> url = "/login?id=1 OR 1=1--"
+        if len(parts) >= 3 and parts[-1].startswith("HTTP/"):
+            raw_url = " ".join(parts[1:-1])
+        else:
+            raw_url = " ".join(parts[1:])
 
         # Parse query params from URL
         parsed = urllib.parse.urlparse(raw_url)
-        query_params = dict(urllib.parse.parse_qsl(parsed.query))
+        query_params = dict(urllib.parse.parse_qsl(parsed.query, keep_blank_values=True))
 
-        # Parse headers from raw payload
-        lines = payload.split("\r\n") if "\r\n" in payload else payload.split("\n")
+        # Parse headers
         headers_dict = {}
         body_start = 0
         for i, line in enumerate(lines[1:], start=1):
@@ -60,7 +66,7 @@ def parse_http_from_pcap(filepath: str) -> list[dict]:
                 "contentType": headers_dict.get("content-type", ""),
                 "referer":     headers_dict.get("referer", ""),
             },
-            "responseCode": None,   # PCAP captures don't always have response
+            "responseCode": None,
             "timestamp":    float(pkt.time),
         })
 

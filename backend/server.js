@@ -30,7 +30,8 @@ if (process.env.NODE_ENV !== 'test') {
 
 // Routes
 app.use('/api/logs',           require('./src/routes/logs'));
-app.use('/api/attacks',        require('./src/routes/attacks'));
+app.use('/api/attacks', require('./src/routes/attacks'));
+app.use('/api/attacks',        require('./src/routes/forensics'));
 app.use('/api/stats',          require('./src/routes/stats'));
 app.use('/api/service-status', require('./src/routes/serviceStatus'));
 

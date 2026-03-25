@@ -1,6 +1,6 @@
 const attackService = require('../services/attackService');
 
-// Validation now handled by Joi middleware — controller stays thin
+// POST /api/attacks/report
 const report = async (req, res, next) => {
   try {
     const attack = await attackService.reportAttack(req.body);
@@ -14,4 +14,19 @@ const report = async (req, res, next) => {
   }
 };
 
-module.exports = { report };
+// GET /api/attacks/recent
+const getRecent = async (req, res, next) => {
+  try {
+    const limit = parseInt(req.query.limit) || 20;
+    const attacks = await attackService.getRecentAttacks(limit);
+    res.status(200).json({
+      success: true,
+      message: 'Recent attacks retrieved',
+      data: attacks
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+module.exports = { report, getRecent };

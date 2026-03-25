@@ -36,6 +36,7 @@ app.use('/api/stats',          require('./src/routes/stats'));
 app.use('/api/service-status', require('./src/routes/serviceStatus'));
 app.use('/api/alerts',         require('./src/routes/alerts'));
 app.use('/api/health',         require('./src/routes/health'));
+app.use('/api/pcap',           require('./src/routes/pcap'));       // PCAP upload
 
 // 404 Handler
 app.use((req, res) => {

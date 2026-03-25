@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from app.schemas import AnalyzeRequest
 from app.rules import run_rules
+from app.classifier import score_request
 import json
 
 app = FastAPI(title="SENTINEL Detection Engine", version="1.0.0")
@@ -15,7 +16,7 @@ def health():
 
 @app.post("/analyze")
 def analyze(request: AnalyzeRequest):
-    # Build a single string from all request fields to scan
+    # Build combined string for rule scanning
     parts = []
     if request.url:
         parts.append(request.url)
@@ -27,23 +28,34 @@ def analyze(request: AnalyzeRequest):
         parts.append(json.dumps(request.headers))
 
     combined = " ".join(parts)
-    match = run_rules(combined)
 
-    if match:
+    # Run rule engine
+    rule_match = run_rules(combined)
+
+    # Run classifier scoring
+    request_data = {
+        "method": request.method,
+        "body": request.body
+    }
+    score = score_request(request_data, rule_match)
+
+    if rule_match:
         return {
-            "logId": request.logId,
-            "threat_detected": True,
-            "threat_type": match["threat_type"],
-            "rule_id": match["rule_id"],
-            "confidence": 0.85,
-            "message": f"Rule {match['rule_id']} matched: {match['threat_type']}"
+            "logId":            request.logId,
+            "threat_detected":  True,
+            "threat_type":      rule_match["threat_type"],
+            "rule_id":          rule_match["rule_id"],
+            "confidence":       score["confidence"],
+            "severity":         score["severity"],
+            "message":          f"Rule {rule_match['rule_id']} matched: {rule_match['threat_type']}"
         }
 
     return {
-        "logId": request.logId,
-        "threat_detected": False,
-        "threat_type": None,
-        "rule_id": None,
-        "confidence": 0.0,
-        "message": "No threats detected"
+        "logId":            request.logId,
+        "threat_detected":  False,
+        "threat_type":      None,
+        "rule_id":          None,
+        "confidence":       0.0,
+        "severity":         "none",
+        "message":          "No threats detected"
     }

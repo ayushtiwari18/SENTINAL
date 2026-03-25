@@ -30,25 +30,12 @@ if (process.env.NODE_ENV !== 'test') {
 
 // Routes
 app.use('/api/logs',           require('./src/routes/logs'));
-app.use('/api/attacks', require('./src/routes/attacks'));
+app.use('/api/attacks',        require('./src/routes/attacks'));
 app.use('/api/attacks',        require('./src/routes/forensics'));
 app.use('/api/stats',          require('./src/routes/stats'));
 app.use('/api/service-status', require('./src/routes/serviceStatus'));
-
-// Health Check
-app.get('/health', (req, res) => {
-  const dbState = mongoose.connection.readyState;
-  res.status(200).json({
-    success: true,
-    message: 'Operation successful',
-    data: {
-      status:    'ok',
-      uptime:    process.uptime(),
-      dbStatus:  dbState === 1 ? 'connected' : 'disconnected',
-      timestamp: new Date().toISOString()
-    }
-  });
-});
+app.use('/api/alerts',         require('./src/routes/alerts'));
+app.use('/api/health',         require('./src/routes/health'));
 
 // 404 Handler
 app.use((req, res) => {

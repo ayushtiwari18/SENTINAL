@@ -5,6 +5,7 @@ const api = axios.create({ baseURL: 'http://localhost:3000' });
 // unwrap standard { success, message, data } envelope
 const unwrap = res => res.data.data;
 
+// ── Existing API calls ──────────────────────────────────────────────────────────
 export const getStats          = ()       => api.get('/api/stats').then(unwrap);
 export const getRecentAttacks  = (n = 50) => api.get(`/api/attacks/recent?limit=${n}`).then(unwrap);
 export const getForensics      = (id)     => api.get(`/api/attacks/${id}/forensics`).then(unwrap);
@@ -24,3 +25,18 @@ export const uploadPcap = (file, projectId = 'pcap-upload') => {
     headers: { 'Content-Type': 'multipart/form-data' },
   }).then(unwrap);
 };
+
+// ── ArmorIQ API calls ─────────────────────────────────────────────────────────
+/** List all pending actions blocked by ArmorIQ policy */
+export const getPendingActions  = ()   => api.get('/api/actions/pending').then(unwrap);
+
+/** Human approves a blocked action */
+export const approveAction = (id) =>
+  api.post(`/api/actions/${id}/approve`, { approvedBy: 'human' }).then(unwrap);
+
+/** Human rejects a blocked action */
+export const rejectAction  = (id) =>
+  api.post(`/api/actions/${id}/reject`, { rejectedBy: 'human' }).then(unwrap);
+
+/** Fetch audit log (ArmorIQ policy decisions) */
+export const getAuditLog  = (n = 50) => api.get(`/api/audit?limit=${n}`).then(unwrap);

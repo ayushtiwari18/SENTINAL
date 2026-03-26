@@ -2,16 +2,17 @@
  * ArmorIQ Trigger Route
  * POST /api/armoriq/trigger
  *
- * Creates a REAL AttackEvent in MongoDB and immediately triggers
+ * Creates a real SystemLog + AttackEvent in MongoDB, then triggers
  * the ArmorIQ enforcement pipeline. Does NOT require the Detection
  * Engine to be running. Use this for demos and testing.
  *
  * Body: { ip, attackType, severity, confidence, status }
  */
-const express  = require('express');
-const router   = express.Router();
+const express      = require('express');
+const router       = express.Router();
+const SystemLog    = require('../models/SystemLog');
 const attackService = require('../services/attackService');
-const logger   = require('../utils/logger');
+const logger       = require('../utils/logger');
 
 const VALID_SEVERITIES   = ['low', 'medium', 'high', 'critical'];
 const VALID_ATTACK_TYPES = [
@@ -30,7 +31,6 @@ router.post('/trigger', async (req, res) => {
       status      = 'successful'
     } = req.body;
 
-    // Basic validation
     if (!VALID_SEVERITIES.includes(severity)) {
       return res.status(400).json({
         success: false,
@@ -46,19 +46,31 @@ router.post('/trigger', async (req, res) => {
       });
     }
 
-    logger.info(`[ARMORIQ-TRIGGER] Simulating ${attackType} attack from ${ip} (${severity})`);
+    logger.info(`[ARMORIQ-TRIGGER] Simulating ${attackType} from ${ip} (${severity})`);
 
-    // reportAttack saves AttackEvent + calls ArmorIQ fire-and-forget
+    // Step 1 — Create a real SystemLog so requestId has a valid ObjectId ref
+    const demoLog = await SystemLog.create({
+      projectId:   'armoriq-demo',
+      method:      'GET',
+      url:         `/demo/${attackType}-attack`,
+      ip,
+      queryParams: {},
+      body:        {},
+      headers:     { userAgent: 'armoriq-demo', contentType: '', referer: '' },
+      responseCode: 200
+    });
+
+    // Step 2 — reportAttack saves AttackEvent + calls ArmorIQ fire-and-forget
     const attack = await attackService.reportAttack({
-      requestId:            null,
+      requestId:            demoLog._id,   // valid ObjectId ref to SystemLog
       ip,
       attackType,
       severity,
       status,
-      detectedBy:           'armoriq-trigger',
+      detectedBy:           'rule',        // valid enum: 'rule' | 'ml' | 'both'
       confidence:           parseFloat(confidence) || 0.97,
-      payload:              `Simulated ${attackType} attack for ArmorIQ demo`,
-      explanation:          `Demo trigger: ${attackType} with ${severity} severity`,
+      payload:              `/demo/${attackType}-attack`,
+      explanation:          `Demo trigger: ${attackType} severity=${severity}`,
       mitigationSuggestion: 'ArmorIQ will evaluate and enforce policy',
       responseCode:         200
     });
@@ -69,12 +81,13 @@ router.post('/trigger', async (req, res) => {
       success: true,
       message: 'Attack simulated — ArmorIQ enforcement triggered',
       data: {
-        attackId:   attack._id,
+        attackId:  attack._id,
+        logId:     demoLog._id,
         ip,
         attackType,
         severity,
         confidence,
-        note: 'Check /api/actions/pending and /api/audit in ~1 second'
+        note: 'Check /api/actions/pending and /api/audit in ~2 seconds'
       }
     });
   } catch (err) {

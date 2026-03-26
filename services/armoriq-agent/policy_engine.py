@@ -2,7 +2,7 @@
 ArmorIQ Policy Engine
 ---------------------
 Pure deterministic function — no I/O, no LLM, no side effects.
-Takes an intent dict, returns a DecisionModel.
+Takes an IntentModel, returns a DecisionModel.
 Default behaviour: BLOCK (fail-safe).
 """
 
@@ -27,28 +27,29 @@ BLOCKED_ACTIONS = {
 }
 
 # Ordered rules: (id, condition, decision, reason)
+# NOTE: conditions now use dot-access on ProposedAction (typed Pydantic model)
 POLICY_RULES = [
     (
         "RULE_001",
-        lambda intent: intent["action"] in BLOCKED_ACTIONS,
+        lambda p: p.action in BLOCKED_ACTIONS,
         "BLOCK",
         "Action requires human authorization — it is on the blocked list",
     ),
     (
         "RULE_002",
-        lambda intent: intent["risk_level"] == "critical",
+        lambda p: p.risk_level == "critical",
         "BLOCK",
         "Critical-risk actions are never auto-executed",
     ),
     (
         "RULE_003",
-        lambda intent: intent["risk_level"] == "high",
+        lambda p: p.risk_level == "high",
         "BLOCK",
         "High-risk actions require human approval",
     ),
     (
         "RULE_004",
-        lambda intent: intent["action"] in ALLOWED_ACTIONS,
+        lambda p: p.action in ALLOWED_ACTIONS,
         "ALLOW",
         "Action is in the pre-approved safe list",
     ),
@@ -59,15 +60,16 @@ def evaluate(intent: IntentModel) -> DecisionModel:
     """
     Evaluate a single intent against all policy rules.
     First matching rule wins. Falls back to BLOCK if nothing matches.
+    Uses dot-access on ProposedAction (typed Pydantic model).
     """
-    proposed = intent.proposed_action
+    proposed = intent.proposed_action  # ProposedAction instance
 
     for rule_id, condition, decision, reason in POLICY_RULES:
         try:
             if condition(proposed):
                 return DecisionModel(
                     intent_id=intent.intent_id,
-                    action=proposed["action"],
+                    action=proposed.action,
                     decision=decision,
                     reason=reason,
                     policy_rule_id=rule_id,
@@ -79,7 +81,7 @@ def evaluate(intent: IntentModel) -> DecisionModel:
     # Fail-safe default
     return DecisionModel(
         intent_id=intent.intent_id,
-        action=proposed.get("action", "unknown"),
+        action=proposed.action,
         decision="BLOCK",
         reason="No matching policy rule — default deny",
         policy_rule_id="RULE_DEFAULT",

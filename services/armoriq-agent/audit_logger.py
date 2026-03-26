@@ -22,6 +22,7 @@ async def log_decision(intent: IntentModel, decision: DecisionModel) -> bool:
     """
     POST audit entry to Gateway /api/audit/ingest.
     Returns True if successfully written, False on any error.
+    Uses dot-access on ProposedAction (typed Pydantic model).
     """
     # Normalise: ALLOW → ALLOWED,  BLOCK → BLOCKED
     status_map = {"ALLOW": "ALLOWED", "BLOCK": "BLOCKED"}
@@ -41,7 +42,7 @@ async def log_decision(intent: IntentModel, decision: DecisionModel) -> bool:
             "attackType":  intent.attack_context.attackType,
             "severity":    intent.attack_context.severity,
             "confidence":  intent.attack_context.confidence,
-            "risk_level":  intent.proposed_action.get("risk_level"),
+            "risk_level":  intent.proposed_action.risk_level,  # dot-access
         }
     }
     try:

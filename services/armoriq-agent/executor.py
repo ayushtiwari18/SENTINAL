@@ -4,6 +4,9 @@ ArmorIQ Executor
 Only called AFTER policy_engine returns ALLOW.
 Executes the allowed action by calling Gateway API endpoints.
 All calls are fire-safe: exceptions are caught and logged, never re-raised.
+
+Fix: replaced raise_for_status() with explicit status check in _send_alert
+so HTTP errors are clearly logged rather than silently swallowed.
 """
 
 import httpx
@@ -55,6 +58,8 @@ async def execute(action: str, intent_data: dict, attack_context: dict) -> bool:
 async def _send_alert(intent_data: dict, attack_context: dict) -> bool:
     """
     Notifies Gateway to create/push an alert via its internal alert system.
+    Uses explicit status check instead of raise_for_status() so HTTP errors
+    are clearly logged rather than propagated as exceptions.
     """
     payload = {
         "attackId":   attack_context.get("attackId"),
@@ -66,6 +71,11 @@ async def _send_alert(intent_data: dict, attack_context: dict) -> bool:
     }
     async with httpx.AsyncClient(timeout=5.0) as client:
         resp = await client.post(f"{GATEWAY_URL}/api/alerts/armoriq", json=payload)
-        resp.raise_for_status()
-        logger.info(f"[EXECUTOR] send_alert → Gateway responded {resp.status_code}")
-        return True
+        if resp.status_code in (200, 201):
+            logger.info(f"[EXECUTOR] send_alert → Gateway responded {resp.status_code}")
+            return True
+        else:
+            logger.warning(
+                f"[EXECUTOR] send_alert → Gateway HTTP {resp.status_code}: {resp.text}"
+            )
+            return False

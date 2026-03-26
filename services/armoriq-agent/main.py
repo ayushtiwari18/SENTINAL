@@ -84,7 +84,7 @@ async def respond(body: RespondRequest):
     audit_count      = 0
 
     for intent in intents:
-        action = intent.proposed_action["action"]
+        action = intent.proposed_action.action  # dot-access on typed ProposedAction
 
         # Step 2: Policy evaluation — deterministic, no LLM
         decision = evaluate(intent)
@@ -103,7 +103,7 @@ async def respond(body: RespondRequest):
             # Step 4: Execute allowed action
             ok = await execute(
                 action=action,
-                intent_data=intent.proposed_action,
+                intent_data=intent.proposed_action.model_dump(),
                 attack_context=ctx.model_dump(),
             )
             if ok:
@@ -119,7 +119,7 @@ async def respond(body: RespondRequest):
                     action=action,
                     decision="BLOCK",
                     reason=decision.reason,
-                    agentReason=intent.proposed_action.get("reason"),
+                    agentReason=intent.proposed_action.reason,
                     blockedReason=decision.reason,
                 )
             )

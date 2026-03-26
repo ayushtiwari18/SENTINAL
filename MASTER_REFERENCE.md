@@ -1,223 +1,190 @@
 # SENTINAL — Master Reference Document
 
-> **Version:** 3.0 · **Date:** 2026-03-26 · **Status:** Living document — update on every merge
+> **Version:** 4.0 · **Date:** 2026-03-26 · **Status:** Living document — single source of truth
 >
-> This document is the single source of truth for the SENTINAL project.
-> It supersedes all previous versions. Use this for every new feature, bug fix, and
-> integration decision. Do NOT invent field names — use the exact names listed in §6.
+> Only one doc file exists in this repo. This is it.
+> Do NOT create REPOSITORY_AUDIT.md, CURRENT_POLICY_FLOW.md, SYSTEM_BUG_REPORT.md,
+> or OPENCLAW_INTEGRATION_PLAN.md — they were deleted. Everything is here.
 
 ---
 
 ## Table of Contents
 
-1. [System Architecture Overview](#1-system-architecture-overview)
-2. [Repo Structure (Deep Scan)](#2-repo-structure)
+1. [System Architecture](#1-system-architecture)
+2. [Exact Repo Structure](#2-exact-repo-structure)
 3. [Service Registry](#3-service-registry)
 4. [Complete Request Lifecycle](#4-complete-request-lifecycle)
-5. [API Contracts — Every Route](#5-api-contracts)
-6. [User Flows](#6-user-flows)
+5. [API Contracts — Every Live Route](#5-api-contracts)
+6. [OpenClaw Enforcement Architecture](#6-openclaw-enforcement)
 7. [MongoDB Schema — All 6 Collections](#7-mongodb-schema)
 8. [Canonical Field Registry](#8-canonical-field-registry)
-9. [Build Status — v3.0](#9-build-status)
-10. [Port & URL Map](#10-port-map)
+9. [Build Status](#9-build-status)
+10. [Port & URL Map + Start Commands](#10-port-map)
 11. [Socket.io Events Reference](#11-socketio-events)
 12. [Response Envelope Standard](#12-response-envelope)
-13. [Demo Target & E2E Test Guide](#13-demo-target)
+13. [Demo Day Guide](#13-demo-day)
 14. [Changelog](#14-changelog)
 
 ---
 
-## 1. System Architecture Overview
-
-### High-Level Diagram
+## 1. System Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                     DEVELOPER'S APPLICATION (or demo-target)                │
-│                                                                             │
-│   const { sentinel } = require('sentinel-middleware');                      │
-│   app.use(sentinel({ projectId: 'my-app', gatewayUrl: 'http://...:3000' })) │
-└──────────────────────────────┬──────────────────────────────────────────────┘
-                               │ POST /api/logs/ingest
-                               │ (async fire-and-forget — zero latency to user)
+┌──────────────────────────────────────────────────────────────────────┐
+│            DEVELOPER APP  (demo-target :4000 or any Express app)     │
+│   uses sentinel-middleware → POST /api/logs/ingest (async)           │
+└──────────────────────────────┬───────────────────────────────────────┘
+                               │
                                ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                   SERVICE 1 — GATEWAY API  (Node/Express :3000)             │
-│                                                                             │
-│  routes/logs.js      → validates (Joi) → SystemLog (MongoDB)               │
-│  services/logService → setImmediate → detectionConnector.analyze()          │
-│  services/attackService.reportAttack()                                      │
-│    ├── AttackEvent.create()     → MongoDB                                   │
-│    ├── Alert.create()           → MongoDB  (high/critical only)             │
-│    ├── emitter.emit(attack:new) → Socket.io → Dashboard                     │
-│    ├── emitter.emit(alert:new)  → Socket.io → Dashboard                     │
-│    └── callArmorIQ()            → POST :8004/respond  (fire-and-forget)     │
-│         ├── ALLOWED actions → executor.py → POST /api/alerts/armoriq        │
-│         │                  → audit_logger → POST /api/audit/ingest          │
-│         │                  → emitter.emit(audit:new) → Socket.io            │
-│         └── BLOCKED actions → ActionQueue.create() → Socket.io action:pending│
-│                             → audit_logger → POST /api/audit/ingest         │
-│                             → emitter.emit(audit:new) → Socket.io           │
-└──────┬──────────────────────────┬──────────────────────────┬────────────────┘
-       │                          │                          │
-       ▼                          ▼                          ▼
-┌──────────────┐      ┌───────────────────────┐   ┌─────────────────────────┐
-│  SERVICE 2   │      │      SERVICE 3         │   │      SERVICE 4          │
-│  PCAP        │      │   DETECTION ENGINE     │   │   ARMORIQ AGENT         │
-│  PROCESSOR   │      │   (Python/FastAPI :8002)│   │   (Python/FastAPI :8004)│
-│  (:8003)     │      │                       │   │                         │
-│              │      │  POST /analyze         │   │  POST /respond          │
-│  POST        │      │  45-rule engine        │   │                         │
-│  /process    │      │  + adversarial decoder │   │  intent_builder.py      │
-│              │      │  + HTTP-status layer   │   │  policy_engine.py       │
-│  8 detectors │      │  (ML model optional)   │   │  executor.py            │
-│  used from   │      │                       │   │  audit_logger.py        │
-│  /pcap page  │      │                       │   │  models.py (typed)      │
-└──────────────┘      └───────────────────────┘   └─────────────────────────┘
-                                                             │
-                                    ┌────────────────────────┴──────────────┐
-                                    │      ALLOWED (auto-executed)          │
-                                    │  send_alert → POST /api/alerts/armoriq│
-                                    │  log_attack → audit_log entry         │
-                                    │  rate_limit_ip → audit_log entry      │
-                                    │  flag_for_review → audit_log entry    │
-                                    │  generate_report → audit_log entry    │
-                                    │                                       │
-                                    │      BLOCKED (require human review)   │
-                                    │  permanent_ban_ip → action_queue      │
-                                    │  shutdown_endpoint → action_queue     │
-                                    │  purge_all_sessions → action_queue    │
-                                    │  modify_firewall_rules → action_queue │
-                                    └───────────────────┬───────────────────┘
-                                                        │
-                                                        ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                 SERVICE 5 — REACT DASHBOARD  (Vite/React :5173)             │
-│                                                                             │
-│  /dashboard    → Stats, live attack feed, service health, charts            │
-│  /attacks      → AttackEvent table + forensics drawer                       │
-│  /alerts  🔴   → Styled table: armoriq_action (purple) + attack_detected    │
-│  /action-queue 🟠 → Confirm modal → Approve / Reject blocked actions        │
-│  /audit        → Full policy decision log, filters, stat bar, auto-refresh  │
-│  /pcap         → Upload .pcap → PCAP Processor → Detection Engine           │
-│  /logs         → Raw SystemLogs                                             │
-│  /services     → Health ping all 5 services                                 │
-│  /settings     → Config (P2)                                                │
-│  /docs         → Documentation                                              │
-└─────────────────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────┐
+│             SERVICE 1 — GATEWAY API  (Node/Express :3000)            │
+│                                                                      │
+│  POST /api/logs/ingest  →  SystemLog saved to MongoDB                │
+│                         →  detectionConnector → POST :8002/analyze   │
+│                                                                      │
+│  IF threat_detected:                                                 │
+│    AttackEvent.create()     → MongoDB                                │
+│    Alert.create()           → MongoDB  (high/critical only)          │
+│    emit(attack:new)         → Socket.io                              │
+│    emit(alert:new)          → Socket.io                              │
+│    callArmorIQ() [async]    → POST :8004/respond                     │
+│                                                                      │
+│  POST /api/pcap/upload   →  POST :8003/process → merge results       │
+│  POST /api/armoriq/trigger → direct ArmorIQ call (demo/test)        │
+│  POST /api/actions/:id/approve|reject → human enforcement           │
+│  POST /api/audit/ingest  ← called by ArmorIQ audit_logger           │
+└──────┬────────────────────────┬──────────────────────┬──────────────┘
+       │                        │                      │
+       ▼                        ▼                      ▼
+┌────────────────┐  ┌───────────────────────┐  ┌──────────────────────────┐
+│  SERVICE 2     │  │  SERVICE 3            │  │  SERVICE 4               │
+│  PCAP          │  │  DETECTION ENGINE     │  │  ARMORIQ AGENT           │
+│  PROCESSOR     │  │  (Python :8002)       │  │  (Python :8004)          │
+│  (Python :8003)│  │                       │  │                          │
+│                │  │  POST /analyze        │  │  POST /respond           │
+│  POST /process │  │  45-rule engine       │  │                          │
+│  8 detectors   │  │  adversarial decoder  │  │  intent_builder.py       │
+│  full pipeline │  │  HTTP-status layer    │  │  openclaw_runtime.py ←NEW│
+│  10/10 tests ✅│  │  ML optional          │  │  policy_engine.py (fbck) │
+└────────────────┘  └───────────────────────┘  │  executor.py             │
+                                               │  audit_logger.py         │
+                                               │  models.py               │
+                                               │  policy.yaml ←NEW        │
+                                               └──────────────────────────┘
+                                                          │
+                               ┌──────────────────────────┴─────────────┐
+                               │  ALLOWED → auto-executed                │
+                               │  send_alert / log_attack                │
+                               │  rate_limit_ip / flag_for_review        │
+                               │  generate_report                        │
+                               │                                         │
+                               │  BLOCKED → action_queue (human review)  │
+                               │  permanent_ban_ip                       │
+                               │  shutdown_endpoint                      │
+                               │  purge_all_sessions                     │
+                               │  modify_firewall_rules                  │
+                               └──────────────────┬──────────────────────┘
+                                                  │
+                                                  ▼
+┌──────────────────────────────────────────────────────────────────────┐
+│              SERVICE 5 — REACT DASHBOARD  (Vite :5173)               │
+│                                                                      │
+│  /dashboard    → Stats, live attack feed, service health             │
+│  /attacks      → AttackEvent table + forensics drawer                │
+│  /alerts       → attack_detected (red) + armoriq_action (purple)     │
+│  /action-queue → Approve / Reject blocked actions                    │
+│  /audit        → Full OpenClaw decision log, live via socket         │
+│  /pcap         → Upload .pcap → full pipeline                        │
+│  /logs         → Raw SystemLogs                                      │
+│  /services     → Health ping all 4 services                          │
+└──────────────────────────────────────────────────────────────────────┘
 ```
 
-### npm Middleware Flow
+### OpenClaw Decision Flow
 
 ```
-Developer installs sentinel-middleware in their Express/Fastify app
-        │
-        │  Every HTTP request → res.on('finish') fires async
-        │  Fields captured: method, url, ip, queryParams, body (scrubbed),
-        │                   headers (userAgent/contentType/referer),
-        │                   responseCode, processingTimeMs, projectId
-        │  Sensitive fields auto-redacted: password, token, secret, cvv, ssn
-        │  Retry queue: up to 500 entries, retried every 10s if Gateway down
-        │  Timer unref()'d so Node/Jest exits cleanly
-        ▼
-  POST /api/logs/ingest  →  SENTINAL Gateway
-```
-
-### ArmorIQ Decision Flow
-
-```
-Attack detected
-       │
-       ▼
- POST :8004/respond
-       │
-  intent_builder.py  →  builds 6 intents from attack context
-  (ProposedAction typed Pydantic model — dot-access only)
-       │
-  policy_engine.py   →  evaluates each intent against POLICY_RULES[]
-  Rule order (first match wins):
-    RULE_001: action in BLOCKED_ACTIONS   → BLOCK
-    RULE_002: risk_level == 'critical'    → BLOCK
-    RULE_003: risk_level == 'high'        → BLOCK
-    RULE_004: action in ALLOWED_ACTIONS   → ALLOW
-    DEFAULT:  no match                   → BLOCK (fail-safe)
-       │
-  ┌────┴────────────────────────────┐
-  │  ALLOW                          │  BLOCK
-  │  send_alert ✅                  │  permanent_ban_ip 🔒
-  │  log_attack ✅                  │  shutdown_endpoint 🔒
-  │  rate_limit_ip ✅               │  purge_all_sessions 🔒
-  │  flag_for_review ✅             │  modify_firewall_rules 🔒
-  │  generate_report ✅             │
-  └─────────────────────────────────┘
-       │                            │
-  executor.py                  action_queue (MongoDB)
-  (HTTP 200/201 = success,      Socket.io → action:pending
-   else warning + return False)  Dashboard ActionQueue card
-  audit_logger.py              Human: APPROVE / REJECT
-  emitter(audit:new)           audit_log updated
-  EVENTS.AUDIT_NEW             emitter(audit:new)
-                               EVENTS.AUDIT_NEW
+POST :8004/respond
+         │
+  intent_builder.py
+  builds 5–6 ProposedAction intents per attack
+         │
+  openclaw_runtime.py  ← PRIMARY (reads policy.yaml)
+    evaluation order (first match wins):
+      RULE_001: action in blocked_actions list  → BLOCK
+      RULE_002: risk_level == 'critical'        → BLOCK
+      RULE_003: risk_level == 'high'            → BLOCK
+      RULE_004: action in allowed_actions list  → ALLOW
+      RULE_DEFAULT: no match                   → BLOCK (fail-safe)
+    on crash → policy_engine.py fallback (same logic, hardcoded)
+         │
+  ┌──────┴──────────────────────┐
+  │ ALLOW                       │ BLOCK
+  │ executor.py fires:          │ ActionQueue.create() in MongoDB
+  │   POST /api/alerts/armoriq  │ emit(action:pending) → Dashboard
+  │   audit entry created       │ audit entry created
+  │   emit(audit:new)           │ emit(audit:new)
+  └─────────────────────────────┘
+         │
+  audit_logger.py
+  POST /api/audit/ingest → AuditLog saved → emit(audit:new)
 ```
 
 ---
 
-## 2. Repo Structure
+## 2. Exact Repo Structure
 
 ```
 SENTINAL/
 ├── .gitignore
 ├── README.md
-├── MASTER_REFERENCE.md          ← this file
+├── MASTER_REFERENCE.md              ← this file (only doc)
 │
-├── backend/                     ← SERVICE 1: Gateway API (Node/Express :3000)
-│   ├── server.js
+├── backend/                         SERVICE 1: Gateway API (Node :3000)
+│   ├── server.js                    entry point
 │   ├── package.json
 │   ├── .env.example
 │   └── src/
 │       ├── config/
-│       │   └── database.js
+│       │   └── database.js          MongoDB Atlas connection
 │       ├── controllers/
-│       │   ├── actionQueueController.js ← GET pending, POST approve/reject
-│       │   ├── alertController.js       ← GET /alerts, PATCH read, POST /armoriq
-│       │   ├── attackController.js      ← GET recent, GET forensics
-│       │   ├── auditController.js       ← POST ingest, GET list
-│       │   │                              emits EVENTS.AUDIT_NEW after create ✅
-│       │   ├── forensicsController.js
+│       │   ├── actionQueueController.js  GET pending + approve + reject
+│       │   ├── alertController.js        GET list + PATCH read + POST armoriq
+│       │   ├── attackController.js       GET recent + GET forensics
+│       │   ├── auditController.js        POST ingest + GET list + emit audit:new
+│       │   ├── forensicsController.js    3-query aggregation + IP history
 │       │   ├── healthController.js
-│       │   ├── logController.js
+│       │   ├── logController.js          GET recent
 │       │   ├── serviceStatusController.js
 │       │   └── statsController.js
 │       ├── middleware/
 │       ├── models/
-│       │   ├── ActionQueue.js           ✅ BUILT
-│       │   ├── Alert.js                 ✅ BUILT (type enum includes armoriq_action)
-│       │   ├── AttackEvent.js           ✅ BUILT
-│       │   ├── AuditLog.js              ✅ BUILT
-│       │   ├── ServiceStatus.js         ✅ BUILT
-│       │   └── SystemLog.js             ✅ BUILT
+│       │   ├── ActionQueue.js       pending|approved|rejected + timestamps
+│       │   ├── Alert.js             type enum: attack_detected|armoriq_action|...
+│       │   ├── AttackEvent.js       full attack record
+│       │   ├── AuditLog.js          ALLOWED|BLOCKED|APPROVED|REJECTED + rule
+│       │   ├── ServiceStatus.js     online|offline + response time
+│       │   └── SystemLog.js         raw HTTP log from middleware
 │       ├── routes/
-│       │   ├── actions.js               ✅ BUILT — pending, approve, reject
-│       │   ├── alerts.js                ✅ BUILT — GET, PATCH read, POST /armoriq
-│       │   ├── armoriq.js               ✅ BUILT — POST /trigger (demo/test)
-│       │   ├── attacks.js               ✅ BUILT
-│       │   ├── audit.js                 ✅ BUILT
-│       │   ├── forensics.js             ✅ BUILT
-│       │   ├── health.js                ✅ BUILT
-│       │   ├── logs.js                  ✅ BUILT
-│       │   ├── pcap.js                  ✅ BUILT (v2 schema)
-│       │   ├── serviceStatus.js         ✅ BUILT
-│       │   └── stats.js                 ✅ BUILT
+│       │   ├── actions.js           GET /pending, POST /:id/approve, POST /:id/reject
+│       │   ├── alerts.js            GET /, PATCH /:id/read, POST /armoriq
+│       │   ├── armoriq.js           POST /trigger (demo/test route)
+│       │   ├── attacks.js           GET /recent, GET /:id/forensics
+│       │   ├── audit.js             POST /ingest, GET /
+│       │   ├── forensics.js         GET /:id
+│       │   ├── health.js            GET /
+│       │   ├── logs.js              POST /ingest, GET /recent
+│       │   ├── pcap.js              POST /upload (multipart, v2 schema)
+│       │   ├── serviceStatus.js     GET /
+│       │   └── stats.js             GET /
 │       ├── services/
-│       │   ├── attackService.js         ✅ BUILT — reportAttack + callArmorIQ
-│       │   ├── detectionConnector.js    ✅ BUILT — circuit breaker, default :8002
-│       │   ├── logService.js            ✅ BUILT
-│       │   ├── serviceHealthService.js  ✅ BUILT
-│       │   └── statsService.js         ✅ BUILT
+│       │   ├── attackService.js     reportAttack() → save + alert + callArmorIQ()
+│       │   ├── detectionConnector.js POST :8002/analyze, circuit breaker 30s
+│       │   ├── logService.js        ingest → detect → report
+│       │   ├── serviceHealthService.js ping all 4 services
+│       │   └── statsService.js      aggregate stats
 │       ├── sockets/
-│       │   └── broadcastService.js      ✅ BUILT
-│       │       EVENTS: attack:new | alert:new | service:status |
-│       │               stats:update | action:pending | audit:new ✅
+│       │   └── broadcastService.js  EVENTS: attack:new|alert:new|service:status
+│       │                            stats:update|action:pending|audit:new
 │       ├── tests/
 │       │   ├── apis.test.js
 │       │   ├── detection.test.js
@@ -231,76 +198,110 @@ SENTINAL/
 │           ├── eventEmitter.js
 │           └── logger.js
 │
-├── dashboard/                   ← SERVICE 5: React SPA (Vite :5173)
+├── dashboard/                       SERVICE 5: React SPA (Vite :5173)
+│   ├── index.html
+│   ├── package.json
+│   ├── vite.config.js
 │   └── src/
 │       ├── App.jsx
+│       ├── main.jsx
 │       ├── components/
-│       │   ├── ActionQueue.jsx          ✅ BUILT — confirm modal, fade-out, attack link
-│       │   ├── AlertsPanel.jsx          ✅ BUILT
+│       │   ├── ActionQueue.jsx      confirm modal, fade-out, attack link
+│       │   ├── AlertsPanel.jsx
 │       │   ├── AppLayout.jsx
-│       │   ├── ForensicsDrawer.jsx      ✅ BUILT
-│       │   ├── LiveAttackFeed.jsx       ✅ BUILT
-│       │   ├── Navbar.jsx               ✅ BUILT — live badge counters
-│       │   ├── StatsPanel.jsx           ✅ BUILT
-│       │   └── SystemStatus.jsx         ✅ BUILT
+│       │   ├── ForensicsDrawer.jsx
+│       │   ├── LiveAttackFeed.jsx   socket.on(attack:new)
+│       │   ├── Navbar.jsx           live badge counters (alerts + queue)
+│       │   ├── StatsPanel.jsx
+│       │   └── SystemStatus.jsx
 │       ├── hooks/
 │       │   ├── useApi.js
 │       │   ├── useInterval.js
 │       │   └── useSocket.js
 │       ├── pages/
-│       │   ├── ActionQueuePage.jsx      ✅ BUILT
-│       │   ├── Alerts.jsx               ✅ BUILT — Tailwind, type filter, mark-all-read
-│       │   ├── Attacks.jsx              ✅ BUILT
-│       │   ├── AuditLog.jsx             ✅ BUILT — stat bar, filters, auto-refresh 10s
-│       │   ├── Dashboard.jsx            ✅ BUILT
+│       │   ├── ActionQueuePage.jsx  approve/reject pending blocked actions
+│       │   ├── Alerts.jsx           type filter + mark-all-read
+│       │   ├── Attacks.jsx          table + severity/type filters
+│       │   ├── AuditLog.jsx         stat bar + filters + socket:audit:new live
+│       │   ├── Dashboard.jsx        main overview
 │       │   ├── Docs.jsx
-│       │   ├── ForensicsPage.jsx        ✅ BUILT
+│       │   ├── ForensicsPage.jsx    IP intel + chain timeline
 │       │   ├── Landing.jsx
-│       │   ├── Logs.jsx                 ✅ BUILT
+│       │   ├── Logs.jsx
 │       │   ├── NotFound.jsx
-│       │   ├── PcapAnalyzer.jsx         ✅ BUILT (v2 schema)
-│       │   ├── Services.jsx             ✅ BUILT
+│       │   ├── PcapAnalyzer.jsx     v2 schema, 5 stat cards
+│       │   ├── Services.jsx         health ping all services
 │       │   └── Settings.jsx
 │       └── services/
-│           ├── api.js                   ✅ BUILT — all API + ArmorIQ calls
-│           └── socket.js                ✅ BUILT
+│           ├── api.js               all API calls + unwrap helper
+│           └── socket.js            Socket.io client
 │
-├── demo-target/                 ← E2E test harness (Express :4000)
-│   ├── server.js                ✅ BUILT — real Express app + sentinel-middleware
-│   ├── attack.sh                ✅ BUILT — 7 automated attack scenarios
+├── demo-target/                     E2E harness (Express :4000)
+│   ├── server.js                    real Express app + sentinel-middleware
+│   ├── attack.sh                    7 automated attack scenarios
 │   └── package.json
 │
 ├── scripts/
-│   └── simulate_attack.sh               ✅ BUILT — fires 2 attacks, tests full pipeline
+│   └── simulate_attack.sh
 │
 └── services/
-    ├── armoriq-agent/               ← SERVICE 4: Python/FastAPI :8004
-    │   ├── main.py                  ✅ BUILT — FastAPI app, POST /respond + GET /health
-    │   ├── intent_builder.py        ✅ BUILT — builds 6 ProposedAction intents
-    │   ├── policy_engine.py         ✅ BUILT — 4 POLICY_RULES, dot-access on ProposedAction
-    │   ├── executor.py              ✅ BUILT — HTTP 200/201 check (no raise_for_status)
-    │   ├── audit_logger.py          ✅ BUILT — POST /api/audit/ingest, dot-access
-    │   ├── models.py                ✅ BUILT — ProposedAction typed, IntentModel updated
-    │   └── requirements.txt
+    ├── armoriq-agent/               SERVICE 4: Python/FastAPI :8004
+    │   ├── main.py                  FastAPI app: POST /respond + GET /health
+    │   │                            _evaluate_with_fallback() wrapper
+    │   ├── intent_builder.py        builds 5–6 ProposedAction intents per attack
+    │   ├── openclaw_runtime.py      PRIMARY enforcer — loads policy.yaml
+    │   │                            RULE_001→004 + RULE_DEFAULT, fail-safe BLOCK
+    │   │                            raises RuntimeError on crash (triggers fallback)
+    │   ├── policy_engine.py         FALLBACK enforcer — hardcoded rules
+    │   │                            used only if openclaw_runtime crashes
+    │   ├── executor.py              HTTP 200/201 check (no raise_for_status)
+    │   │                            sends to Gateway endpoints
+    │   ├── audit_logger.py          POST /api/audit/ingest per decision
+    │   ├── models.py                ProposedAction (Pydantic typed), IntentModel,
+    │   │                            DecisionModel, RespondRequest, RespondResponse
+    │   ├── policy.yaml              declarative policy: allowed/blocked lists,
+    │   │                            risk_rules, default_decision: BLOCK
+    │   ├── requirements.txt         fastapi, uvicorn, httpx, pydantic, pyyaml,
+    │   │                            python-dotenv, pytest, pytest-asyncio
+    │   ├── .env.example
+    │   ├── README.md
+    │   └── tests/
+    │       └── test_enforcement.py  7/7 tests pass ✅
     │
-    ├── detection-engine/            ← SERVICE 3: Python/FastAPI :8002
-    │   └── app/                     🟡 PARTIAL — 45-rule engine works, ML optional
+    ├── detection-engine/            SERVICE 3: Python/FastAPI :8002
+    │   └── app/
+    │       ├── main.py              FastAPI: POST /analyze + GET /health
+    │       ├── rules.py             45 regex patterns, 11 attack types
+    │       ├── adversarial.py       URL/double/HTML/unicode decode
+    │       └── [classifier.py]      ML optional — needs sentinel_v5.pkl
     │
-    ├── middleware/                  ← npm package: sentinel-middleware
-    │   ├── package.json             ✅ BUILT — v1.0.0, publishable
+    ├── middleware/                  npm package: sentinel-middleware
+    │   ├── package.json             v1.0.0
     │   ├── README.md
     │   ├── src/
-    │   │   ├── index.js             ✅ BUILT
-    │   │   ├── config.js            ✅ BUILT — scrub, IP extract, validation
-    │   │   ├── sender.js            ✅ BUILT — axios + retry queue + unref() ✅
+    │   │   ├── index.js
+    │   │   ├── config.js            scrub sensitive fields, IP extract
+    │   │   ├── sender.js            axios + retry queue + unref()
     │   │   └── adapters/
-    │   │       ├── express.js       ✅ BUILT
-    │   │       └── fastify.js       ✅ BUILT
+    │   │       ├── express.js
+    │   │       └── fastify.js
     │   └── tests/
-    │       └── sentinel.test.js     ✅ 16/16 PASS
+    │       └── sentinel.test.js     16/16 Jest tests pass ✅
     │
-    └── pcap-processor/              ← SERVICE 2: Python/FastAPI :8003
-        └── [8 detectors, 10/10 tests pass] ✅ BUILT
+    └── pcap-processor/              SERVICE 2: Python/FastAPI :8003
+        ├── main.py                  FastAPI: POST /process + GET /health
+        ├── pcap_loader.py
+        ├── packet_parser.py         PacketMeta objects
+        ├── flow_builder.py          5-tuple flows
+        ├── attack_detector.py       8 detectors (see §8)
+        ├── config.py
+        ├── flow_builder.py
+        ├── logger.py
+        ├── requirements.txt
+        ├── datasets/
+        └── tests/
+            ├── test_pcap_processor.py  10/10 pass ✅
+            └── fixtures/               9 .pcap files
 ```
 
 ---
@@ -309,153 +310,84 @@ SENTINAL/
 
 | Service | Language | Port | Status | Entry Point |
 |---------|----------|------|--------|-------------|
-| **Gateway API** | Node.js + Express | 3000 | ✅ WORKING | `backend/server.js` |
-| **PCAP Processor** | Python + FastAPI | 8003 | ✅ WORKING | `services/pcap-processor/main.py` |
-| **Detection Engine** | Python + FastAPI | 8002 | 🟡 PARTIAL | `services/detection-engine/app/main.py` |
-| **ArmorIQ Agent** | Python + FastAPI | 8004 | ✅ WORKING | `services/armoriq-agent/main.py` |
-| **React Dashboard** | Vite + React | 5173 | ✅ WORKING | `dashboard/src/main.jsx` |
-| **sentinel-middleware** | Node.js npm pkg | — | ✅ WORKING | `services/middleware/src/index.js` |
-| **Demo Target** | Node.js + Express | 4000 | ✅ WORKING | `demo-target/server.js` |
-| **MongoDB** | Atlas cloud | 27017 | ✅ WORKING | configured in `.env` |
-
-### Start Commands (Demo Day)
-
-```bash
-# Terminal 1 — MongoDB (if local)
-mongod
-
-# Terminal 2 — Gateway
-cd backend && npm run dev
-
-# Terminal 3 — Detection Engine
-cd services/detection-engine
-source venv/bin/activate
-uvicorn app.main:app --port 8002
-
-# Terminal 4 — ArmorIQ Agent
-cd services/armoriq-agent
-uvicorn main:app --port 8004 --reload
-
-# Terminal 5 — Demo Target
-cd demo-target && node server.js
-
-# Terminal 6 — Dashboard
-cd dashboard && npm run dev
-# Open: http://localhost:5173
-
-# Fire attacks (demo presentation)
-bash demo-target/attack.sh
-```
+| Gateway API | Node.js + Express | 3000 | ✅ WORKING | `backend/server.js` |
+| PCAP Processor | Python + FastAPI | 8003 | ✅ WORKING | `services/pcap-processor/main.py` |
+| Detection Engine | Python + FastAPI | 8002 | 🟡 PARTIAL | `services/detection-engine/app/main.py` |
+| ArmorIQ Agent | Python + FastAPI | 8004 | ✅ WORKING | `services/armoriq-agent/main.py` |
+| React Dashboard | Vite + React | 5173 | ✅ WORKING | `dashboard/src/main.jsx` |
+| sentinel-middleware | Node.js npm pkg | — | ✅ WORKING | `services/middleware/src/index.js` |
+| Demo Target | Node.js + Express | 4000 | ✅ WORKING | `demo-target/server.js` |
+| MongoDB | Atlas cloud | 27017 | ✅ WORKING | configured in `.env` |
 
 ---
 
 ## 4. Complete Request Lifecycle
 
-### Flow A — Live Request via Middleware (Normal Operation)
+### Flow A — Live Request via Middleware
 
 ```
-1.  User hits developer's app  →  Express/Fastify handles request normally
-2.  res.on('finish') fires     →  sentinel-middleware captures payload
-3.  POST /api/logs/ingest      →  Gateway validates (Joi) + saves SystemLog
-4.  setImmediate(() =>)        →  non-blocking detection pipeline starts
-5.  detectionConnector         →  POST :8002/analyze (circuit breaker: 30s reset)
-6.  Detection Engine returns   →  { threat_detected, threat_type, severity,
-                                     confidence, explanation, ... }
-7a. IF threat_detected = false →  stop. No further action.
-7b. IF threat_detected = true:
-    AttackEvent.create()       →  saved to MongoDB
-    emitter.emit(attack:new)   →  Dashboard LiveAttackFeed updates
-    IF severity high/critical:
-      Alert.create()           →  type: 'attack_detected'
-      emitter.emit(alert:new)  →  Navbar badge increments
-    callArmorIQ() [async]      →  POST :8004/respond
-8.  ArmorIQ evaluates 6 intents (each a ProposedAction):
-    ALLOWED → executor.py fires:
-      send_alert  →  POST /api/alerts/armoriq → Alert.create(armoriq_action)
-                  →  emitter.emit(alert:new)
-      log_attack / rate_limit_ip / flag_for_review / generate_report
-                  →  acknowledged + audit_logger called
-    Each intent → audit_logger.py → POST /api/audit/ingest
-                → AuditLog.create() → emitter.emit(EVENTS.AUDIT_NEW)
-                → Socket.io broadcasts audit:new → Dashboard AuditLog live
-    BLOCKED → for each blocked action:
-      ActionQueue.create()     →  status: 'pending'
-      emitter.emit(action:pending) →  Dashboard queue badge increments
-      audit_logger.py          →  AuditLog entry status: 'BLOCKED'
-9.  Human visits /action-queue:
+1.  User hits developer's app → Express handles normally
+2.  res.on('finish') → sentinel-middleware captures payload async
+3.  POST /api/logs/ingest → SystemLog saved to MongoDB
+4.  setImmediate() → non-blocking: detectionConnector.analyze()
+5.  POST :8002/analyze → Detection Engine evaluates
+6.  Returns { threat_detected, threat_type, severity, confidence, ... }
+7a. threat_detected = false → stop.
+7b. threat_detected = true:
+      AttackEvent.create()  → MongoDB
+      emit(attack:new)      → Dashboard LiveAttackFeed
+      IF severity high/critical:
+        Alert.create(type: attack_detected)
+        emit(alert:new)     → Navbar badge
+      callArmorIQ() [async] → POST :8004/respond
+8.  ArmorIQ evaluates each ProposedAction via openclaw_runtime:
+      ALLOW → executor.py executes (send_alert, log_attack, rate_limit_ip, etc.)
+      BLOCK → ActionQueue.create() in MongoDB
+    Each decision → audit_logger.py → POST /api/audit/ingest
+                 → AuditLog.create() → emit(audit:new) → Dashboard live
+9.  Blocked actions saved as 'pending' in action_queue
+    emit(action:pending) → Dashboard queue badge increments
+10. Human visits /action-queue:
     APPROVE → POST /api/actions/:id/approve
-              AuditLog entry: status 'APPROVED', policy_rule_id 'HUMAN_OVERRIDE'
+              AuditLog(APPROVED, HUMAN_OVERRIDE)
     REJECT  → POST /api/actions/:id/reject
-              AuditLog entry: status 'REJECTED', policy_rule_id 'HUMAN_OVERRIDE'
-    Both emit emitter(audit:new) → Dashboard AuditLog updates live
+              AuditLog(REJECTED, HUMAN_OVERRIDE)
 ```
 
-### Flow B — PCAP Upload (Offline Analysis)
+### Flow B — PCAP Upload
 
 ```
-1.  Analyst uploads .pcap at /pcap page
-2.  POST /api/pcap/upload (multipart) →  saved to /tmp/sentinal-uploads/<uuid>
-3.  Gateway → POST :8003/process (filepath + projectId)
-4.  PCAP Processor pipeline:
-    pcap_loader → packet_parser → flow_builder → attack_detector
-    Returns: local_attacks[] + engine_attacks[] (v2 schema)
-5.  Gateway merges both lists → AttackEvent.create() per attack
-6.  Each attack → emitter.emit(attack:new) → Dashboard feed
-7.  Response to UI:
-    { total_packets, parsed_packets, total_flows, processing_time_s,
-      local_attacks_found, engine_attacks_found, attacks_saved, skipped_engine }
+1.  POST /api/pcap/upload (multipart, field "pcap", field "projectId")
+2.  Saved to /tmp/sentinal-uploads/<uuid>
+3.  Gateway → POST :8003/process
+4.  PCAP Processor: pcap_loader→packet_parser→flow_builder→attack_detector
+5.  Returns local_attacks[] + engine_attacks[] (v2 schema)
+6.  Gateway merges → AttackEvent.create() per attack → emit(attack:new)
+7.  Response: { total_packets, parsed_packets, total_flows,
+                processing_time_s, local_attacks_found,
+                engine_attacks_found, attacks_saved, skipped_engine }
 ```
 
-### Flow C — Direct ArmorIQ Trigger (Demo / Testing)
+### Flow C — Direct ArmorIQ Trigger (Demo)
 
 ```
 1.  POST /api/armoriq/trigger { ip, attackType, severity, confidence, status }
 2.  Gateway creates SystemLog (projectId: 'armoriq-demo')
-3.  attackService.reportAttack() → AttackEvent + Alert + callArmorIQ()
-4.  Same as Flow A steps 8–9
-    Response: { attackId, logId, ip, attackType, severity, confidence, note }
-```
-
-### Flow D — Demo Target (E2E Attack Simulation)
-
-```
-1.  Attacker/tester sends attack payload to demo-target :4000
-    e.g. GET /search?q='+UNION+SELECT -- or POST /login with XSS body
-2.  Demo target responds normally (intentionally vulnerable)
-3.  sentinel-middleware fires res.on('finish') async
-4.  POST :3000/api/logs/ingest  →  full pipeline as Flow A above
-5.  Attack appears in Dashboard within ~2–4 seconds
-    attack:new → LiveAttackFeed
-    action:pending → ActionQueue badge
-    audit:new → AuditLog panel
+3.  attackService.reportAttack() → full pipeline same as Flow A steps 7b–10
+4.  Response: { attackId, logId, ip, attackType, severity, confidence, note }
 ```
 
 ---
 
-## 5. API Contracts — Every Route
+## 5. API Contracts — Every Live Route
 
-### Gateway API (`:3000`)
-
-All responses use the standard envelope (§12). `data` field holds the payload.
-
-> ⚠️ `GET /api/health` returns `{ success: false, code: 'NOT_FOUND' }` — this route
-> is not registered. Use `GET /api/service-status` to check gateway liveness or
-> add a `/health` route manually if needed.
+### Gateway (`:3000`) — all responses use envelope (§12)
 
 #### Logs
 ```
 POST /api/logs/ingest
-Body: {
-  projectId:        string   (required)
-  method:           string   GET|POST|PUT|PATCH|DELETE|OPTIONS|HEAD
-  url:              string   (required)
-  ip:               string   (required)
-  queryParams:      object   (default: {})
-  body:             object   (default: {})
-  headers:          object   (default: {})
-  responseCode:     number   100–599 | null
-  processingTimeMs: number   (default: 0)
-}
+Body: { projectId, method, url, ip, queryParams?, body?, headers?,
+        responseCode?, processingTimeMs? }
 Response 201: { success: true, data: { id: ObjectId } }
 ```
 
@@ -465,107 +397,72 @@ GET  /api/attacks/recent?limit=50
 Response: { success: true, data: AttackEvent[] }
 
 GET  /api/attacks/:id/forensics
-Response data: {
-  attack:      AttackEventShape,
-  raw_request: SystemLogShape | null,
-  ip_intel: {
-    ip, total_requests_24h, total_attacks_ever,
-    first_attack, last_attack, attack_types_seen
-  },
-  attack_chain: {
-    timeline:      { time, method, url, code }[],
-    pattern_label: string,
-    all_attacks:   AttackEvent[]
-  }
-}
+Response data: { attack, raw_request, ip_intel, attack_chain }
 ```
 
 #### Alerts
 ```
-GET   /api/alerts?limit=50          →  { success: true, data: Alert[] }
-PATCH /api/alerts/:id/read          →  { success: true, data: { id, read: true } }
-POST  /api/alerts/armoriq           →  called by ArmorIQ executor only
+GET   /api/alerts?limit=50
+PATCH /api/alerts/:id/read
+POST  /api/alerts/armoriq  ← called by ArmorIQ executor only
   Body: { attackId, ip, attackType, severity, message, source }
-  Response 201: { success: true, data: { id: ObjectId } }
+  Response 201: { success: true, data: { id } }
 ```
 
-#### ArmorIQ Actions
+#### Action Queue (OpenClaw blocked actions)
 ```
 GET  /api/actions/pending
   Response: { success: true, data: ActionQueue[] }
 
 POST /api/actions/:id/approve
   Body: { approvedBy: string }
-  Response: { success: true, message: 'Action approved',
-              data: { _id, action, status: 'approved', approvedBy, approvedAt, ... } }
+  Response: { success: true, data: { _id, action, status:'approved', ... } }
 
 POST /api/actions/:id/reject
   Body: { rejectedBy: string }
-  Response: { success: true, message: 'Action rejected',
-              data: { _id, action, status: 'rejected', rejectedBy, rejectedAt, ... } }
+  Response: { success: true, data: { _id, action, status:'rejected', ... } }
 ```
 
-#### Audit Log
+#### Audit Log (OpenClaw decision log)
 ```
 GET  /api/audit?limit=100
-  Response: { success: true, data: AuditLog[] }  (sorted createdAt desc)
+  Response: { success: true, data: AuditLog[] }  sorted createdAt desc
 
-POST /api/audit/ingest  (called by ArmorIQ audit_logger.py — not for direct use)
-  Body: {
-    intent_id?:         string
-    action:             string  (required)
-    status:             string  ALLOWED|BLOCKED|APPROVED|REJECTED (required)
-    reason?:            string
-    policy_rule_id?:    string
-    enforcement_level?: string
-    triggeredBy?:       string  (default: 'agent')
-    ip?:                string
-    attackId?:          string
-    meta?:              object
-  }
-  Response 201: { success: true, data: { id: ObjectId } }
-  Side effect: emits EVENTS.AUDIT_NEW via Socket.io
+POST /api/audit/ingest  ← called by audit_logger.py only
+  Body: { intent_id?, action, status, reason?, policy_rule_id?,
+          enforcement_level?, triggeredBy?, ip?, attackId?, meta? }
+  Response 201: { success: true, data: { id } }
+  Side effect: emit(audit:new) via Socket.io
 ```
 
-#### ArmorIQ Trigger (Demo)
+#### ArmorIQ Trigger (Demo / Testing)
 ```
 POST /api/armoriq/trigger
-Body: {
-  ip:         string  (default: '10.0.0.1')
-  attackType: string  sqli|xss|traversal|command_injection|ssrf|lfi_rfi|
-                      brute_force|hpp|xxe|webshell|unknown
-  severity:   string  low|medium|high|critical (default: 'critical')
-  confidence: number  0.0–1.0 (default: 0.97)
-  status:     string  attempt|successful|blocked (default: 'successful')
-}
-Response 201: { success: true, data: { attackId, logId, ip, attackType, severity, confidence, note } }
+Body: { ip?, attackType?, severity?, confidence?, status? }
+Response 201: { success: true, data: { attackId, logId, ip, attackType,
+                                       severity, confidence, note } }
 ```
 
 #### PCAP Upload
 ```
 POST /api/pcap/upload
-Body: multipart/form-data
-  Field "pcap":      File (.pcap or .pcapng, max 500MB)
-  Field "projectId": string (optional, default: 'pcap-upload')
-Response data (v2 schema):
-  { total_packets, parsed_packets, total_flows, processing_time_s,
-    local_attacks_found, engine_attacks_found, attacks_saved, skipped_engine }
+Body: multipart/form-data  field:"pcap" (File) + field:"projectId" (string)
+Response data: { total_packets, parsed_packets, total_flows,
+                 processing_time_s, local_attacks_found,
+                 engine_attacks_found, attacks_saved, skipped_engine }
 ```
 
-#### Stats
+#### Stats / Services / Logs
 ```
 GET /api/stats
-Response data: {
-  totalRequests, totalAttacks, criticalAlerts, servicesOnline,
-  attacksByType: { [attackType]: number },
-  recentTimeline: { time: ISODate, count: number }[]
-}
-```
+  Response data: { totalRequests, totalAttacks, criticalAlerts, servicesOnline,
+                   attacksByType: {[type]:number}, recentTimeline: {time,count}[] }
 
-#### Other
-```
-GET /api/service-status  →  { service, status, responseTimeMs, error? }[]
-GET /api/logs/recent?limit=50  →  SystemLog[]
+GET /api/service-status
+  Response data: { service, status, responseTimeMs, error? }[]
+
+GET /api/logs/recent?limit=50
+  Response data: SystemLog[]
 ```
 
 ### ArmorIQ Agent (`:8004`)
@@ -573,101 +470,124 @@ GET /api/logs/recent?limit=50  →  SystemLog[]
 POST /respond
 Body: { attackId, ip, attackType, severity, status, confidence }
 Response: {
-  actionsExecuted: string[],
-  actionsQueued: [
-    { action, agentReason, blockedReason }
-  ]
+  attackId:         string,
+  actionsExecuted:  string[],
+  actionsQueued:    { action, decision, reason, agentReason, blockedReason }[],
+  auditEntries:     number
 }
 
-GET /health  →  { status: 'ok', service: 'armoriq-agent', version, enforcement }
+GET /health
+Response: { status:'ok', service:'armoriq-agent', version:'2.0.0',
+            enforcement:'ArmorClaw-v1', openclaw_loaded:bool,
+            policy_source:'policy.yaml' }
 ```
 
 ### PCAP Processor (`:8003`)
 ```
 POST /process
 Body: { filepath: string, projectId: string }
-Response (v2 schema): { filepath, total_packets, parsed_packets, total_flows,
-  http_requests_sent, processing_time_s,
-  local_attacks: [{ attack_type, severity, src_ip, dst_ip, description, evidence }],
-  engine_attacks: [{ threat_detected, threat_type, severity, confidence, ip, url, responseCode }],
-  skipped_engine: number }
+Response: { filepath, total_packets, parsed_packets, total_flows,
+            http_requests_sent, processing_time_s,
+            local_attacks: [{ attack_type, severity, src_ip, dst_ip,
+                              description, evidence }],
+            engine_attacks: [{ threat_detected, threat_type, severity,
+                               confidence, ip, url, responseCode }],
+            skipped_engine: number }
 
-GET /health  →  { status: 'ok' }
+GET /health  →  { status: 'ok', service: 'pcap-processor', version: '2.0.0' }
 ```
 
 ### Detection Engine (`:8002`)
 ```
 POST /analyze
-Body: { logId, projectId, method, url, ip, queryParams, body, headers, responseCode }
-Response (attack):
-  { threat_detected: true, threat_type, severity, status, detectedBy,
-    confidence, payload, explanation: { headline, what_happened, damage, fix } | null,
-    mitigationSuggestion }
+Body: { logId, projectId, method, url, ip, queryParams,
+        body, headers, responseCode }
+Response (threat): { threat_detected:true, threat_type, severity, status,
+                     detectedBy, confidence, payload,
+                     explanation:{headline,what_happened,damage,fix}|null,
+                     mitigationSuggestion }
 Response (clean): { threat_detected: false }
 
-GET /health  →  { status: 'ok', model_loaded: boolean }
+GET /health  →  { status:'ok', service:'detection-engine', version:'1.0.0' }
 ```
 
 ---
 
-## 6. User Flows
+## 6. OpenClaw Enforcement Architecture
 
-### Flow 1 — Dashboard
-```
-/dashboard
-  ├── StatsPanel         polls GET /api/stats every 30s
-  ├── ServiceStatusBar   polls GET /api/service-status every 15s
-  ├── LiveAttackFeed     socket.on('attack:new') — new row slides in
-  └── Charts             attacksByType + recentTimeline (P1)
+### Files in `services/armoriq-agent/`
+
+| File | Role |
+|------|------|
+| `main.py` | FastAPI app. Calls `_evaluate_with_fallback()` per intent. Tries openclaw_runtime first; catches RuntimeError → falls back to policy_engine |
+| `intent_builder.py` | Takes `RespondRequest` → builds list of `IntentModel` objects. 5–6 intents per attack depending on severity |
+| `openclaw_runtime.py` | **PRIMARY enforcer**. Loads `policy.yaml` via `@lru_cache`. Evaluates RULE_001→004→DEFAULT. Returns `DecisionModel`. Raises `RuntimeError` on policy load failure |
+| `policy_engine.py` | **FALLBACK enforcer**. Same rule logic but hardcoded in Python. Used only when `openclaw_runtime` raises |
+| `executor.py` | Receives ALLOW decisions. Calls Gateway endpoints. Uses HTTP 200/201 check (not `raise_for_status`). Does NOT execute BLOCK decisions |
+| `audit_logger.py` | Called after every decision. POSTs to `/api/audit/ingest`. Dot-access on `DecisionModel` |
+| `models.py` | `RespondRequest`, `ProposedAction` (typed Pydantic), `IntentModel`, `DecisionModel`, `RespondResponse` |
+| `policy.yaml` | External declarative policy file. Defines `allowed_actions`, `blocked_actions`, `risk_rules`, `default_decision`, `enforcement_level` |
+
+### policy.yaml Structure
+```yaml
+version: "1.0"
+enforcement_level: "ArmorClaw-v1"
+
+allowed_actions:
+  - name: send_alert
+  - name: log_attack
+  - name: rate_limit_ip
+  - name: flag_for_review
+  - name: generate_report
+
+blocked_actions:
+  - name: permanent_ban_ip
+    reason: "Irreversible — requires human authorization"
+  - name: shutdown_endpoint
+    reason: "Critical impact — requires human authorization"
+  - name: purge_all_sessions
+    reason: "Irreversible — requires human authorization"
+  - name: modify_firewall_rules
+    reason: "Critical infrastructure — requires human authorization"
+
+risk_rules:
+  - rule_id: RULE_002
+    risk_level: critical
+    decision: BLOCK
+    reason: "Critical risk level — auto-block regardless of action"
+  - rule_id: RULE_003
+    risk_level: high
+    decision: BLOCK
+    reason: "High risk level — escalated for human review"
+
+default_decision: BLOCK
+default_reason: "No matching policy rule — fail-safe deny"
+default_rule_id: RULE_DEFAULT
 ```
 
-### Flow 2 — Alerts Page
-```
-/alerts
-  GET /api/alerts?limit=200
-  Filters: severity | type (armoriq_action/attack_detected) | read/unread
-  Row styling: armoriq_action = purple; read = 50% opacity
-  Live: socket.on('alert:new') prepends row; Navbar badge increments
-  Mark All Read: PATCH /api/alerts/:id/read for all unread
-```
+### `policy_rule_id` enum
 
-### Flow 3 — Action Queue
-```
-/action-queue
-  GET /api/actions/pending
-  Card: risk badge | action | attackType | severity | IP | reasons | View Attack link
-  Approve → POST /api/actions/:id/approve → AuditLog APPROVED + card fades out
-  Reject  → POST /api/actions/:id/reject  → AuditLog REJECTED + card fades out
-  Live: socket.on('action:pending') prepends card; Navbar badge increments
-```
+| Rule | Fires when |
+|------|------------|
+| `RULE_001` | action is in `blocked_actions` list |
+| `RULE_002` | `risk_level == 'critical'` |
+| `RULE_003` | `risk_level == 'high'` |
+| `RULE_004` | action is in `allowed_actions` list |
+| `RULE_DEFAULT` | nothing matched — fail-safe BLOCK |
+| `HUMAN_OVERRIDE` | human approved or rejected via Dashboard |
 
-### Flow 4 — Audit Log
+### Enforcement Verification (live test result)
 ```
-/audit
-  GET /api/audit?limit=200  (auto-refresh every 10s)
-  Live: socket.on('audit:new') prepends row in real time ✅
-  Stat bar (clickable filters): ALLOWED:N | BLOCKED:N | APPROVED:N | REJECTED:N
-  Action filter dropdown: all 8 action types
-  Table: Timestamp | Action | Status badge | Policy Rule | IP | Triggered By | Reason
-  Triggered By 'human' shown in blue bold
-```
+POST /respond {severity:critical, attackType:sqli}
 
-### Flow 5 — PCAP Analyzer
-```
-/pcap  — drag-drop .pcap → POST /api/pcap/upload → 5 stat cards + attack feed
-```
+send_alert       → RULE_004 → ALLOW  → EXECUTED ✅
+log_attack       → RULE_004 → ALLOW  → EXECUTED ✅
+rate_limit_ip    → RULE_004 → ALLOW  → EXECUTED ✅
+flag_for_review  → RULE_004 → ALLOW  → EXECUTED ✅
+permanent_ban_ip → RULE_001 → BLOCK  → QUEUED   🔒
+shutdown_endpoint→ RULE_001 → BLOCK  → QUEUED   🔒
 
-### Flow 6 — Forensics
-```
-/attacks/:id → GET /api/attacks/:id/forensics
-  Shows: attack summary | raw HTTP request | IP intel | attack chain timeline
-```
-
-### Flow 7 — Services Health
-```
-/services → GET /api/service-status
-  Services monitored: gateway (3000) | detection-engine (8002) |
-                      pcap-processor (8003) | armoriq-agent (8004)
+auditEntries: 6 — all logged to MongoDB ✅
 ```
 
 ---
@@ -677,105 +597,79 @@ GET /health  →  { status: 'ok', model_loaded: boolean }
 ### `systemlogs`
 ```js
 {
-  _id:              ObjectId,
-  projectId:        String,
-  timestamp:        Date,
-  method:           String,
-  url:              String,
-  queryParams:      Object,
-  body:             Object,
-  headers:          { userAgent, contentType, referer },
-  ip:               String,
-  responseCode:     Number | null,
-  processingTimeMs: Number
+  _id: ObjectId, projectId: String, timestamp: Date,
+  method: String, url: String, queryParams: Object,
+  body: Object, headers: { userAgent, contentType, referer },
+  ip: String, responseCode: Number|null, processingTimeMs: Number
 }
 ```
 
 ### `attackevents`
 ```js
 {
-  _id:                  ObjectId,
-  requestId:            ObjectId,   // ref → systemlogs._id
-  timestamp:            Date,
-  ip:                   String,
-  attackType:           String,     // see §8 enum
-  severity:             String,     // low|medium|high|critical
-  status:               String,     // attempt|successful|blocked
-  detectedBy:           String,     // rule|ml|both
-  confidence:           Number,
-  payload:              String,
-  explanation:          String,     // JSON stringified
-  mitigationSuggestion: String,
-  responseCode:         Number | null
+  _id: ObjectId, requestId: ObjectId,  // → systemlogs
+  timestamp: Date, ip: String,
+  attackType: String,    // see §8 enum
+  severity: String,      // low|medium|high|critical
+  status: String,        // attempt|successful|blocked
+  detectedBy: String,    // rule|ml|both
+  confidence: Number,    // 0.0–1.0
+  payload: String, explanation: String, mitigationSuggestion: String,
+  responseCode: Number|null
 }
 ```
 
 ### `alerts`
 ```js
 {
-  _id:        ObjectId,
-  attackId:   ObjectId,             // ref → attackevents._id (required)
-  title:      String,
-  message:    String,
-  severity:   String,               // low|medium|high|critical
-  type:       String,               // attack_detected|armoriq_action|service_down|rate_limit|anomaly
-  isRead:     Boolean,              // default: false
-  resolvedAt: Date | null,
-  meta:       Object,
-  createdAt:  Date
+  _id: ObjectId, attackId: ObjectId,  // → attackevents
+  title: String, message: String,
+  severity: String,      // low|medium|high|critical
+  type: String,          // attack_detected|armoriq_action|service_down|rate_limit|anomaly
+  isRead: Boolean,       // default: false
+  resolvedAt: Date|null, meta: Object, createdAt: Date
 }
 ```
 
 ### `action_queue`
 ```js
 {
-  _id:           ObjectId,
-  attackId:      ObjectId,          // ref → attackevents._id
-  action:        String,            // permanent_ban_ip|shutdown_endpoint|
-                                    //   purge_all_sessions|modify_firewall_rules
-  status:        String,            // pending|approved|rejected
-  agentReason:   String,
-  blockedReason: String,
-  ip:            String,
-  approvedBy:    String | null,
-  approvedAt:    Date | null,
-  rejectedBy:    String | null,
-  rejectedAt:    Date | null,
-  createdAt:     Date
+  _id: ObjectId, attackId: ObjectId,  // → attackevents
+  action: String,        // permanent_ban_ip|shutdown_endpoint|purge_all_sessions|modify_firewall_rules
+  status: String,        // pending|approved|rejected
+  agentReason: String, blockedReason: String, ip: String,
+  approvedBy: String|null, approvedAt: Date|null,
+  rejectedBy: String|null, rejectedAt: Date|null,
+  createdAt: Date
 }
 ```
 
 ### `audit_logs`
 ```js
 {
-  _id:               ObjectId,
-  intent_id:         String | null,   // UUID from ArmorIQ IntentModel
-  action:            String,          // one of the 9 ArmorIQ actions
-  status:            String,          // ALLOWED|BLOCKED|APPROVED|REJECTED
-  triggeredBy:       String,          // 'agent'|'human'
-  ip:                String,
-  attackId:          String | null,   // stored as string (ObjectId ref)
-  policy_rule_id:    String,          // RULE_001..RULE_004|RULE_DEFAULT|HUMAN_OVERRIDE
-  enforcement_level: String,          // default: 'ArmorIQ-Policy-v1'
-  reason:            String,
-  meta:              Object,          // e.g. { actionQueueId, attackType }
-  createdAt:         Date
+  _id: ObjectId,
+  intent_id: String|null,          // UUID from IntentModel
+  action: String,                   // one of 9 ArmorIQ actions
+  status: String,                   // ALLOWED|BLOCKED|APPROVED|REJECTED
+  triggeredBy: String,              // 'agent'|'human'
+  ip: String,
+  attackId: String|null,
+  policy_rule_id: String,           // RULE_001–DEFAULT|HUMAN_OVERRIDE
+  enforcement_level: String,        // 'ArmorClaw-v1'
+  reason: String,
+  meta: Object,                     // { actionQueueId, attackType }
+  createdAt: Date
 }
 ```
 
 ### `servicestatuses`
 ```js
 {
-  _id:            ObjectId,
-  serviceName:    String,
-  status:         String,            // online|offline
-  lastChecked:    Date,
-  responseTimeMs: Number,
-  errorMessage:   String
+  _id: ObjectId, serviceName: String,
+  status: String,        // online|offline
+  lastChecked: Date, responseTimeMs: Number, errorMessage: String
 }
 ```
-
-> ⚠️ `ip_intelligence` collection is **not yet built** — planned P1.
 
 ---
 
@@ -783,61 +677,39 @@ GET /health  →  { status: 'ok', model_loaded: boolean }
 
 ### `attackType` enum
 
-| Value | Meaning | Source |
-|-------|---------|--------|
-| `sqli` | SQL Injection | Detection Engine + PCAP |
-| `xss` | Cross-Site Scripting | Detection Engine + PCAP |
-| `traversal` | Path Traversal | Detection Engine |
-| `command_injection` | Command Injection | Detection Engine |
-| `ssrf` | SSRF | Detection Engine |
-| `lfi_rfi` | LFI / RFI | Detection Engine |
-| `brute_force` | Brute Force | Detection Engine + PCAP |
-| `hpp` | HTTP Parameter Pollution | Detection Engine |
-| `xxe` | XXE | Detection Engine |
-| `webshell` | Webshell | Detection Engine |
-| `recon` | Port Scan / Recon | PCAP only |
-| `ddos` | DoS / DDoS / ICMP / DNS Amp | PCAP only |
-| `unknown` | Unclassified | fallback |
-
-### Alert `type` enum
-
-| Value | When created |
-|-------|-------------|
-| `attack_detected` | Gateway `attackService.reportAttack()` for high/critical |
-| `armoriq_action` | ArmorIQ executor `send_alert` action |
-| `service_down` | Future |
-| `rate_limit` | Future |
-| `anomaly` | Future |
-
-### ArmorIQ Action enum & Policy
-
-| Action | Risk | Policy | Rule |
-|--------|------|--------|------|
-| `send_alert` | Low | ALLOW | RULE_004 |
-| `log_attack` | Low | ALLOW | RULE_004 |
-| `rate_limit_ip` | Low | ALLOW | RULE_004 |
-| `flag_for_review` | Low | ALLOW | RULE_004 |
-| `generate_report` | Low | ALLOW | RULE_004 |
-| `permanent_ban_ip` | High | BLOCK | RULE_001 |
-| `shutdown_endpoint` | Critical | BLOCK | RULE_001 |
-| `purge_all_sessions` | Medium | BLOCK | RULE_001 |
-| `modify_firewall_rules` | Critical | BLOCK | RULE_001 |
-
-### `policy_rule_id` enum
-
-| Value | Meaning |
+| Value | Source |
 |-------|--------|
-| `RULE_001` | Action is in BLOCKED_ACTIONS set |
-| `RULE_002` | risk_level == 'critical' |
-| `RULE_003` | risk_level == 'high' |
-| `RULE_004` | Action is in ALLOWED_ACTIONS set |
-| `RULE_DEFAULT` | No rule matched — fail-safe BLOCK |
-| `HUMAN_OVERRIDE` | Human approved or rejected via Dashboard |
+| `sqli` | Detection Engine + PCAP |
+| `xss` | Detection Engine + PCAP |
+| `traversal` | Detection Engine |
+| `command_injection` | Detection Engine |
+| `ssrf` | Detection Engine |
+| `lfi_rfi` | Detection Engine |
+| `brute_force` | Detection Engine + PCAP |
+| `hpp` | Detection Engine |
+| `xxe` | Detection Engine |
+| `webshell` | Detection Engine |
+| `recon` | PCAP only (PORT_SCAN) |
+| `ddos` | PCAP only (SYN_FLOOD/DDOS/ICMP/DNS_AMP) |
+| `unknown` | fallback |
 
-### Detection Engine `threat_type` → `attackType` mapping
+### PCAP `attack_type` → Gateway `attackType` mapping
 
-| Detection Engine label | Gateway `attackType` |
-|------------------------|---------------------|
+| PCAP value | Gateway value |
+|------------|---------------|
+| `PORT_SCAN` | `recon` |
+| `SYN_FLOOD` | `ddos` |
+| `DDOS` | `ddos` |
+| `ICMP_FLOOD` | `ddos` |
+| `DNS_AMPLIFICATION` | `ddos` |
+| `SQL_INJECTION` | `sqli` |
+| `XSS` | `xss` |
+| `BRUTE_FORCE` | `brute_force` |
+
+### Detection Engine `threat_type` → Gateway `attackType`
+
+| Detection label | Gateway value |
+|-----------------|---------------|
 | `SQL Injection` | `sqli` |
 | `XSS` | `xss` |
 | `Path Traversal` | `traversal` |
@@ -849,239 +721,206 @@ GET /health  →  { status: 'ok', model_loaded: boolean }
 | `XXE` | `xxe` |
 | `Webshell` | `webshell` |
 
+### ArmorIQ Action enum + Policy
+
+| Action | Policy | Rule |
+|--------|--------|------|
+| `send_alert` | ALLOW | RULE_004 |
+| `log_attack` | ALLOW | RULE_004 |
+| `rate_limit_ip` | ALLOW | RULE_004 |
+| `flag_for_review` | ALLOW | RULE_004 |
+| `generate_report` | ALLOW | RULE_004 |
+| `permanent_ban_ip` | BLOCK | RULE_001 |
+| `shutdown_endpoint` | BLOCK | RULE_001 |
+| `purge_all_sessions` | BLOCK | RULE_001 |
+| `modify_firewall_rules` | BLOCK | RULE_001 |
+
 ---
 
-## 9. Build Status — v3.0
+## 9. Build Status
 
-### ✅ COMPLETE & TESTED
+### ✅ COMPLETE & VERIFIED
 
-| Feature | File(s) | Test Evidence |
-|---------|---------|---------------|
-| Gateway API — all routes | `backend/src/routes/` (11 files) | E2E verified |
-| MongoDB — 6 models | `backend/src/models/` | 20+ attack events saved |
-| Socket.io — 6 events incl. audit:new | `broadcastService.js` | Live dashboard updates confirmed |
-| Log ingest → Detection Engine | `logService.js` + `detectionConnector.js` | sqli, xss, traversal, command_injection classified |
-| Attack persistence + alert auto-create | `attackService.js` | Attacks saved: 20 confirmed |
-| Forensics endpoint | `forensicsController.js` | ✅ |
-| Stats + Service Health | `statsService.js` | ✅ |
-| PCAP route v2 | `backend/src/routes/pcap.js` | ✅ |
-| PCAP Processor (8 detectors, 10/10) | `services/pcap-processor/` | ✅ |
-| ArmorIQ Agent — full pipeline | `services/armoriq-agent/` | 6 intents/attack verified |
-| ProposedAction typed Pydantic model | `models.py` | ✅ Fix 1 applied |
-| policy_engine.py dot-access | `policy_engine.py` | ✅ Fix 1 applied |
-| executor.py safe HTTP check | `executor.py` | ✅ Fix 2: 200/201 check, no raise_for_status |
-| audit_logger.py dot-access | `audit_logger.py` | ✅ Fix 1 applied |
-| AUDIT_NEW socket event | `broadcastService.js` + `auditController.js` | ✅ Fix 3 applied |
-| Action Queue — model + routes + UI | `ActionQueue.js` + `routes/actions.js` | approve/reject E2E tested |
-| Audit Log — model + route + UI | `AuditLog.js` + `routes/audit.js` | ALLOWED/BLOCKED/APPROVED/REJECTED all confirmed |
-| Alert type enum fix (armoriq_action) | `Alert.js` | ✅ |
-| ArmorIQ trigger route | `routes/armoriq.js` | E2E tested — critical attack: 6 intents |
-| Human override (approve/reject) | `actionQueueController.js` | shutdown_endpoint APPROVED, permanent_ban_ip REJECTED ✅ |
-| React Dashboard — all pages | `dashboard/src/pages/` | ✅ |
-| Navbar live badges | `Navbar.jsx` | ✅ |
-| AuditLog filters + stat bar | `AuditLog.jsx` | ✅ |
-| sentinel-middleware npm package | `services/middleware/` | 16/16 Jest tests pass |
-| Demo Target server | `demo-target/server.js` | Attacks received and processed ✅ |
-| E2E attack script | `demo-target/attack.sh` | 7/7 scenarios pass |
-| ArmorIQ resilience (Gateway survives agent down) | `attackService.js` fire-and-forget | Attacks saved: 20 with ArmorIQ killed ✅ |
+| Feature | Evidence |
+|---------|----------|
+| Gateway API — 11 route files | All routes respond correctly |
+| MongoDB — 6 models live | 75+ attacks saved |
+| Socket.io — 6 events incl. audit:new | Live dashboard updates confirmed |
+| Log ingest → Detection Engine pipeline | sqli/xss/traversal/command_injection classified |
+| Attack persistence + alert auto-create | 75 attacks, 31 alerts confirmed in UI |
+| PCAP Processor — 8 detectors | 10/10 tests pass, 10,120 pkt/s |
+| ArmorIQ Agent — full OpenClaw pipeline | 7/7 pytest pass, live enforcement confirmed |
+| openclaw_runtime.py — policy.yaml driven | `openclaw_loaded:true` in /health |
+| policy_engine.py — fallback ready | Tested via RuntimeError injection |
+| executor.py — safe HTTP check | 200/201 check, no raise_for_status |
+| audit_logger.py — per-decision logging | 6 entries per critical attack |
+| Action Queue — approve/reject E2E | shutdown_endpoint APPROVED, ban REJECTED tested |
+| Audit Log — all 4 statuses live | ALLOWED/BLOCKED/APPROVED/REJECTED all confirmed |
+| ArmorIQ trigger route | E2E tested: 6 intents, ALLOW×4 + BLOCK×2 |
+| React Dashboard — all 10 pages | All render, no 404s |
+| Navbar live badges | Alerts:31, ActionQueue:5 confirmed |
+| AuditLog page — filters + stat bar | ✅ |
+| sentinel-middleware npm package | 16/16 Jest tests pass |
+| Demo Target + attack.sh | 7/7 E2E scenarios confirmed |
+| All 4 services health check | gateway:3000 + 8002 + 8003 + 8004 all online |
 
 ### 🟡 PARTIAL
 
 | Feature | What Exists | What's Missing |
 |---------|-------------|----------------|
-| Detection Engine | FastAPI, 45-rule engine, adversarial decoder | `sentinel_v5.pkl` ML model; `explainer.py` (needs OPENAI_API_KEY) |
-| Dashboard Charts | StatsPanel component | Recharts donut + timeline not wired to live `/api/stats` |
+| Detection Engine | 45-rule engine + adversarial decoder | `sentinel_v5.pkl` ML model; LLM explainer (needs OPENAI_API_KEY) |
+| Dashboard Charts | StatsPanel component | Recharts donut + timeline not wired to live data |
 
 ### 🔲 NOT BUILT
 
 | Feature | Priority |
 |---------|----------|
 | ML model `sentinel_v5.pkl` | P0 |
-| Dashboard Charts (donut + timeline) | P1 |
-| Threat Intelligence (`GET /api/intel/:ip`, AbuseIPDB) | P1 |
+| Dashboard charts (donut + timeline) | P1 |
+| Threat Intelligence (AbuseIPDB / IPInfo) | P1 |
 | Export CSV/JSON | P2 |
 | Settings page | P2 |
 
 ---
 
-## 10. Port & URL Map
+## 10. Port & URL Map + Start Commands
 
-| Service | Port | Base URL | Start Command |
-|---------|------|----------|---------------|
-| Gateway API | 3000 | `http://localhost:3000` | `cd backend && npm run dev` |
-| Detection Engine | 8002 | `http://localhost:8002` | `uvicorn app.main:app --port 8002` |
-| PCAP Processor | 8003 | `http://localhost:8003` | `uvicorn main:app --port 8003` |
-| ArmorIQ Agent | 8004 | `http://localhost:8004` | `uvicorn main:app --port 8004` |
-| React Dashboard | 5173 | `http://localhost:5173` | `cd dashboard && npm run dev` |
-| Demo Target | 4000 | `http://localhost:4000` | `cd demo-target && node server.js` |
-| MongoDB | 27017 | Atlas cloud | configured in `.env` |
+| Service | Port | Start Command |
+|---------|------|---------------|
+| Gateway API | 3000 | `cd backend && npm run dev` |
+| Detection Engine | 8002 | `cd services/detection-engine && source venv/bin/activate && uvicorn app.main:app --port 8002` |
+| PCAP Processor | 8003 | `cd services/pcap-processor && uvicorn main:app --port 8003` |
+| ArmorIQ Agent | 8004 | `cd services/armoriq-agent && source venv/bin/activate && uvicorn main:app --port 8004 --reload` |
+| Dashboard | 5173 | `cd dashboard && npm run dev` |
+| Demo Target | 4000 | `cd demo-target && node server.js` |
+| MongoDB | 27017 | Atlas cloud — configure `MONGO_URI` in `.env` |
 
-### Environment Variables (`backend/.env`)
-```env
+### `backend/.env`
+```
 NODE_ENV=development
 PORT=3000
-MONGO_URI=<your Atlas URI>
+MONGO_URI=<Atlas URI>
 DETECTION_ENGINE_URL=http://localhost:8002
 PCAP_SERVICE_URL=http://localhost:8003
 ARMORIQ_URL=http://localhost:8004
 ```
 
-### sentinel-middleware Options
-```js
-sentinel({
-  projectId:   'my-app',                    // required
-  gatewayUrl:  'http://localhost:3000',      // required
-  apiKey:      '',                           // optional — sent as X-Sentinel-Key
-  sampleRate:  1.0,                          // 0.0–1.0
-  debug:       false,                        // console log each ingest
-  timeout:     3000,                         // ms
-  maxBodySize: 4096,                         // bytes
-  ignoreRoutes: ['/health', '/favicon.ico'], // skip these paths
-  ignoreIPs:   [],                           // skip these IPs
-  onError:     (err) => {}                   // custom error handler
-})
+### `services/armoriq-agent/.env`
+```
+GATEWAY_URL=http://localhost:3000
+ARMORIQ_PORT=8004
 ```
 
 ---
 
 ## 11. Socket.io Events Reference
 
-### `attack:new`
-```js
-{ id, ip, attackType, severity, status, detectedBy, confidence, timestamp }
-```
-
-### `alert:new`
-```js
-{ id, title, severity, type, timestamp }  // type: attack_detected|armoriq_action
-```
-
-### `action:pending`
-```js
-{ id, action, agentReason, blockedReason, ip, attackId }
-```
-
-### `audit:new`  ← added Fix 3
-```js
-{
-  id:             string,   // AuditLog._id
-  action:         string,
-  status:         string,   // ALLOWED|BLOCKED|APPROVED|REJECTED
-  reason:         string,
-  policy_rule_id: string,
-  triggeredBy:    string,
-  ip:             string,
-  attackId:       string | null,
-  timestamp:      ISODate
-}
-```
-
-### `service:status`
-```js
-{ serviceName, status, responseTimeMs, timestamp }
-```
+| Event | Emitted by | Payload |
+|-------|-----------|--------|
+| `attack:new` | Gateway attackService | `{ id, ip, attackType, severity, status, detectedBy, confidence, timestamp }` |
+| `alert:new` | Gateway attackService | `{ id, title, severity, type, timestamp }` |
+| `action:pending` | Gateway actionQueueController | `{ id, action, agentReason, blockedReason, ip, attackId }` |
+| `audit:new` | Gateway auditController | `{ id, action, status, reason, policy_rule_id, triggeredBy, ip, attackId, timestamp }` |
+| `service:status` | Gateway serviceHealthService | `{ serviceName, status, responseTimeMs, timestamp }` |
+| `stats:update` | Gateway statsService | stats payload |
 
 ---
 
 ## 12. Response Envelope Standard
 
 ```js
-// Success
-{ success: true,  message: string, data: object | array }
-
-// Error
-{ success: false, message: string, code: 'NOT_FOUND'|'SERVER_ERROR'|'VALIDATION_ERROR' }
+// All Gateway API responses:
+{ success: true,  message: string, data: object | array }   // success
+{ success: false, message: string, code: string }           // error
+// code: 'NOT_FOUND' | 'SERVER_ERROR' | 'VALIDATION_ERROR'
 ```
 
-**Frontend usage:** `api.js` uses `unwrap = res => res.data.data`.
-Always access payload as `response.data.data` — never `response.data` directly.
+**Frontend:** `api.js` uses `unwrap = res => res.data.data`.
+Always access payload as `response.data.data`, never `response.data` directly.
 
-> ⚠️ **Common mistake:** `GET /api/attacks/recent` returns `{ success, data: [] }` —
-> NOT a bare array. Use `r.data.length` not `r.length`.
+> ⚠️ Arrays come back as `{ success:true, data:[] }` — not bare arrays.
+> Use `r.data.length` not `r.length`. This is a common mistake.
 
 ---
 
-## 13. Demo Target & E2E Test Guide
+## 13. Demo Day Guide
 
-### What Is `demo-target`?
-
-A real Express.js application at `demo-target/server.js` that uses `sentinel-middleware`
-from the local package at `services/middleware/src/adapters/express.js`.
-It provides intentionally vulnerable routes for demo and testing:
-
-| Route | Attack Surface |
-|-------|---------------|
-| `GET /search?q=` | SQL injection, XSS via query param |
-| `POST /login` body | XSS, brute force |
-| `GET /file?name=` | Path traversal |
-| `GET /users` | Normal (baseline) |
-| `GET /` | Health check |
-
-### E2E Test Scenario Results (2026-03-26)
-
-All tests run against live stack: Gateway :3000 + Detection Engine :8002 +
-ArmorIQ :8004 + Demo Target :4000.
-
-| # | Attack | Via | Result | Audit Entries |
-|---|--------|-----|--------|---------------|
-| 1 | SQL Injection `1' OR '1'='1` | demo-target /search | ✅ Detected, pipeline fired | ALLOWED × 3 |
-| 2 | XSS `<script>alert(1)</script>` | demo-target /login | ✅ Detected, send_alert executed | ALLOWED × 3 |
-| 3 | Path Traversal `../../etc/passwd` | demo-target /file | ✅ Detected, permanent_ban_ip queued | BLOCKED pending |
-| 4 | Critical trigger (command_injection) | POST /api/armoriq/trigger | ✅ 6 intents: ALLOW×4, BLOCK×2 | 6 entries |
-| 5 | Human Approve | Dashboard ActionQueue | ✅ shutdown_endpoint APPROVED | HUMAN_OVERRIDE |
-| 6 | Human Reject | Dashboard ActionQueue | ✅ permanent_ban_ip REJECTED | HUMAN_OVERRIDE |
-| 7 | ArmorIQ killed mid-test | demo-target /search | ✅ Gateway survived, Attacks saved: 20 | — |
-
-### Verify Pipeline Health
+### Start Everything
 ```bash
-# All services alive
+# T1 — Gateway
+cd backend && npm run dev
+
+# T2 — Detection Engine
+cd services/detection-engine && source venv/bin/activate
+uvicorn app.main:app --port 8002
+
+# T3 — PCAP Processor
+cd services/pcap-processor
+uvicorn main:app --port 8003
+
+# T4 — ArmorIQ Agent
+cd services/armoriq-agent && source venv/bin/activate
+uvicorn main:app --port 8004 --reload
+
+# T5 — Demo Target
+cd demo-target && node server.js
+
+# T6 — Dashboard
+cd dashboard && npm run dev
+# Open: http://localhost:5173
+```
+
+### Health Check All Services
+```bash
 curl http://localhost:3000/api/service-status
 curl http://localhost:8002/health
-curl http://localhost:8004/health
-curl http://localhost:4000/
-
-# Recent audit log (use .data not bare array)
-curl -s http://localhost:3000/api/audit?limit=5 | \
-  node -e "const r=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8')); \
-  r.data.forEach(e=>console.log(e.action.padEnd(22),e.status,e.policy_rule_id))"
-
-# Pending blocked actions
-curl -s http://localhost:3000/api/actions/pending | \
-  node -e "const r=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8')); \
-  console.log(r.data.map(a=>a.action+' '+a.status))"
-
-# Attacks saved count
-curl -s http://localhost:3000/api/attacks/recent | \
-  node -e "const r=JSON.parse(require('fs').readFileSync('/dev/stdin','utf8')); \
-  console.log('Attacks saved:', r.data.length)"
+curl http://localhost:8003/health
+curl http://localhost:8004/health   # must show openclaw_loaded:true
 ```
 
-### Demo Day Attack Command
+### Judge Demo — ALLOW
+```bash
+curl -X POST http://localhost:8004/respond \
+  -H "Content-Type: application/json" \
+  -d '{"attackId":"demo-1","ip":"5.5.5.5","attackType":"sqli",
+       "severity":"medium","confidence":0.9,"status":"attempt"}'
+# Expected: actionsExecuted:[send_alert, log_attack, rate_limit_ip]
+```
+
+### Judge Demo — BLOCK
+```bash
+curl -X POST http://localhost:8004/respond \
+  -H "Content-Type: application/json" \
+  -d '{"attackId":"demo-2","ip":"6.6.6.6","attackType":"brute_force",
+       "severity":"critical","confidence":0.97,"status":"successful"}'
+# Expected: actionsQueued:[permanent_ban_ip(BLOCK), shutdown_endpoint(BLOCK)]
+```
+
+### Full E2E Attack Script
 ```bash
 bash demo-target/attack.sh
-# Then open: http://localhost:5173
-# Watch: LiveAttackFeed | ActionQueue badge | AuditLog | Alerts
+# Then watch: http://localhost:5173
+# LiveAttackFeed | ActionQueue badge | AuditLog | Alerts
 ```
+
+### What to Say to Judges
+
+> *"SENTINEL detects threats in real time, generates structured response intents,
+> and enforces them through our OpenClaw runtime — reading from a declarative
+> policy.yaml file. Safe actions like send_alert execute automatically.
+> Dangerous actions like permanent_ban_ip are deterministically blocked
+> and queued for human approval. Every decision is logged to the audit trail
+> with the exact rule that fired it."*
+
+Point to the ArmorIQ terminal — judges can see `[OPENCLAW] permanent_ban_ip → BLOCK (RULE_001)` printed live.
 
 ---
 
 ## 14. Changelog
 
-| Date | Version | Change | File(s) |
-|------|---------|--------|---------|
-| 2026-03-26 | 1.0 | Initial doc | `MASTER_REFERENCE.md` |
-| 2026-03-26 | 1.0 | PCAP Processor built — 8 detectors | `services/pcap-processor/` |
-| 2026-03-26 | 1.0 | PCAP route fixed — port 8003, v2 schema | `backend/src/routes/pcap.js` |
-| 2026-03-26 | 1.0 | Service health fixed — ports corrected | `serviceHealthService.js` |
-| 2026-03-26 | 2.0 | ArmorIQ Agent built — full pipeline | `services/armoriq-agent/` |
-| 2026-03-26 | 2.0 | ActionQueue model + routes + UI | `ActionQueue.js`, `routes/actions.js` |
-| 2026-03-26 | 2.0 | AuditLog model + route + UI | `AuditLog.js`, `routes/audit.js` |
-| 2026-03-26 | 2.0 | Alert type enum fix (armoriq_action) | `Alert.js` |
-| 2026-03-26 | 2.0 | ArmorIQ trigger route | `routes/armoriq.js` |
-| 2026-03-26 | 2.0 | UI Polish — Navbar badges, Alerts, AuditLog | `Navbar.jsx`, `Alerts.jsx`, `AuditLog.jsx` |
-| 2026-03-26 | 2.0 | sentinel-middleware — 16/16 Jest tests | `services/middleware/` |
-| 2026-03-26 | 3.0 | **Fix 1** — ProposedAction typed Pydantic; dot-access in policy_engine, intent_builder, audit_logger, main | `models.py`, `policy_engine.py`, `intent_builder.py`, `audit_logger.py`, `main.py` |
-| 2026-03-26 | 3.0 | **Fix 2** — executor.py: safe HTTP 200/201 check, no raise_for_status | `executor.py` |
-| 2026-03-26 | 3.0 | **Fix 3** — AUDIT_NEW socket event; emitter in auditController after create | `broadcastService.js`, `auditController.js` |
-| 2026-03-26 | 3.0 | Demo Target server + attack.sh — 7 E2E scenarios | `demo-target/` |
-| 2026-03-26 | 3.0 | MASTER_REFERENCE rewritten — v3.0, accurate to live repo | `MASTER_REFERENCE.md` |
+| Date | Version | Change |
+|------|---------|--------|
+| 2026-03-26 | 1.0 | Initial doc + PCAP Processor built |
+| 2026-03-26 | 2.0 | ArmorIQ Agent + ActionQueue + AuditLog + sentinel-middleware |
+| 2026-03-26 | 3.0 | Fix1: typed Pydantic models + dot-access. Fix2: executor safe HTTP. Fix3: audit:new socket event. Demo Target E2E |
+| 2026-03-26 | 4.0 | **openclaw_runtime.py** + **policy.yaml** added. 4 redundant doc files deleted. MASTER_REFERENCE rewritten to exact current repo state |

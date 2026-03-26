@@ -5,7 +5,8 @@ Port: 8004
 Responsibilities:
   1. Receive attack context from Gateway (POST /respond)
   2. Build structured intents via intent_builder
-  3. Evaluate each intent via policy_engine (deterministic, no LLM)
+  3. Evaluate each intent via OpenClaw runtime (openclaw_runtime.py)
+     Fallback: policy_engine.py if OpenClaw is unavailable
   4. Execute ALLOWED actions via executor
   5. Return BLOCKED actions as actionsQueued for human review
   6. Log every decision to audit_log via audit_logger
@@ -21,7 +22,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from models import RespondRequest, RespondResponse, AttackContext, ActionResult
 from intent_builder import build_intents
-from policy_engine import evaluate
+import openclaw_runtime
+from policy_engine import evaluate as _fallback_evaluate
 from executor import execute
 from audit_logger import log_decision
 
@@ -33,8 +35,8 @@ logger = logging.getLogger("armoriq")
 
 app = FastAPI(
     title="ArmorIQ Agent",
-    description="Intent-boundary enforcement for SENTINEL. Policy-based runtime control.",
-    version="1.0.0"
+    description="Intent-boundary enforcement for SENTINEL. OpenClaw-powered policy runtime.",
+    version="2.0.0"
 )
 
 app.add_middleware(
@@ -45,13 +47,31 @@ app.add_middleware(
 )
 
 
+def _evaluate_with_fallback(intent):
+    """
+    Evaluate intent via OpenClaw runtime.
+    Falls back to policy_engine.evaluate() if OpenClaw is unavailable or crashes.
+    NEVER raises — always returns a DecisionModel.
+    """
+    try:
+        return openclaw_runtime.evaluate(intent)
+    except Exception as exc:
+        logger.error(
+            f"[OPENCLAW] Runtime error: {exc} — falling back to policy_engine (RULE-based)"
+        )
+        return _fallback_evaluate(intent)
+
+
 @app.get("/health")
 def health():
+    openclaw_ok = openclaw_runtime.is_loaded()
     return {
         "status": "ok",
         "service": "armoriq-agent",
-        "version": "1.0.0",
-        "enforcement": "ArmorIQ-Policy-v1"
+        "version": "2.0.0",
+        "enforcement": "ArmorClaw-v1" if openclaw_ok else "ArmorIQ-Policy-v1 (fallback)",
+        "openclaw_loaded": openclaw_ok,
+        "policy_source": "policy.yaml" if openclaw_ok else "policy_engine.py (fallback)",
     }
 
 
@@ -84,14 +104,14 @@ async def respond(body: RespondRequest):
     audit_count      = 0
 
     for intent in intents:
-        action = intent.proposed_action.action  # dot-access on typed ProposedAction
+        action = intent.proposed_action.action
 
-        # Step 2: Policy evaluation — deterministic, no LLM
-        decision = evaluate(intent)
+        # Step 2: OpenClaw policy evaluation (with fallback)
+        decision = _evaluate_with_fallback(intent)
 
         logger.info(
             f"[POLICY] {action} → {decision.decision} "
-            f"(rule={decision.policy_rule_id})"
+            f"(rule={decision.policy_rule_id} enforcement={decision.enforcement_level})"
         )
 
         # Step 3: Audit every decision regardless of outcome
@@ -113,7 +133,6 @@ async def respond(body: RespondRequest):
                 logger.warning(f"[ARMORIQ] Execution of '{action}' failed — see executor log")
 
         else:  # BLOCK
-            # Step 5: Return blocked action for human review
             actions_queued.append(
                 ActionResult(
                     action=action,

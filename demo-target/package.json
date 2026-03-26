@@ -1,0 +1,13 @@
+{
+  "name": "sentinel-demo-target",
+  "version": "1.0.0",
+  "description": "Dummy Express server protected by sentinel-middleware for demo testing",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "attack": "bash attack.sh"
+  },
+  "dependencies": {
+    "express": "^4.18.0"
+  }
+}

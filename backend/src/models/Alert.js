@@ -25,7 +25,7 @@ const AlertSchema = new mongoose.Schema({
   type: {
     type: String,
     required: [true, 'Alert type is required'],
-    enum: ['attack_detected', 'service_down', 'rate_limit', 'anomaly']
+    enum: ['attack_detected', 'service_down', 'rate_limit', 'anomaly', 'armoriq_action']
   },
   isRead: {
     type: Boolean,

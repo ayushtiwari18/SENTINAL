@@ -1,13 +1,12 @@
 const express = require('express');
 const router  = express.Router();
-const { getAlerts, markRead } = require('../controllers/alertController');
-const { ingestArmorIQAlert }  = require('../controllers/alertController');
+const { getAlerts, markRead, ingestArmorIQAlert } = require('../controllers/alertController');
+
+// ArmorIQ agent posts alerts here — MUST be before /:id routes to avoid route conflicts
+router.post('/armoriq', ingestArmorIQAlert);
 
 // Existing routes
-router.get('/',         getAlerts);
+router.get('/',           getAlerts);
 router.patch('/:id/read', markRead);
-
-// ArmorIQ agent posts alerts here after send_alert action is executed
-router.post('/armoriq', ingestArmorIQAlert);
 
 module.exports = router;

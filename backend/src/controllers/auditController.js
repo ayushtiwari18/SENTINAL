@@ -10,24 +10,44 @@ const ingestAudit = async (req, res) => {
       triggeredBy, ip, attackId, meta
     } = req.body;
 
+    // Validate required fields
+    if (!action || !status) {
+      return res.status(400).json({
+        success: false,
+        message: 'action and status are required',
+        code: 'VALIDATION_ERROR'
+      });
+    }
+
+    // Normalise status to uppercase
+    const normStatus = (status || '').toUpperCase();
+    const allowed    = ['ALLOWED', 'BLOCKED', 'APPROVED', 'REJECTED'];
+    if (!allowed.includes(normStatus)) {
+      return res.status(400).json({
+        success: false,
+        message: `status must be one of ${allowed.join(', ')}`,
+        code: 'VALIDATION_ERROR'
+      });
+    }
+
     const entry = await AuditLog.create({
-      intent_id,
+      intent_id:         intent_id         || null,
       action,
-      status,        // ALLOWED | BLOCKED
-      reason,
-      policy_rule_id,
-      enforcement_level,
-      triggeredBy:   triggeredBy || 'agent',
-      ip:            ip          || '',
-      attackId:      attackId    || null,
-      meta:          meta        || {}
+      status:            normStatus,
+      reason:            reason            || '',
+      policy_rule_id:    policy_rule_id    || '',
+      enforcement_level: enforcement_level || 'ArmorIQ-Policy-v1',
+      triggeredBy:       triggeredBy       || 'agent',
+      ip:                ip                || '',
+      attackId:          attackId          ? String(attackId) : null,
+      meta:              meta              || {}
     });
 
-    logger.info(`[AUDIT] Ingested: ${action} → ${status} (rule=${policy_rule_id})`);
+    logger.info(`[AUDIT] Ingested: ${action} → ${normStatus} (rule=${policy_rule_id})`);
     res.status(201).json({ success: true, message: 'Audit entry recorded', data: { id: entry._id } });
   } catch (err) {
     logger.error('[AUDIT] ingestAudit failed:', err.message);
-    res.status(500).json({ success: false, message: 'Server error', code: 'SERVER_ERROR' });
+    res.status(500).json({ success: false, message: 'Server error', code: 'SERVER_ERROR', detail: err.message });
   }
 };
 

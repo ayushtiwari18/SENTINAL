@@ -9,7 +9,6 @@ const getPending = async (req, res) => {
     const items = await ActionQueue.find({ status: 'pending' })
       .sort({ createdAt: -1 })
       .limit(50)
-      .populate('attackId', 'attackType severity ip')
       .select('-__v');
     res.json({ success: true, message: 'Pending actions', data: items });
   } catch (err) {
@@ -32,15 +31,16 @@ const approveAction = async (req, res) => {
     item.approvedAt = new Date();
     await item.save();
 
-    // Write to audit log
     await AuditLog.create({
-      action:      item.action,
-      status:      'APPROVED',
-      reason:      'Human approved pending action',
-      triggeredBy: 'human',
-      ip:          item.ip,
-      attackId:    item.attackId,
-      meta:        { actionQueueId: item._id }
+      action:            item.action,
+      status:            'APPROVED',
+      reason:            'Human approved pending action',
+      policy_rule_id:    'HUMAN_OVERRIDE',
+      enforcement_level: 'ArmorIQ-Policy-v1',
+      triggeredBy:       'human',
+      ip:                item.ip,
+      attackId:          item.attackId ? String(item.attackId) : null,
+      meta:              { actionQueueId: String(item._id) }
     });
 
     logger.info(`[ACTIONS] APPROVED: ${item.action} for attackId=${item.attackId}`);
@@ -66,13 +66,15 @@ const rejectAction = async (req, res) => {
     await item.save();
 
     await AuditLog.create({
-      action:      item.action,
-      status:      'REJECTED',
-      reason:      'Human rejected pending action',
-      triggeredBy: 'human',
-      ip:          item.ip,
-      attackId:    item.attackId,
-      meta:        { actionQueueId: item._id }
+      action:            item.action,
+      status:            'REJECTED',
+      reason:            'Human rejected pending action',
+      policy_rule_id:    'HUMAN_OVERRIDE',
+      enforcement_level: 'ArmorIQ-Policy-v1',
+      triggeredBy:       'human',
+      ip:                item.ip,
+      attackId:          item.attackId ? String(item.attackId) : null,
+      meta:              { actionQueueId: String(item._id) }
     });
 
     logger.info(`[ACTIONS] REJECTED: ${item.action} for attackId=${item.attackId}`);

@@ -1,5 +1,7 @@
 const AuditLog = require('../models/AuditLog');
 const logger   = require('../utils/logger');
+const emitter  = require('../utils/eventEmitter');
+const { EVENTS } = require('../sockets/broadcastService');
 
 // POST /api/audit/ingest  — called by ArmorIQ agent
 const ingestAudit = async (req, res) => {
@@ -41,6 +43,19 @@ const ingestAudit = async (req, res) => {
       ip:                ip                || '',
       attackId:          attackId          ? String(attackId) : null,
       meta:              meta              || {}
+    });
+
+    // Emit real-time socket event so Dashboard AuditLog panel updates live
+    emitter.emit(EVENTS.AUDIT_NEW, {
+      id:             entry._id,
+      action:         entry.action,
+      status:         entry.status,
+      reason:         entry.reason,
+      policy_rule_id: entry.policy_rule_id,
+      triggeredBy:    entry.triggeredBy,
+      ip:             entry.ip,
+      attackId:       entry.attackId,
+      timestamp:      entry.createdAt
     });
 
     logger.info(`[AUDIT] Ingested: ${action} → ${normStatus} (rule=${policy_rule_id})`);

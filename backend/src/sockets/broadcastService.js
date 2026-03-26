@@ -8,7 +8,8 @@ const EVENTS = {
   ALERT_NEW:      'alert:new',
   SERVICE_STATUS: 'service:status',
   STATS_UPDATE:   'stats:update',
-  ACTION_PENDING: 'action:pending'   // ArmorIQ blocked action awaiting human review
+  ACTION_PENDING: 'action:pending',  // ArmorIQ blocked action awaiting human review
+  AUDIT_NEW:      'audit:new'        // ArmorIQ policy decision logged (ALLOW or BLOCK)
 };
 
 const init = (ioInstance) => {
@@ -54,7 +55,18 @@ const init = (ioInstance) => {
     logger.info(`[BROADCAST] action:pending → ${actionData.action} for ip=${actionData.ip}`);
   });
 
-  logger.info('[BROADCAST] Broadcast service listening for events (incl. action:pending)');
+  // ArmorIQ audit decision — notify Dashboard AuditLog panel in real time
+  emitter.on(EVENTS.AUDIT_NEW, (auditData) => {
+    if (!io) return;
+    io.emit(EVENTS.AUDIT_NEW, {
+      event:     EVENTS.AUDIT_NEW,
+      timestamp: new Date().toISOString(),
+      data:      auditData
+    });
+    logger.info(`[BROADCAST] audit:new → ${auditData.action} ${auditData.status} (rule=${auditData.policy_rule_id})`);
+  });
+
+  logger.info('[BROADCAST] Broadcast service listening for events (incl. action:pending, audit:new)');
 };
 
 module.exports = { init, EVENTS };

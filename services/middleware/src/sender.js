@@ -8,8 +8,8 @@ const axios = require('axios');
 const RETRY_INTERVAL_MS = 10_000;
 const MAX_QUEUE_SIZE    = 500;
 
-let retryQueue    = [];
-let retryTimer    = null;
+let retryQueue = [];
+let retryTimer = null;
 
 function buildClient(cfg) {
   const headers = { 'Content-Type': 'application/json' };
@@ -38,7 +38,6 @@ async function send(client, payload, cfg) {
 
 function enqueue(payload, client, cfg) {
   if (retryQueue.length >= MAX_QUEUE_SIZE) {
-    // Drop oldest to make room
     retryQueue.shift();
   }
   retryQueue.push({ payload, client, cfg });
@@ -58,9 +57,8 @@ function scheduleRetry() {
     for (const { payload, client, cfg } of batch) {
       try {
         await client.post('/api/logs/ingest', payload);
-        if (cfg.debug) console.log(`[sentinel] 🔁 retry succeeded for ${payload.url}`);
+        if (cfg.debug) console.log(`[sentinel] 🔄 retry succeeded for ${payload.url}`);
       } catch {
-        // Re-queue if still failing
         retryQueue.push({ payload, client, cfg });
       }
     }
@@ -68,6 +66,16 @@ function scheduleRetry() {
       console.warn(`[sentinel] retry queue still has ${retryQueue.length} pending entries`);
     }
   }, RETRY_INTERVAL_MS);
+
+  // unref() lets Node/Jest exit even if this timer is still pending.
+  // Works in Node.js — safe to skip if not available (e.g. browser bundles).
+  if (retryTimer.unref) retryTimer.unref();
 }
 
-module.exports = { buildClient, send };
+/** Exposed for testing — clears queue and cancels timer */
+function _reset() {
+  retryQueue = [];
+  if (retryTimer) { clearInterval(retryTimer); retryTimer = null; }
+}
+
+module.exports = { buildClient, send, _reset };

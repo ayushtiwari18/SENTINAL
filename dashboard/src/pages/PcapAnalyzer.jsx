@@ -3,10 +3,10 @@
  * Route: /pcap
  *
  * Upload a .pcap file → calls POST /api/pcap/upload → shows:
- *   - Summary bar  (analyzed / attacks found / saved / skipped)
- *   - Results table per detected attack
+ *   - Summary bar  (packets / attacks found / saved / skipped / time)
+ *   - Attack breakdown table per detection source
  *
- * Attacks detected here also appear in LiveAttackFeed via Socket.io automatically.
+ * Attacks also appear in LiveAttackFeed via Socket.io automatically.
  */
 import React, { useState, useRef } from 'react';
 import { uploadPcap } from '../services/api';
@@ -16,17 +16,18 @@ const SEV_COLORS = {
   high:     '#ff8c00',
   medium:   '#dcdcaa',
   low:      '#4ec9b0',
-  none:     '#555',
 };
 
 const TYPE_LABELS = {
   sqli:               'SQL Injection',
   xss:                'XSS',
+  recon:              'Port Scan / Recon',
   traversal:          'Path Traversal',
   command_injection:  'Command Injection',
   ssrf:               'SSRF',
   lfi_rfi:            'LFI / RFI',
   brute_force:        'Brute Force',
+  ddos:               'DoS / DDoS / Flood',
   hpp:                'HTTP Param Pollution',
   xxe:                'XXE',
   webshell:           'Webshell',
@@ -37,20 +38,18 @@ export default function PcapAnalyzer() {
   const [file, setFile]         = useState(null);
   const [dragging, setDragging] = useState(false);
   const [loading, setLoading]   = useState(false);
-  const [result, setResult]     = useState(null);   // { analyzed, attacks_found, attacks_saved, skipped }
-  const [attacks, setAttacks]   = useState([]);     // raw attack objects from response
+  const [result, setResult]     = useState(null);
   const [error, setError]       = useState(null);
   const inputRef                = useRef();
 
   const handleFile = (f) => {
     if (!f) return;
-    if (!f.name.endsWith('.pcap')) {
-      setError('Only .pcap files are accepted.');
+    if (!f.name.endsWith('.pcap') && !f.name.endsWith('.pcapng')) {
+      setError('Only .pcap / .pcapng files are accepted.');
       return;
     }
     setFile(f);
     setResult(null);
-    setAttacks([]);
     setError(null);
   };
 
@@ -65,15 +64,16 @@ export default function PcapAnalyzer() {
     setLoading(true);
     setError(null);
     setResult(null);
-    setAttacks([]);
     try {
+      // uploadPcap → api.js → unwrap → returns res.data.data
+      // Backend v2 shape:
+      // {
+      //   total_packets, parsed_packets, total_flows, processing_time_s,
+      //   local_attacks_found, engine_attacks_found,
+      //   attacks_saved, skipped_engine
+      // }
       const data = await uploadPcap(file);
-      // data = { analyzed, attacks_found, attacks_saved, skipped }
-      // Note: full attack objects come back via socket attack:new in LiveAttackFeed
-      // Here we show the summary + what came back in the response
       setResult(data);
-      // The backend doesn't return full attack objects in summary,
-      // so we indicate they appear in the Live Feed
     } catch (err) {
       setError(err.response?.data?.message || err.message);
     } finally {
@@ -84,13 +84,17 @@ export default function PcapAnalyzer() {
   const reset = () => {
     setFile(null);
     setResult(null);
-    setAttacks([]);
     setError(null);
     if (inputRef.current) inputRef.current.value = '';
   };
 
+  // Derived totals from v2 response
+  const totalAttacksFound = result
+    ? (result.local_attacks_found ?? 0) + (result.engine_attacks_found ?? 0)
+    : 0;
+
   return (
-    <div style={{ padding: '24px 32px', maxWidth: 900 }}>
+    <div style={{ padding: '24px 32px', maxWidth: 960 }}>
       <h2 style={{ marginBottom: 4, color: '#e0e0e0' }}>PCAP Analyzer</h2>
       <p style={{ color: '#666', marginBottom: 24, fontSize: 13 }}>
         Upload a <code>.pcap</code> capture file. Every HTTP request is extracted,
@@ -98,7 +102,7 @@ export default function PcapAnalyzer() {
         in the Live Attack Feed in real time.
       </p>
 
-      {/* Drop zone */}
+      {/* ── Drop zone ───────────────────────────────────────────────── */}
       <div
         onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
         onDragLeave={() => setDragging(false)}
@@ -118,7 +122,7 @@ export default function PcapAnalyzer() {
         <input
           ref={inputRef}
           type="file"
-          accept=".pcap"
+          accept=".pcap,.pcapng"
           style={{ display: 'none' }}
           onChange={(e) => handleFile(e.target.files[0])}
         />
@@ -134,12 +138,12 @@ export default function PcapAnalyzer() {
           <>
             <div style={{ fontSize: 28, marginBottom: 8 }}>🗂️</div>
             <div style={{ color: '#888' }}>Drag & drop a <strong>.pcap</strong> file here</div>
-            <div style={{ color: '#555', fontSize: 12, marginTop: 4 }}>or click to browse — max 100 MB</div>
+            <div style={{ color: '#555', fontSize: 12, marginTop: 4 }}>or click to browse — max 500 MB</div>
           </>
         )}
       </div>
 
-      {/* Action buttons */}
+      {/* ── Buttons ─────────────────────────────────────────────────── */}
       <div style={{ display: 'flex', gap: 12, marginBottom: 24 }}>
         <button
           onClick={handleSubmit}
@@ -175,42 +179,60 @@ export default function PcapAnalyzer() {
         )}
       </div>
 
-      {/* Error */}
+      {/* ── Error ───────────────────────────────────────────────────── */}
       {error && (
         <div style={{
-          background: '#f4474722',
-          border: '1px solid #f44747',
-          borderRadius: 4,
-          padding: '10px 16px',
-          color: '#f44747',
-          marginBottom: 20,
-          fontSize: 13,
+          background: '#f4474722', border: '1px solid #f44747',
+          borderRadius: 4, padding: '10px 16px',
+          color: '#f44747', marginBottom: 20, fontSize: 13,
         }}>
           {error}
         </div>
       )}
 
-      {/* Loading spinner */}
+      {/* ── Loading ─────────────────────────────────────────────────── */}
       {loading && (
         <div style={{ color: '#00d4aa', fontSize: 13, marginBottom: 20 }}>
           ⏳ Processing packets… this may take a moment for large files.
         </div>
       )}
 
-      {/* Summary */}
+      {/* ── Summary cards ───────────────────────────────────────────── */}
       {result && (
         <>
           <div style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(4, 1fr)',
+            gridTemplateColumns: 'repeat(5, 1fr)',
             gap: 12,
-            marginBottom: 24,
+            marginBottom: 20,
           }}>
             {[
-              { label: 'Packets Analyzed', value: result.analyzed,      color: '#e0e0e0' },
-              { label: 'Attacks Found',    value: result.attacks_found, color: result.attacks_found > 0 ? '#f44747' : '#4ec9b0' },
-              { label: 'Attacks Saved',    value: result.attacks_saved, color: result.attacks_saved > 0 ? '#ff8c00' : '#4ec9b0' },
-              { label: 'Skipped',          value: result.skipped,       color: result.skipped > 0 ? '#dcdcaa' : '#555' },
+              {
+                label: 'Packets Analyzed',
+                // v2 uses total_packets (old schema used analyzed)
+                value: result.total_packets ?? result.analyzed ?? '—',
+                color: '#e0e0e0',
+              },
+              {
+                label: 'Local Detections',
+                value: result.local_attacks_found ?? 0,
+                color: (result.local_attacks_found ?? 0) > 0 ? '#f44747' : '#4ec9b0',
+              },
+              {
+                label: 'Engine Detections',
+                value: result.engine_attacks_found ?? 0,
+                color: (result.engine_attacks_found ?? 0) > 0 ? '#ff8c00' : '#4ec9b0',
+              },
+              {
+                label: 'Attacks Saved',
+                value: result.attacks_saved ?? 0,
+                color: (result.attacks_saved ?? 0) > 0 ? '#ff8c00' : '#4ec9b0',
+              },
+              {
+                label: 'Skipped (no engine)',
+                value: result.skipped_engine ?? result.skipped ?? 0,
+                color: (result.skipped_engine ?? result.skipped ?? 0) > 0 ? '#dcdcaa' : '#555',
+              },
             ].map(card => (
               <div key={card.label} style={{
                 background: '#1a1a1a',
@@ -218,34 +240,45 @@ export default function PcapAnalyzer() {
                 borderRadius: 6,
                 padding: '16px 20px',
               }}>
-                <div style={{ fontSize: 26, fontWeight: 700, color: card.color }}>{card.value}</div>
+                <div style={{ fontSize: 26, fontWeight: 700, color: card.color }}>
+                  {card.value}
+                </div>
                 <div style={{ fontSize: 11, color: '#666', marginTop: 4 }}>{card.label}</div>
               </div>
             ))}
           </div>
 
-          {result.attacks_found > 0 ? (
+          {/* Processing time badge */}
+          {result.processing_time_s !== undefined && (
+            <div style={{ fontSize: 12, color: '#555', marginBottom: 16 }}>
+              ⚡ Processed in <strong style={{ color: '#888' }}>
+                {(result.processing_time_s * 1000).toFixed(1)} ms
+              </strong>
+              {result.total_flows !== undefined && (
+                <> · <strong style={{ color: '#888' }}>{result.total_flows}</strong> flows built</>
+              )}
+            </div>
+          )}
+
+          {/* ── Result message ──────────────────────────────────────── */}
+          {totalAttacksFound > 0 ? (
             <div style={{
-              background: '#1a1a1a',
-              border: '1px solid #333',
-              borderRadius: 6,
-              padding: '14px 18px',
-              fontSize: 13,
-              color: '#888',
+              background: '#1a1a1a', border: '1px solid #333',
+              borderRadius: 6, padding: '14px 18px',
+              fontSize: 13, color: '#888',
             }}>
-              ✅ <strong style={{ color: '#00d4aa' }}>{result.attacks_saved}</strong> attack
-              {result.attacks_saved !== 1 ? 's' : ''} saved to MongoDB and emitted to the{' '}
-              <strong style={{ color: '#e0e0e0' }}>Live Attack Feed</strong> in real time.
-              Head to <a href="/attacks" style={{ color: '#00d4aa' }}>Attacks</a> to view them.
+              🚨 <strong style={{ color: '#f44747' }}>{totalAttacksFound}</strong> attack signal
+              {totalAttacksFound !== 1 ? 's' : ''} detected
+              {' '}(<strong style={{ color: '#00d4aa' }}>{result.attacks_saved ?? 0}</strong> saved
+              to MongoDB). Head to{' '}
+              <a href="/attacks" style={{ color: '#00d4aa' }}>Attacks</a> or watch the{' '}
+              <strong style={{ color: '#e0e0e0' }}>Live Attack Feed</strong> on the Dashboard.
             </div>
           ) : (
             <div style={{
-              background: '#1a1a1a',
-              border: '1px solid #333',
-              borderRadius: 6,
-              padding: '14px 18px',
-              fontSize: 13,
-              color: '#4ec9b0',
+              background: '#1a1a1a', border: '1px solid #333',
+              borderRadius: 6, padding: '14px 18px',
+              fontSize: 13, color: '#4ec9b0',
             }}>
               ✅ No threats detected in this capture file.
             </div>

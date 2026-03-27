@@ -1,0 +1,1979 @@
+{
+	"info": {
+		"_postman_id": "39541497-7df66b3d-6d86-494c-9ba7-b3b943d50de3",
+		"name": "SENTINAL — Complete API + Attack Test Collection",
+		"description": "Production-verified Postman collection for all SENTINAL services.\n\nServices covered:\n- Gateway API (:3000)\n- Detection Engine (:8002)\n- PCAP Processor (:8003)\n- ArmorIQ Agent (:8004)\n\nIncludes: health checks, normal flows, and controlled attack simulations for each service.\n\nBase URL variable: {{base}} = http://98.82.8.144:3000\nSet in Postman Environment.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "00 — Health Checks (All Services)",
+			"item": [
+				{
+					"name": "Gateway Health",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Gateway is online', () => pm.response.to.have.status(200));",
+									"pm.test('Status ok', () => { const b = pm.response.json(); pm.expect(b.status).to.eql('ok'); });"
+								],
+								"type": "text/javascript",
+								"id": "a1c62002-1c27-4719-bebd-5de5dee4dbee"
+							}
+						}
+					],
+					"id": "39541497-533bd071-e200-41b5-a286-766457e08d52",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base}}/health",
+							"host": [
+								"{{base}}"
+							],
+							"path": [
+								"health"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Detection Engine Health",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Detection Engine online', () => pm.response.to.have.status(200));"
+								],
+								"type": "text/javascript",
+								"id": "c62cb94f-5a66-451d-9431-cc6fcf4b2ea2"
+							}
+						}
+					],
+					"id": "39541497-cccb48fe-2c53-4aa5-864c-17254eb85001",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{detection}}/health",
+							"host": [
+								"{{detection}}"
+							],
+							"path": [
+								"health"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "PCAP Processor Health",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('PCAP Processor online', () => pm.response.to.have.status(200));"
+								],
+								"type": "text/javascript",
+								"id": "ce1eeb11-75cf-4eee-bf1f-5cd2b9faabb1"
+							}
+						}
+					],
+					"id": "39541497-63b2b066-f183-4e2a-bb40-fa0e01c5c52f",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{pcap}}/health",
+							"host": [
+								"{{pcap}}"
+							],
+							"path": [
+								"health"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "ArmorIQ Agent Health",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('ArmorIQ online', () => pm.response.to.have.status(200));",
+									"pm.test('OpenClaw loaded', () => { const b = pm.response.json(); pm.expect(b.openclaw_loaded).to.be.true; });"
+								],
+								"type": "text/javascript",
+								"id": "3c23ee82-b6a1-4bc8-87c0-27f7f23c8ca6"
+							}
+						}
+					],
+					"id": "39541497-e11aff37-add3-4e7c-8e87-2679288284e8",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{armoriq}}/health",
+							"host": [
+								"{{armoriq}}"
+							],
+							"path": [
+								"health"
+							]
+						}
+					},
+					"response": []
+				}
+			],
+			"id": "39541497-b3e9a48a-1157-476e-b00a-b5ef99919d5c",
+			"description": "Verify all 4 backend services are live before running any tests."
+		},
+		{
+			"name": "01 — Gateway API — Normal Flows",
+			"item": [
+				{
+					"name": "GET /api/stats",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Stats returned', () => pm.response.to.have.status(200));",
+									"pm.test('Has totalAttacks', () => { const d = pm.response.json().data; pm.expect(d).to.have.property('totalAttacks'); });"
+								],
+								"type": "text/javascript",
+								"id": "53d3a734-0c55-4bd8-a1c2-f13d9c27e86b"
+							}
+						}
+					],
+					"id": "39541497-4e270c9f-c41b-4ad8-97be-14930525b976",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base}}/api/stats",
+							"host": [
+								"{{base}}"
+							],
+							"path": [
+								"api",
+								"stats"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "GET /api/attacks/recent",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Attacks returned', () => pm.response.to.have.status(200));",
+									"pm.test('Data is array', () => { const d = pm.response.json().data; pm.expect(d).to.be.an('array'); });",
+									"// Save first attack ID for forensics test",
+									"const attacks = pm.response.json().data;",
+									"if (attacks && attacks.length > 0) pm.collectionVariables.set('attackId', attacks[0]._id);"
+								],
+								"type": "text/javascript",
+								"id": "68b214fb-2ec9-4db8-9021-77f7eacc6dfa"
+							}
+						}
+					],
+					"id": "39541497-b660279a-2cab-4dec-9be9-39d3e49559ad",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base}}/api/attacks/recent?limit=10",
+							"host": [
+								"{{base}}"
+							],
+							"path": [
+								"api",
+								"attacks",
+								"recent"
+							],
+							"query": [
+								{
+									"key": "limit",
+									"value": "10"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "GET /api/attacks/search?q=sqli",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Search returned 200', () => pm.response.to.have.status(200));"
+								],
+								"type": "text/javascript",
+								"id": "be4fbc57-a9c9-436c-9517-bafa2aa52fa8"
+							}
+						}
+					],
+					"id": "39541497-9f61577d-9d69-4456-9f0a-72b18c931657",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base}}/api/attacks/search?q=sqli&limit=5",
+							"host": [
+								"{{base}}"
+							],
+							"path": [
+								"api",
+								"attacks",
+								"search"
+							],
+							"query": [
+								{
+									"key": "q",
+									"value": "sqli"
+								},
+								{
+									"key": "limit",
+									"value": "5"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "GET /api/attacks/:id/forensics",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Forensics returned', () => pm.response.to.have.status(200));"
+								],
+								"type": "text/javascript",
+								"id": "8b05d45a-e164-4a49-a300-273c7cc2a852"
+							}
+						}
+					],
+					"id": "39541497-80315187-cbf6-4898-a8de-a4a8106da204",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base}}/api/attacks/{{attackId}}/forensics",
+							"host": [
+								"{{base}}"
+							],
+							"path": [
+								"api",
+								"attacks",
+								"{{attackId}}",
+								"forensics"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "GET /api/alerts",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Alerts returned', () => pm.response.to.have.status(200));",
+									"pm.test('Data is array', () => pm.expect(pm.response.json().data).to.be.an('array'));"
+								],
+								"type": "text/javascript",
+								"id": "ea0e63e1-583f-43cb-9c6c-fdecab5bdb9a"
+							}
+						}
+					],
+					"id": "39541497-8d95908b-d343-48a1-b28c-53255b4c4e96",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base}}/api/alerts?limit=20",
+							"host": [
+								"{{base}}"
+							],
+							"path": [
+								"api",
+								"alerts"
+							],
+							"query": [
+								{
+									"key": "limit",
+									"value": "20"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "GET /api/actions/pending",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Pending actions returned', () => pm.response.to.have.status(200));"
+								],
+								"type": "text/javascript",
+								"id": "41475459-c7ed-427e-aeac-308ee8ceea95"
+							}
+						}
+					],
+					"id": "39541497-98a4cf44-15d7-44be-b71a-9972650f71bc",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base}}/api/actions/pending",
+							"host": [
+								"{{base}}"
+							],
+							"path": [
+								"api",
+								"actions",
+								"pending"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "GET /api/audit",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Audit log returned', () => pm.response.to.have.status(200));"
+								],
+								"type": "text/javascript",
+								"id": "7f1ee406-b11d-42d0-bce6-751977998dd3"
+							}
+						}
+					],
+					"id": "39541497-aad039a2-8214-47c3-8dd2-d1660aaa42a7",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base}}/api/audit?limit=20",
+							"host": [
+								"{{base}}"
+							],
+							"path": [
+								"api",
+								"audit"
+							],
+							"query": [
+								{
+									"key": "limit",
+									"value": "20"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "GET /api/logs/recent",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Logs returned', () => pm.response.to.have.status(200));"
+								],
+								"type": "text/javascript",
+								"id": "4b715719-3151-4c87-9aff-8b07a9fc1867"
+							}
+						}
+					],
+					"id": "39541497-2666a62a-1bd3-40ff-8282-e3cd0c72e440",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base}}/api/logs/recent?limit=10",
+							"host": [
+								"{{base}}"
+							],
+							"path": [
+								"api",
+								"logs",
+								"recent"
+							],
+							"query": [
+								{
+									"key": "limit",
+									"value": "10"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "GET /api/service-status",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Service status returned', () => pm.response.to.have.status(200));"
+								],
+								"type": "text/javascript",
+								"id": "6f005c5d-455a-439c-ab55-eb23bc043f36"
+							}
+						}
+					],
+					"id": "39541497-61343965-1578-4bdd-9b50-69d37efc42ac",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base}}/api/service-status",
+							"host": [
+								"{{base}}"
+							],
+							"path": [
+								"api",
+								"service-status"
+							]
+						}
+					},
+					"response": []
+				}
+			],
+			"id": "39541497-8974cabc-8b5e-4c23-87d2-0c2f0049f9b1",
+			"description": "Standard Gateway API requests: stats, logs, attacks, alerts, audit."
+		},
+		{
+			"name": "02 — Gateway API — Attack Simulations",
+			"item": [
+				{
+					"name": "[ATTACK] SQL Injection — Login Body",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('SQLi ingested', () => pm.response.to.have.status(201));",
+									"pm.test('Success true', () => pm.expect(pm.response.json().success).to.be.true);",
+									"pm.test('Log ID returned', () => pm.expect(pm.response.json().data.id).to.be.a('string'));"
+								],
+								"type": "text/javascript",
+								"id": "b1ea17a2-10b9-4142-953d-d3c2939c51e2"
+							}
+						}
+					],
+					"id": "39541497-afc491ca-71a5-4bc6-a206-86ada12d67ed",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"projectId\": \"demo\",\n  \"method\": \"POST\",\n  \"url\": \"/api/login\",\n  \"ip\": \"203.0.113.10\",\n  \"headers\": { \"content-type\": \"application/json\" },\n  \"queryParams\": {},\n  \"body\": {\n    \"username\": \"admin' OR '1'='1' --\",\n    \"password\": \"anything\"\n  }\n}"
+						},
+						"url": {
+							"raw": "{{base}}/api/logs/ingest",
+							"host": [
+								"{{base}}"
+							],
+							"path": [
+								"api",
+								"logs",
+								"ingest"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "[ATTACK] XSS — Script Tag in URL",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('XSS ingested', () => pm.response.to.have.status(201));",
+									"pm.test('Success true', () => pm.expect(pm.response.json().success).to.be.true);"
+								],
+								"type": "text/javascript",
+								"id": "84f0d9cd-537c-4f78-b7c7-b751ce7a64eb"
+							}
+						}
+					],
+					"id": "39541497-5ec2ecff-609d-4fd2-8b0c-f6c57b36b0d6",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"projectId\": \"demo\",\n  \"method\": \"GET\",\n  \"url\": \"/search?q=<script>alert(document.cookie)</script>\",\n  \"ip\": \"203.0.113.11\",\n  \"headers\": {},\n  \"queryParams\": { \"q\": \"<script>alert(document.cookie)</script>\" },\n  \"body\": {}\n}"
+						},
+						"url": {
+							"raw": "{{base}}/api/logs/ingest",
+							"host": [
+								"{{base}}"
+							],
+							"path": [
+								"api",
+								"logs",
+								"ingest"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "[ATTACK] XSS — IMG onerror Variant",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('XSS variant ingested', () => pm.response.to.have.status(201));"
+								],
+								"type": "text/javascript",
+								"id": "6415769b-1f1e-4aab-85d3-28aef01cbdc9"
+							}
+						}
+					],
+					"id": "39541497-7a4e6a91-83d4-4a80-bbb6-200abf08b562",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"projectId\": \"demo\",\n  \"method\": \"GET\",\n  \"url\": \"/search?q=<img src=x onerror=alert(1)>\",\n  \"ip\": \"203.0.113.11\",\n  \"headers\": {},\n  \"queryParams\": { \"q\": \"<img src=x onerror=alert(1)>\" },\n  \"body\": {}\n}"
+						},
+						"url": {
+							"raw": "{{base}}/api/logs/ingest",
+							"host": [
+								"{{base}}"
+							],
+							"path": [
+								"api",
+								"logs",
+								"ingest"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "[ATTACK] Path Traversal — /etc/passwd",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Traversal ingested', () => pm.response.to.have.status(201));"
+								],
+								"type": "text/javascript",
+								"id": "f0486ab7-3d74-48bd-96ae-f4322e540ece"
+							}
+						}
+					],
+					"id": "39541497-a4db4d3a-3978-4798-b018-dad527bcda91",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"projectId\": \"demo\",\n  \"method\": \"GET\",\n  \"url\": \"/file?name=/../../../etc/passwd\",\n  \"ip\": \"203.0.113.12\",\n  \"headers\": {},\n  \"queryParams\": { \"name\": \"/../../../etc/passwd\" },\n  \"body\": {}\n}"
+						},
+						"url": {
+							"raw": "{{base}}/api/logs/ingest",
+							"host": [
+								"{{base}}"
+							],
+							"path": [
+								"api",
+								"logs",
+								"ingest"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "[ATTACK] Command Injection — Shell Escape",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Command injection ingested', () => pm.response.to.have.status(201));"
+								],
+								"type": "text/javascript",
+								"id": "e7f33642-1602-4af1-9e0a-58f1319772b1"
+							}
+						}
+					],
+					"id": "39541497-097d9548-4f51-4d4c-a0ce-91d22b5f96ec",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"projectId\": \"demo\",\n  \"method\": \"GET\",\n  \"url\": \"/search?q=hello; cat /etc/shadow\",\n  \"ip\": \"203.0.113.13\",\n  \"headers\": {},\n  \"queryParams\": { \"q\": \"hello; cat /etc/shadow\" },\n  \"body\": {}\n}"
+						},
+						"url": {
+							"raw": "{{base}}/api/logs/ingest",
+							"host": [
+								"{{base}}"
+							],
+							"path": [
+								"api",
+								"logs",
+								"ingest"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "[ATTACK] SSRF — Internal AWS Metadata",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('SSRF ingested', () => pm.response.to.have.status(201));"
+								],
+								"type": "text/javascript",
+								"id": "5154ae3b-cd8f-481c-9db6-41e178d0c5e5"
+							}
+						}
+					],
+					"id": "39541497-254d238d-634b-4f06-97da-5b89c78abbe4",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"projectId\": \"demo\",\n  \"method\": \"GET\",\n  \"url\": \"/fetch?url=http://169.254.169.254/latest/meta-data/\",\n  \"ip\": \"203.0.113.14\",\n  \"headers\": {},\n  \"queryParams\": { \"url\": \"http://169.254.169.254/latest/meta-data/\" },\n  \"body\": {}\n}"
+						},
+						"url": {
+							"raw": "{{base}}/api/logs/ingest",
+							"host": [
+								"{{base}}"
+							],
+							"path": [
+								"api",
+								"logs",
+								"ingest"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "[ATTACK] Brute Force — Rapid Login Attempts",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Brute force ingested', () => pm.response.to.have.status(201));"
+								],
+								"type": "text/javascript",
+								"id": "adb875c8-08f2-4a9b-861c-a1392d92ad2d"
+							}
+						}
+					],
+					"id": "39541497-16e5c736-80bf-415b-b74c-3e3465970400",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"projectId\": \"demo\",\n  \"method\": \"POST\",\n  \"url\": \"/login\",\n  \"ip\": \"203.0.113.99\",\n  \"headers\": {},\n  \"queryParams\": {},\n  \"body\": { \"username\": \"admin\", \"password\": \"password123\" },\n  \"responseCode\": 401\n}"
+						},
+						"url": {
+							"raw": "{{base}}/api/logs/ingest",
+							"host": [
+								"{{base}}"
+							],
+							"path": [
+								"api",
+								"logs",
+								"ingest"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "[ATTACK] Clean Request — Should NOT Trigger Detection",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Clean request ingested (201)', () => pm.response.to.have.status(201));",
+									"pm.test('No attack created for clean request', () => pm.expect(pm.response.json().success).to.be.true);"
+								],
+								"type": "text/javascript",
+								"id": "90222104-8ab3-4b16-aeec-fe0ac5683a95"
+							}
+						}
+					],
+					"id": "39541497-87c93e99-3fca-4c87-87a5-e851d07357a4",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"projectId\": \"demo\",\n  \"method\": \"GET\",\n  \"url\": \"/api/products?category=electronics\",\n  \"ip\": \"192.168.1.1\",\n  \"headers\": {},\n  \"queryParams\": { \"category\": \"electronics\" },\n  \"body\": {}\n}"
+						},
+						"url": {
+							"raw": "{{base}}/api/logs/ingest",
+							"host": [
+								"{{base}}"
+							],
+							"path": [
+								"api",
+								"logs",
+								"ingest"
+							]
+						}
+					},
+					"response": []
+				}
+			],
+			"id": "39541497-f6dafcc9-8f9f-432c-aa86-02660ca9a5fe",
+			"description": "Controlled attack payloads sent to /api/logs/ingest. Each triggers the full pipeline: Detection → ArmorIQ → Dashboard."
+		},
+		{
+			"name": "03 — ArmorIQ Agent — Direct Enforcement Tests",
+			"item": [
+				{
+					"name": "[ALLOW] SQLi Medium — Auto-Execute Safe Actions",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('ArmorIQ responded 200', () => pm.response.to.have.status(200));",
+									"const b = pm.response.json();",
+									"pm.test('Has actionsExecuted', () => pm.expect(b).to.have.property('actionsExecuted'));",
+									"pm.test('send_alert executed', () => pm.expect(b.actionsExecuted).to.include('send_alert'));",
+									"pm.test('rate_limit_ip executed', () => pm.expect(b.actionsExecuted).to.include('rate_limit_ip'));"
+								],
+								"type": "text/javascript",
+								"id": "e9f2cf18-7768-44a3-977e-5d8da5d98883"
+							}
+						}
+					],
+					"id": "39541497-7d7c290f-f1a8-4467-bcfd-c9f59d60faff",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"attackId\": \"test-allow-sqli\",\n  \"ip\": \"5.5.5.5\",\n  \"attackType\": \"sqli\",\n  \"severity\": \"medium\",\n  \"confidence\": 0.90,\n  \"status\": \"attempt\"\n}"
+						},
+						"url": {
+							"raw": "{{armoriq}}/respond",
+							"host": [
+								"{{armoriq}}"
+							],
+							"path": [
+								"respond"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "[ALLOW] XSS Low — Only Log Actions",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('ArmorIQ responded 200', () => pm.response.to.have.status(200));"
+								],
+								"type": "text/javascript",
+								"id": "4421738d-413e-45e2-82db-9cc9d278c07e"
+							}
+						}
+					],
+					"id": "39541497-ed848f40-6171-4d83-b33b-2850d6a4e09c",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"attackId\": \"test-allow-xss\",\n  \"ip\": \"5.5.5.6\",\n  \"attackType\": \"xss\",\n  \"severity\": \"low\",\n  \"confidence\": 0.75,\n  \"status\": \"attempt\"\n}"
+						},
+						"url": {
+							"raw": "{{armoriq}}/respond",
+							"host": [
+								"{{armoriq}}"
+							],
+							"path": [
+								"respond"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "[BLOCK] Brute Force Critical — permanent_ban_ip BLOCKED",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('ArmorIQ responded 200', () => pm.response.to.have.status(200));",
+									"const b = pm.response.json();",
+									"pm.test('Has actionsQueued (BLOCKED)', () => pm.expect(b).to.have.property('actionsQueued'));",
+									"pm.test('permanent_ban_ip blocked', () => pm.expect(b.actionsQueued).to.include('permanent_ban_ip'));",
+									"pm.test('shutdown_endpoint blocked', () => pm.expect(b.actionsQueued).to.include('shutdown_endpoint'));"
+								],
+								"type": "text/javascript",
+								"id": "4d8fb879-0cc3-441b-a0ff-2ee535f21bdf"
+							}
+						}
+					],
+					"id": "39541497-e3b7bdff-2248-417a-9adf-0979a6dad5d5",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"attackId\": \"test-block-bruteforce\",\n  \"ip\": \"6.6.6.6\",\n  \"attackType\": \"brute_force\",\n  \"severity\": \"critical\",\n  \"confidence\": 0.97,\n  \"status\": \"successful\"\n}"
+						},
+						"url": {
+							"raw": "{{armoriq}}/respond",
+							"host": [
+								"{{armoriq}}"
+							],
+							"path": [
+								"respond"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "[BLOCK] SQLi Critical — All Dangerous Actions Blocked",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('ArmorIQ responded 200', () => pm.response.to.have.status(200));",
+									"pm.test('Actions queued for critical', () => pm.expect(pm.response.json()).to.have.property('actionsQueued'));"
+								],
+								"type": "text/javascript",
+								"id": "b88f7f8a-ba49-477f-9431-3c3bc8887ad2"
+							}
+						}
+					],
+					"id": "39541497-3304e40c-bdc7-46ee-aed6-e6ac11c61417",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"attackId\": \"test-block-sqli-critical\",\n  \"ip\": \"7.7.7.7\",\n  \"attackType\": \"sqli\",\n  \"severity\": \"critical\",\n  \"confidence\": 0.99,\n  \"status\": \"successful\"\n}"
+						},
+						"url": {
+							"raw": "{{armoriq}}/respond",
+							"host": [
+								"{{armoriq}}"
+							],
+							"path": [
+								"respond"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "[BLOCK] Command Injection High — RULE_003",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('ArmorIQ responded 200', () => pm.response.to.have.status(200));"
+								],
+								"type": "text/javascript",
+								"id": "c122bef2-6014-4ec0-8c77-daf37988af73"
+							}
+						}
+					],
+					"id": "39541497-fe39c579-e416-4b3a-bd5a-91b045f7242d",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"attackId\": \"test-block-cmdinject\",\n  \"ip\": \"8.8.8.100\",\n  \"attackType\": \"command_injection\",\n  \"severity\": \"high\",\n  \"confidence\": 0.95,\n  \"status\": \"attempt\"\n}"
+						},
+						"url": {
+							"raw": "{{armoriq}}/respond",
+							"host": [
+								"{{armoriq}}"
+							],
+							"path": [
+								"respond"
+							]
+						}
+					},
+					"response": []
+				}
+			],
+			"id": "39541497-9a1b24dc-e6c2-4680-abc4-5197de47a1df",
+			"description": "Test ArmorIQ's OpenClaw enforcement engine directly on :8004.\nALLOW tests: medium/low severity → safe actions auto-execute.\nBLOCK tests: critical/high severity → dangerous actions queued."
+		},
+		{
+			"name": "04 — Gateway API — ArmorIQ Trigger (Full Pipeline)",
+			"item": [
+				{
+					"name": "[TRIGGER] XSS High — Full Pipeline",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Trigger accepted', () => pm.response.to.have.status(200));",
+									"pm.test('Success true', () => pm.expect(pm.response.json().success).to.be.true);"
+								],
+								"type": "text/javascript",
+								"id": "9099cecf-003f-4dd3-b6e1-2002636afbce"
+							}
+						}
+					],
+					"id": "39541497-da84cdfa-8e9c-4827-ba75-d3a53a34691a",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"ip\": \"10.0.0.55\",\n  \"attackType\": \"xss\",\n  \"severity\": \"high\",\n  \"confidence\": 0.88,\n  \"status\": \"attempt\"\n}"
+						},
+						"url": {
+							"raw": "{{base}}/api/armoriq/trigger",
+							"host": [
+								"{{base}}"
+							],
+							"path": [
+								"api",
+								"armoriq",
+								"trigger"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "[TRIGGER] Brute Force Critical — BLOCK + Action Queue",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Trigger accepted', () => pm.response.to.have.status(200));"
+								],
+								"type": "text/javascript",
+								"id": "7313f9ac-5c4d-4b1f-b096-458a23566af9"
+							}
+						}
+					],
+					"id": "39541497-77330d86-b803-442a-9fec-e00139e33798",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"ip\": \"203.0.113.99\",\n  \"attackType\": \"brute_force\",\n  \"severity\": \"critical\",\n  \"confidence\": 0.97,\n  \"status\": \"successful\"\n}"
+						},
+						"url": {
+							"raw": "{{base}}/api/armoriq/trigger",
+							"host": [
+								"{{base}}"
+							],
+							"path": [
+								"api",
+								"armoriq",
+								"trigger"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "[TRIGGER] SQLi Critical — Full BLOCK Pipeline",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Trigger accepted', () => pm.response.to.have.status(200));"
+								],
+								"type": "text/javascript",
+								"id": "79c7ca1e-4830-470b-8d46-dd50f54ea052"
+							}
+						}
+					],
+					"id": "39541497-5f19512e-f3ac-4a2b-b4ab-0061178b23f9",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"ip\": \"203.0.113.77\",\n  \"attackType\": \"sqli\",\n  \"severity\": \"critical\",\n  \"confidence\": 0.99,\n  \"status\": \"successful\"\n}"
+						},
+						"url": {
+							"raw": "{{base}}/api/armoriq/trigger",
+							"host": [
+								"{{base}}"
+							],
+							"path": [
+								"api",
+								"armoriq",
+								"trigger"
+							]
+						}
+					},
+					"response": []
+				}
+			],
+			"id": "39541497-ce395670-5328-46fb-a356-8f123692daec",
+			"description": "Use /api/armoriq/trigger to fire the full attack pipeline through the Gateway.\nThis creates AttackEvent + Alert + calls ArmorIQ — all 4 socket events fire."
+		},
+		{
+			"name": "05 — Action Queue — Human Approval Workflow",
+			"item": [
+				{
+					"name": "GET Pending Actions",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Pending actions fetched', () => pm.response.to.have.status(200));",
+									"const actions = pm.response.json().data;",
+									"if (actions && actions.length > 0) {",
+									"  pm.collectionVariables.set('pendingActionId', actions[0]._id);",
+									"  console.log('Saved action ID:', actions[0]._id);",
+									"}"
+								],
+								"type": "text/javascript",
+								"id": "a192b69e-fc96-4bf1-8b0d-381ed9f977b3"
+							}
+						}
+					],
+					"id": "39541497-4e8af25b-0192-4557-8ccf-9f7aa5eb3333",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base}}/api/actions/pending",
+							"host": [
+								"{{base}}"
+							],
+							"path": [
+								"api",
+								"actions",
+								"pending"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "POST Approve Action",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Action approved', () => pm.response.to.have.status(200));",
+									"pm.test('Success true', () => pm.expect(pm.response.json().success).to.be.true);"
+								],
+								"type": "text/javascript",
+								"id": "72de425a-92b3-444b-8574-73f2894b273b"
+							}
+						}
+					],
+					"id": "39541497-7ccc250c-2d19-4703-93c3-9aefbc5e78c9",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"approvedBy\": \"demo-judge\"\n}"
+						},
+						"url": {
+							"raw": "{{base}}/api/actions/{{pendingActionId}}/approve",
+							"host": [
+								"{{base}}"
+							],
+							"path": [
+								"api",
+								"actions",
+								"{{pendingActionId}}",
+								"approve"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "POST Reject Action",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Action rejected', () => pm.response.to.have.status(200));"
+								],
+								"type": "text/javascript",
+								"id": "2db9916f-7880-433c-8252-4f9f6dde78bd"
+							}
+						}
+					],
+					"id": "39541497-cc352dc8-ed72-48ae-bd1e-6c419066abcc",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"rejectedBy\": \"demo-judge\"\n}"
+						},
+						"url": {
+							"raw": "{{base}}/api/actions/{{pendingActionId}}/reject",
+							"host": [
+								"{{base}}"
+							],
+							"path": [
+								"api",
+								"actions",
+								"{{pendingActionId}}",
+								"reject"
+							]
+						}
+					},
+					"response": []
+				}
+			],
+			"id": "39541497-2ca49bde-6b22-466c-96a6-632be32d13df",
+			"description": "After firing a critical attack trigger, use these requests to approve or reject blocked actions.\n\nWorkflow:\n1. Run [TRIGGER] Brute Force Critical from folder 04\n2. GET /api/actions/pending — copy an action ID\n3. POST approve or reject with that ID"
+		},
+		{
+			"name": "06 — Detection Engine — Direct Tests",
+			"item": [
+				{
+					"name": "[DETECT] SQLi — Direct",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Detection responded 200', () => pm.response.to.have.status(200));",
+									"const b = pm.response.json();",
+									"pm.test('Threat detected', () => pm.expect(b.threat_detected).to.be.true);",
+									"pm.test('Attack type is sqli', () => pm.expect(b.attack_type).to.eql('sqli'));"
+								],
+								"type": "text/javascript",
+								"id": "10e4c1ce-c858-4b65-b581-e4b09f8f84f6"
+							}
+						}
+					],
+					"id": "39541497-04d6316e-20d3-42f9-a074-2bd060717f12",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"logId\": \"direct-test-sqli\",\n  \"projectId\": \"demo\",\n  \"method\": \"POST\",\n  \"url\": \"/login\",\n  \"ip\": \"1.2.3.4\",\n  \"queryParams\": {},\n  \"body\": { \"username\": \"admin' UNION SELECT * FROM users--\", \"password\": \"x\" },\n  \"headers\": {},\n  \"responseCode\": 200\n}"
+						},
+						"url": {
+							"raw": "{{detection}}/analyze",
+							"host": [
+								"{{detection}}"
+							],
+							"path": [
+								"analyze"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "[DETECT] XSS — Direct",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Detection responded 200', () => pm.response.to.have.status(200));",
+									"pm.test('XSS detected', () => pm.expect(pm.response.json().threat_detected).to.be.true);",
+									"pm.test('Attack type is xss', () => pm.expect(pm.response.json().attack_type).to.eql('xss'));"
+								],
+								"type": "text/javascript",
+								"id": "cdaec916-f924-4d3e-ac62-4a1ab99f5f53"
+							}
+						}
+					],
+					"id": "39541497-c9c2afe7-d972-495c-a6d2-b3a0f14fc9f8",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"logId\": \"direct-test-xss\",\n  \"projectId\": \"demo\",\n  \"method\": \"GET\",\n  \"url\": \"/search?q=<script>alert(1)</script>\",\n  \"ip\": \"1.2.3.5\",\n  \"queryParams\": { \"q\": \"<script>alert(1)</script>\" },\n  \"body\": {},\n  \"headers\": {},\n  \"responseCode\": 200\n}"
+						},
+						"url": {
+							"raw": "{{detection}}/analyze",
+							"host": [
+								"{{detection}}"
+							],
+							"path": [
+								"analyze"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "[DETECT] Path Traversal — Direct",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Detection responded 200', () => pm.response.to.have.status(200));",
+									"pm.test('Traversal detected', () => pm.expect(pm.response.json().threat_detected).to.be.true);"
+								],
+								"type": "text/javascript",
+								"id": "9d82f49e-1057-473a-b4da-8e33b40e7b64"
+							}
+						}
+					],
+					"id": "39541497-bebb3f0e-21c8-4029-9b52-af5dc0e4a76f",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"logId\": \"direct-test-traversal\",\n  \"projectId\": \"demo\",\n  \"method\": \"GET\",\n  \"url\": \"/file?name=../../etc/passwd\",\n  \"ip\": \"1.2.3.6\",\n  \"queryParams\": { \"name\": \"../../etc/passwd\" },\n  \"body\": {},\n  \"headers\": {},\n  \"responseCode\": 200\n}"
+						},
+						"url": {
+							"raw": "{{detection}}/analyze",
+							"host": [
+								"{{detection}}"
+							],
+							"path": [
+								"analyze"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "[DETECT] Clean Request — Should NOT Detect",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Detection responded 200', () => pm.response.to.have.status(200));",
+									"pm.test('NO threat on clean request', () => pm.expect(pm.response.json().threat_detected).to.be.false);"
+								],
+								"type": "text/javascript",
+								"id": "db9ce2fe-9ffc-47b4-9e40-46688dfc4855"
+							}
+						}
+					],
+					"id": "39541497-04039212-0116-469e-bb7f-60d236132726",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"logId\": \"direct-test-clean\",\n  \"projectId\": \"demo\",\n  \"method\": \"GET\",\n  \"url\": \"/api/products?category=electronics\",\n  \"ip\": \"192.168.1.1\",\n  \"queryParams\": { \"category\": \"electronics\" },\n  \"body\": {},\n  \"headers\": {},\n  \"responseCode\": 200\n}"
+						},
+						"url": {
+							"raw": "{{detection}}/analyze",
+							"host": [
+								"{{detection}}"
+							],
+							"path": [
+								"analyze"
+							]
+						}
+					},
+					"response": []
+				}
+			],
+			"id": "39541497-d6991a2c-7edc-40fa-8fc2-d4901aa07ea1",
+			"description": "Send payloads directly to the Detection Engine on :8002.\nBypasses the Gateway — useful for testing detection logic in isolation."
+		},
+		{
+			"name": "07 — PCAP Processor — Direct Tests",
+			"item": [
+				{
+					"name": "PCAP Health",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('PCAP online', () => pm.response.to.have.status(200));"
+								],
+								"type": "text/javascript",
+								"id": "07db1de2-44af-47f3-aff2-b8a416f8d04f"
+							}
+						}
+					],
+					"id": "39541497-64d4f98e-b7a3-49e5-88aa-c8074ead7b00",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{pcap}}/health",
+							"host": [
+								"{{pcap}}"
+							],
+							"path": [
+								"health"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "[INFO] PCAP Upload via Gateway",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('PCAP upload accepted', () => {",
+									"  pm.expect([200, 201]).to.include(pm.response.code);",
+									"});"
+								],
+								"type": "text/javascript",
+								"id": "fea59742-fb85-43b6-8af9-2e2ac2324542"
+							}
+						}
+					],
+					"id": "39541497-b007c8b5-d78c-4f4a-ab9e-a4d9f88a4b8a",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "pcap",
+									"type": "file",
+									"description": "Upload a real .pcap file here",
+									"src": "/path/to/your/capture.pcap"
+								},
+								{
+									"key": "projectId",
+									"type": "text",
+									"value": "demo"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{base}}/api/pcap/upload",
+							"host": [
+								"{{base}}"
+							],
+							"path": [
+								"api",
+								"pcap",
+								"upload"
+							]
+						}
+					},
+					"response": []
+				}
+			],
+			"id": "39541497-c6cc8292-3a33-4c1b-8fc8-b4c79ac37de1",
+			"description": "Test PCAP Processor on :8003 directly.\nNote: POST /process requires a real filepath on the server.\nHealth check always works."
+		},
+		{
+			"name": "08 — End-to-End Demo Sequence",
+			"item": [
+				{
+					"name": "STEP 1 — Verify All Services Up",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Gateway ONLINE', () => pm.response.to.have.status(200));"
+								],
+								"type": "text/javascript",
+								"id": "e068950f-c252-4c57-a9a4-3683b0cbe308"
+							}
+						}
+					],
+					"id": "39541497-165ce78e-bdb4-43c2-827c-050c391ba900",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base}}/health",
+							"host": [
+								"{{base}}"
+							],
+							"path": [
+								"health"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "STEP 2 — Fire SQLi Attack",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('SQLi fired', () => pm.response.to.have.status(201));",
+									"console.log('>>> Watch /attacks on dashboard NOW');"
+								],
+								"type": "text/javascript",
+								"id": "32c41f84-e74d-4994-8942-6100f2c3c573"
+							}
+						}
+					],
+					"id": "39541497-ec843dba-a224-4c31-bff5-125f944317f1",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"projectId\": \"live-demo\",\n  \"method\": \"POST\",\n  \"url\": \"/login\",\n  \"ip\": \"198.51.100.1\",\n  \"headers\": {},\n  \"queryParams\": {},\n  \"body\": { \"username\": \"admin' OR '1'='1' --\", \"password\": \"x\" }\n}"
+						},
+						"url": {
+							"raw": "{{base}}/api/logs/ingest",
+							"host": [
+								"{{base}}"
+							],
+							"path": [
+								"api",
+								"logs",
+								"ingest"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "STEP 3 — Fire XSS Attack",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('XSS fired', () => pm.response.to.have.status(201));",
+									"console.log('>>> Watch /alerts on dashboard NOW');"
+								],
+								"type": "text/javascript",
+								"id": "5ddc2200-c122-471f-b1e0-04ddf1dfcc01"
+							}
+						}
+					],
+					"id": "39541497-98ae6f36-cf97-46a9-92b8-6111e72082ed",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"projectId\": \"live-demo\",\n  \"method\": \"GET\",\n  \"url\": \"/search?q=<script>alert(document.cookie)</script>\",\n  \"ip\": \"198.51.100.2\",\n  \"headers\": {},\n  \"queryParams\": { \"q\": \"<script>alert(document.cookie)</script>\" },\n  \"body\": {}\n}"
+						},
+						"url": {
+							"raw": "{{base}}/api/logs/ingest",
+							"host": [
+								"{{base}}"
+							],
+							"path": [
+								"api",
+								"logs",
+								"ingest"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "STEP 4 — Fire Critical Brute Force (BLOCK)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Critical attack triggered', () => pm.response.to.have.status(200));",
+									"console.log('>>> Watch /action-queue — blocked actions should appear NOW');"
+								],
+								"type": "text/javascript",
+								"id": "93a80de3-757c-41b4-a14c-3ff27a6eb3fc"
+							}
+						}
+					],
+					"id": "39541497-097bc762-f809-4a1c-aa66-e48c238603ee",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"ip\": \"203.0.113.99\",\n  \"attackType\": \"brute_force\",\n  \"severity\": \"critical\",\n  \"confidence\": 0.97,\n  \"status\": \"successful\"\n}"
+						},
+						"url": {
+							"raw": "{{base}}/api/armoriq/trigger",
+							"host": [
+								"{{base}}"
+							],
+							"path": [
+								"api",
+								"armoriq",
+								"trigger"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "STEP 5 — Get Pending Action ID",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Pending actions exist', () => pm.response.to.have.status(200));",
+									"const actions = pm.response.json().data;",
+									"pm.test('At least 1 pending action', () => pm.expect(actions.length).to.be.greaterThan(0));",
+									"if (actions.length > 0) pm.collectionVariables.set('pendingActionId', actions[0]._id);"
+								],
+								"type": "text/javascript",
+								"id": "cc6262c8-cfcf-45ca-966b-6d181ad60045"
+							}
+						}
+					],
+					"id": "39541497-78f275e8-8722-42fe-ab39-67fb4f443625",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base}}/api/actions/pending",
+							"host": [
+								"{{base}}"
+							],
+							"path": [
+								"api",
+								"actions",
+								"pending"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "STEP 6 — Approve Action (HUMAN_OVERRIDE)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Approved successfully', () => pm.response.to.have.status(200));",
+									"console.log('>>> Watch /audit — HUMAN_OVERRIDE entry should appear NOW');"
+								],
+								"type": "text/javascript",
+								"id": "a3a901fb-e28f-455d-a77c-dd2e42c9845f"
+							}
+						}
+					],
+					"id": "39541497-6405eae5-c12e-4281-9ec4-e0516481756c",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"approvedBy\": \"judge-panel\"\n}"
+						},
+						"url": {
+							"raw": "{{base}}/api/actions/{{pendingActionId}}/approve",
+							"host": [
+								"{{base}}"
+							],
+							"path": [
+								"api",
+								"actions",
+								"{{pendingActionId}}",
+								"approve"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "STEP 7 — Verify Final Stats",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Stats returned', () => pm.response.to.have.status(200));",
+									"const d = pm.response.json().data;",
+									"console.log('Total Attacks:', d.totalAttacks, '| Total Logs:', d.totalLogs);",
+									"pm.test('Attack count > 0', () => pm.expect(d.totalAttacks).to.be.greaterThan(0));"
+								],
+								"type": "text/javascript",
+								"id": "59ce97ee-dd4c-434b-8366-4f8c78eb58fe"
+							}
+						}
+					],
+					"id": "39541497-f406ed91-6965-45c5-b88a-951e90af6ca4",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base}}/api/stats",
+							"host": [
+								"{{base}}"
+							],
+							"path": [
+								"api",
+								"stats"
+							]
+						}
+					},
+					"response": []
+				}
+			],
+			"id": "39541497-7b9bdf16-cf21-4610-97cf-2857811e49c2",
+			"description": "Run this folder IN ORDER for the full 8-minute live demo.\n\nSequence:\n1. Health Check All\n2. SQLi Attack → watch /attacks page\n3. XSS Attack → watch /alerts page\n4. Brute Force CRITICAL Trigger → watch /action-queue\n5. Approve Action → watch /audit for HUMAN_OVERRIDE\n6. Check final stats"
+		}
+	],
+	"variable": [
+		{
+			"key": "base",
+			"value": "http://98.82.8.144:3000",
+			"type": "string"
+		},
+		{
+			"key": "detection",
+			"value": "http://98.82.8.144:8002",
+			"type": "string"
+		},
+		{
+			"key": "pcap",
+			"value": "http://98.82.8.144:8003",
+			"type": "string"
+		},
+		{
+			"key": "armoriq",
+			"value": "http://98.82.8.144:8004",
+			"type": "string"
+		},
+		{
+			"key": "attackId",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "pendingActionId",
+			"value": ""
+		}
+	]
+}

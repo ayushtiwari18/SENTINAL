@@ -1,22 +1,35 @@
 """
 ArmorIQ Agent — FastAPI Microservice
-Port: 8004
+
+dotenv is loaded from the ROOT .env file at startup.
+Path resolution: this file is at services/armoriq-agent/main.py
+Root .env is 2 directories up: Path(__file__).parents[2] / ".env"
+
+Directory structure:
+  SENTINAL/                        ← root (parents[2] from main.py)
+    services/
+      armoriq-agent/
+        main.py                    ← this file
 
 Responsibilities:
   1. Receive attack context from Gateway (POST /respond)
   2. Build structured intents via intent_builder
-  3. Evaluate each intent via OpenClaw runtime (openclaw_runtime.py)
+  3. Evaluate each intent via OpenClaw runtime
      Fallback: policy_engine.py if OpenClaw is unavailable
   4. Execute ALLOWED actions via executor
   5. Return BLOCKED actions as actionsQueued for human review
   6. Log every decision to audit_log via audit_logger
-
-ArmorIQ does NOT: detect attacks, parse packets, store AttackEvents,
-or render UI. It only enforces intent boundaries.
 """
+from pathlib import Path
+from dotenv import load_dotenv
+import os
+
+# Load root .env FIRST — before any other imports
+_env_path = Path(__file__).resolve().parents[2] / ".env"
+load_dotenv(dotenv_path=_env_path, override=False)
+# override=False: system env vars (e.g. AWS, Docker) take priority over .env
 
 import logging
-import os
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -27,11 +40,17 @@ from policy_engine import evaluate as _fallback_evaluate
 from executor import execute
 from audit_logger import log_decision
 
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
 logging.basicConfig(
-    level=logging.INFO,
+    level=getattr(logging, LOG_LEVEL, logging.INFO),
     format="%(asctime)s [%(name)s] %(levelname)s — %(message)s"
 )
 logger = logging.getLogger("armoriq")
+
+logger.info(f"[ARMORIQ] Loading env from: {_env_path}")
+logger.info(f"[ARMORIQ] .env found: {_env_path.exists()}")
+logger.info(f"[ARMORIQ] GATEWAY_URL: {os.getenv('GATEWAY_URL', 'http://localhost:3000')}")
+logger.info(f"[ARMORIQ] ARMORIQ_PORT: {os.getenv('ARMORIQ_PORT', '8004')}")
 
 app = FastAPI(
     title="ArmorIQ Agent",
@@ -64,14 +83,18 @@ def _evaluate_with_fallback(intent):
 
 @app.get("/health")
 def health():
+    import time
     openclaw_ok = openclaw_runtime.is_loaded()
     return {
         "status": "ok",
         "service": "armoriq-agent",
         "version": "2.0.0",
+        "uptime": round(time.time()),
+        "port": int(os.getenv("ARMORIQ_PORT", "8004")),
         "enforcement": "ArmorClaw-v1" if openclaw_ok else "ArmorIQ-Policy-v1 (fallback)",
         "openclaw_loaded": openclaw_ok,
         "policy_source": "policy.yaml" if openclaw_ok else "policy_engine.py (fallback)",
+        "gateway_url": os.getenv("GATEWAY_URL", "http://localhost:3000"),
     }
 
 
@@ -95,7 +118,6 @@ async def respond(body: RespondRequest):
         status=body.status,
     )
 
-    # Step 1: Build intents from attack context
     intents = build_intents(ctx)
     logger.info(f"[ARMORIQ] Built {len(intents)} intents for attackId={body.attackId}")
 
@@ -105,8 +127,6 @@ async def respond(body: RespondRequest):
 
     for intent in intents:
         action = intent.proposed_action.action
-
-        # Step 2: OpenClaw policy evaluation (with fallback)
         decision = _evaluate_with_fallback(intent)
 
         logger.info(
@@ -114,13 +134,11 @@ async def respond(body: RespondRequest):
             f"(rule={decision.policy_rule_id} enforcement={decision.enforcement_level})"
         )
 
-        # Step 3: Audit every decision regardless of outcome
         logged = await log_decision(intent, decision)
         if logged:
             audit_count += 1
 
         if decision.decision == "ALLOW":
-            # Step 4: Execute allowed action
             ok = await execute(
                 action=action,
                 intent_data=intent.proposed_action.model_dump(),
@@ -131,8 +149,7 @@ async def respond(body: RespondRequest):
                 logger.info(f"[ARMORIQ] EXECUTED: {action}")
             else:
                 logger.warning(f"[ARMORIQ] Execution of '{action}' failed — see executor log")
-
-        else:  # BLOCK
+        else:
             actions_queued.append(
                 ActionResult(
                     action=action,

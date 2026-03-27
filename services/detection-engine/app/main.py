@@ -1,3 +1,26 @@
+"""
+SENTINAL Detection Engine — FastAPI Entry Point
+
+dotenv is loaded from the ROOT .env file at startup.
+Path resolution: this file is at services/detection-engine/app/main.py
+Root .env is 3 directories up: Path(__file__).parents[3] / ".env"
+
+Directory structure:
+  SENTINAL/                        ← root (parents[3] from app/main.py)
+    services/
+      detection-engine/
+        app/
+          main.py                  ← this file
+"""
+from pathlib import Path
+from dotenv import load_dotenv
+import os
+
+# Load root .env FIRST — before any other imports that may read env vars
+_env_path = Path(__file__).resolve().parents[3] / ".env"
+load_dotenv(dotenv_path=_env_path, override=False)
+# override=False: system/shell env vars take priority (important for cloud/docker)
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from app.schemas import AnalyzeRequest
@@ -10,8 +33,12 @@ import json
 import logging
 import time
 
-logging.basicConfig(level=logging.INFO)
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
+logging.basicConfig(level=getattr(logging, LOG_LEVEL, logging.INFO))
 logger = logging.getLogger("detection-engine")
+
+logger.info(f"[DETECTION-ENGINE] Loading env from: {_env_path}")
+logger.info(f"[DETECTION-ENGINE] .env found: {_env_path.exists()}")
 
 app = FastAPI(title="SENTINEL Detection Engine", version="1.0.0")
 
@@ -22,6 +49,7 @@ app.add_middleware(
     allow_headers=["*"]
 )
 
+
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
     start = time.time()
@@ -30,18 +58,21 @@ async def log_requests(request: Request, call_next):
     logger.info(f"{request.method} {request.url.path} - {response.status_code} - {duration}ms")
     return response
 
+
 @app.get("/health")
 def health():
     return {
         "status": "ok",
         "service": "detection-engine",
-        "version": "1.0.0"
+        "version": "1.0.0",
+        "port": int(os.getenv("DETECTION_PORT", "8002")),
+        "uptime": round(time.time())
     }
+
 
 @app.post("/analyze")
 def analyze(request: AnalyzeRequest):
     try:
-        # Build combined string
         parts = []
         if request.url:
             parts.append(request.url)
@@ -54,15 +85,12 @@ def analyze(request: AnalyzeRequest):
 
         combined = " ".join(parts)
 
-        # Layer 3 — Adversarial decoder + Layer 1 rules
         scan_result = decode_and_scan(combined, run_rules)
         rule_match = scan_result["match"]
         adversarial_decoded = scan_result["adversarial_decoded"]
 
-        # Layer 2 — Feature extraction (ready for ML model)
         features = extract_features(request.url or "")
 
-        # Layer 4 — Success determination
         response_code = request.queryParams.get("responseCode") if request.queryParams else None
         if isinstance(response_code, str):
             response_code = int(response_code) if response_code.isdigit() else None
@@ -74,7 +102,6 @@ def analyze(request: AnalyzeRequest):
         else:
             attack_status = "unknown"
 
-        # Layer 6 — Scoring
         request_data = {
             "method": request.method,
             "body": request.body

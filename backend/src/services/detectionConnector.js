@@ -2,8 +2,12 @@ const axios = require('axios');
 const { withRetry } = require('../utils/retry');
 const logger = require('../utils/logger');
 
-const DETECTION_ENGINE_URL = process.env.DETECTION_ENGINE_URL
-  || 'http://localhost:8002';
+// Supports both old DETECTION_ENGINE_URL and new centralized DETECTION_URL
+const DETECTION_ENGINE_URL =
+  process.env.DETECTION_URL ||
+  process.env.DETECTION_ENGINE_URL ||
+  'http://localhost:8002';
+
 const TIMEOUT_MS = 5000;
 
 let circuitOpen = false;

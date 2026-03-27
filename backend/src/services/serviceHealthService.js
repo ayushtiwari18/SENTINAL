@@ -2,26 +2,22 @@ const axios = require('axios');
 const ServiceStatus = require('../models/ServiceStatus');
 const logger = require('../utils/logger');
 
-// ── Service registry ─────────────────────────────────────────────────────────
-// Ports:
-//   gateway          → 3000  (this process)
-//   detection-engine → 8002  (Python FastAPI)
-//   pcap-processor   → 8003  (Python FastAPI)   ← was wrongly 8001
-//   armoriq-agent    → 8004  (Python FastAPI)   ← was conflicting with pcap on 8003
+// Service registry — reads from central .env
+// Each URL supports both the new centralized name and the old name for backward compatibility
 const SERVICES = [
   {
     name: 'detection-engine',
-    url:  process.env.DETECTION_ENGINE_URL  || 'http://localhost:8002',
+    url:  process.env.DETECTION_URL || process.env.DETECTION_ENGINE_URL || 'http://localhost:8002',
     healthPath: '/health',
   },
   {
     name: 'pcap-processor',
-    url:  process.env.PCAP_SERVICE_URL      || 'http://localhost:8003',
+    url:  process.env.PCAP_URL || process.env.PCAP_SERVICE_URL || 'http://localhost:8003',
     healthPath: '/health',
   },
   {
     name: 'armoriq-agent',
-    url:  process.env.ARMORIQ_URL           || 'http://localhost:8004',
+    url:  process.env.ARMORIQ_URL || 'http://localhost:8004',
     healthPath: '/health',
   },
 ];
@@ -57,7 +53,6 @@ const pingService = async (service) => {
 
 const checkAllServices = async () => {
   const results = await Promise.all(SERVICES.map(pingService));
-  // Prepend gateway itself (always online if this code is running)
   results.unshift({ service: 'gateway', status: 'online', responseTimeMs: 0 });
   return results;
 };

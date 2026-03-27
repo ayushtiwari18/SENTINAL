@@ -6,6 +6,7 @@ const { EVENTS }  = require('../sockets/broadcastService');
 const axios       = require('axios');
 const logger      = require('../utils/logger');
 
+// Supports both new centralized ARMORIQ_URL and old name (same key, kept for clarity)
 const ARMORIQ_URL = process.env.ARMORIQ_URL || 'http://localhost:8004';
 
 /**
@@ -35,7 +36,6 @@ const callArmorIQ = async (attack) => {
       `queued=${JSON.stringify(actionsQueued.map(a => a.action))}`
     );
 
-    // Persist each BLOCKED action into action_queue collection
     for (const item of actionsQueued) {
       const queued = await ActionQueue.create({
         attackId:      attack._id,
@@ -46,7 +46,6 @@ const callArmorIQ = async (attack) => {
         ip:            attack.ip
       });
 
-      // Emit Socket.io event so Dashboard ActionQueue updates live
       emitter.emit(EVENTS.ACTION_PENDING, {
         id:           queued._id,
         action:       queued.action,
@@ -60,7 +59,6 @@ const callArmorIQ = async (attack) => {
     }
 
   } catch (err) {
-    // ArmorIQ unreachable — log and continue. Never block detection pipeline.
     logger.warn(`[ARMORIQ] Unreachable or error: ${err.message}`);
   }
 };
@@ -80,7 +78,6 @@ const reportAttack = async (data) => {
     responseCode:         data.responseCode         || null
   });
 
-  // Emit real-time event immediately after save
   emitter.emit(EVENTS.ATTACK_NEW, {
     id:         attack._id,
     ip:         attack.ip,
@@ -92,7 +89,6 @@ const reportAttack = async (data) => {
     timestamp:  attack.createdAt
   });
 
-  // Auto-create Alert for high/critical
   if (['high', 'critical'].includes(data.severity)) {
     const alert = await Alert.create({
       attackId: attack._id,
@@ -112,9 +108,7 @@ const reportAttack = async (data) => {
     });
   }
 
-  // -----------------------------------------------------------------------
-  // ArmorIQ enforcement — fire-and-forget, NEVER blocks the pipeline above
-  // -----------------------------------------------------------------------
+  // Fire-and-forget — never blocks the detection pipeline
   callArmorIQ(attack);
 
   return attack;

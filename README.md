@@ -1,7 +1,7 @@
 # SENTINAL 🛡️
 
-> Real-time web application security monitoring platform.
-> One-line Express middleware → instant attack detection, forensics, and live dashboard.
+> Real-time web application security monitoring platform.  
+> Drop-in Express middleware → instant attack detection, forensics, and live dashboard.
 
 [![Node.js](https://img.shields.io/badge/Node.js-Express-green)](https://nodejs.org)
 [![Python](https://img.shields.io/badge/Python-FastAPI-blue)](https://fastapi.tiangolo.com)
@@ -12,69 +12,129 @@
 
 ## Overview
 
-SENTINAL is a microservices-based security layer that wraps any Express.js application. It captures HTTP metadata, runs it through a multi-layer detection engine (rules + ML), surfaces threats in a live React dashboard, and can trigger autonomous remediation via the ArmorIQ agent.
+SENTINAL is a microservices-based security layer that wraps any Express.js application. It captures HTTP metadata, runs it through a multi-layer detection engine (rule-based + adversarial decoder), surfaces threats in a live React dashboard, and triggers autonomous remediation via the ArmorIQ agent.
 
 ---
 
 ## Architecture
 
 ```
-Developer App  ──►  services/middleware  (npm package / one-liner)
-                          │
-                          ▼
-         Service 1 — Gateway API          Node.js + Express + Socket.io  :3000
-                          │
-              ┌───────────┴──────────────┐
-              ▼                          ▼
- Service 3 — Detection Engine       Service 2 — PCAP Processor
-   Python + FastAPI  :8002            Python + Scapy  :8001
-              │
-              ▼
-  Service 6 — Data Layer (MongoDB Atlas)
-              │
-    ┌─────────┴───────────┐
-    ▼                     ▼
- Service 4 — Dashboard   Service 5 — ArmorIQ Agent
- React + Vite  :5173      Python + LangChain  :8003
+User Traffic
+    │
+    ▼
+┌─────────────────────────────────────────────────────────┐
+│  Gateway API          Node.js + Express + Socket.io      │  :3000
+│  backend/server.js                                       │
+└──────────────┬───────────────────┬──────────────────────┘
+               │                   │
+               ▼                   ▼
+  ┌────────────────────┐  ┌──────────────────────┐
+  │  Detection Engine  │  │   PCAP Processor     │
+  │  Python + FastAPI  │  │  Python + Scapy      │  :8003
+  │  :8002             │  └──────────────────────┘
+  └────────────────────┘
+               │
+               ▼
+  ┌────────────────────┐    ┌──────────────────────┐
+  │  MongoDB Atlas     │    │  ArmorIQ Agent       │
+  │  (Data Layer)      │    │  Python + FastAPI    │  :8004
+  └────────────────────┘    └──────────────────────┘
+               │
+               ▼
+  ┌────────────────────┐
+  │  Dashboard         │
+  │  React + Vite      │  :5173
+  └────────────────────┘
 ```
+
+### Service Port Map
+
+| Service | Tech | Port |
+|---|---|---|
+| Gateway API | Node.js + Express + Socket.io | **3000** |
+| Detection Engine | Python + FastAPI | **8002** |
+| PCAP Processor | Python + FastAPI + Scapy | **8003** |
+| ArmorIQ Agent | Python + FastAPI | **8004** |
+| React Dashboard | React + Vite | **5173** |
+| Database | MongoDB Atlas | — |
+
+---
+
+## Prerequisites
+
+- **Node.js** ≥ 18 — [nodejs.org](https://nodejs.org)
+- **Python** ≥ 3.10 — [python.org](https://python.org)
+- **PM2** — `npm install -g pm2`
+- **MongoDB Atlas** free cluster — [mongodb.com/atlas](https://www.mongodb.com/cloud/atlas/register)
+- **Google Gemini API Key** *(optional — for ArmorIQ AI decisions)* — [aistudio.google.com](https://aistudio.google.com/app/apikey)
 
 ---
 
 ## Quick Start
 
-### Prerequisites
-- Node.js ≥ 18
-- Python ≥ 3.10
-- MongoDB Atlas cluster (or local instance)
-
-### 1. Gateway / Backend
+### 1. Clone the repository
 
 ```bash
-cd backend
+git clone https://github.com/ayushtiwari18/SENTINAL.git
+cd SENTINAL
+```
+
+### 2. Create your `.env` file
+
+All 4 services read from **one single `.env` file at the project root**.
+
+```bash
 cp .env.example .env
-# Set MONGO_URI=mongodb+srv://.../<dbname>  (DB name must be: sentinal)
-npm install
-npm run dev
-# Starts on http://localhost:3000
 ```
 
-### 2. Seed Demo Data
+Then open `.env` and fill in your values. The only fields you **must** change:
 
 ```bash
-# From repo root
-node backend/scripts/seed.js
-# Creates: 80 system logs, 50 attack events, proportional alerts
+# Required — system will not start without these
+MONGO_URI=mongodb+srv://youruser:yourpassword@cluster0.xxxxx.mongodb.net/sentinel
+JWT_SECRET=generate_a_long_random_string_here
+
+# Optional but recommended for AI features
+GEMINI_API_KEY=your_gemini_api_key_here
 ```
 
-### 3. Detection Engine
+> **Generate a secure JWT secret:**
+> ```bash
+> node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+> ```
+
+### 3. Validate your environment
+
+Before starting anything, check that all required variables are set:
 
 ```bash
-cd services/detection-engine
-pip install -r requirements.txt
-uvicorn main:app --port 8002 --reload
+chmod +x scripts/validate-env.sh
+./scripts/validate-env.sh --env-only
 ```
 
-### 4. Dashboard
+You should see:
+```
+  ✓  MONGO_URI  =  mongodb+srv://user:****@cluster...
+  ✓  JWT_SECRET length is 64 chars (good)
+  ...
+  ALL CHECKS PASSED — safe to deploy.
+```
+
+### 4. Start all services with one command
+
+```bash
+chmod +x start.sh stop.sh status.sh
+./start.sh
+```
+
+This will:
+1. Check `node`, `python3`, `pm2` are installed
+2. Verify `.env` exists
+3. Install Node dependencies if needed
+4. Start all 4 services via PM2
+5. Auto-run health checks after 6 seconds
+
+### 5. Start the Dashboard
 
 ```bash
 cd dashboard
@@ -83,20 +143,110 @@ npm run dev
 # Open http://localhost:5173
 ```
 
-### 5. ArmorIQ Agent *(optional)*
+---
+
+## Service Management
+
+### Start / Stop / Status
 
 ```bash
-cd services/armoriq-agent
-pip install -r requirements.txt
-uvicorn main:app --port 8003 --reload
+./start.sh          # start all services (production)
+./start.sh --dev    # start all services (development mode)
+./stop.sh           # stop all (keep in PM2 list)
+./stop.sh --delete  # stop + remove from PM2
+./status.sh         # check all health endpoints
 ```
 
-### 6. PCAP Processor *(optional)*
+### PM2 Commands
 
+```bash
+pm2 list                          # show all processes
+pm2 logs                          # tail all logs live
+pm2 logs sentinal-gateway         # tail one service
+pm2 monit                         # live CPU + memory dashboard
+pm2 restart ecosystem.config.js   # restart all
+pm2 reload ecosystem.config.js    # zero-downtime reload
+pm2 save                          # save process list
+pm2 startup                       # auto-start on server reboot
+```
+
+### Auto-start on Server Reboot
+
+```bash
+pm2 save
+pm2 startup    # follow the printed command (requires sudo)
+```
+
+---
+
+## Manual Setup (without PM2)
+
+If you prefer to run services manually in separate terminals:
+
+**Terminal 1 — Gateway**
+```bash
+cd backend
+npm install
+node server.js
+```
+
+**Terminal 2 — Detection Engine**
+```bash
+cd services/detection-engine
+pip install -r requirements.txt
+uvicorn app.main:app --host 0.0.0.0 --port 8002
+```
+
+**Terminal 3 — PCAP Processor**
 ```bash
 cd services/pcap-processor
 pip install -r requirements.txt
-uvicorn main:app --port 8001 --reload
+uvicorn main:app --host 0.0.0.0 --port 8003
+```
+
+**Terminal 4 — ArmorIQ Agent**
+```bash
+cd services/armoriq-agent
+pip install -r requirements.txt
+uvicorn main:app --host 0.0.0.0 --port 8004
+```
+
+> Each Python service auto-reads the root `.env` file via `python-dotenv`.
+
+---
+
+## Health Checks
+
+Every service exposes a `/health` endpoint. Check them after starting:
+
+```bash
+./status.sh
+
+# Or manually:
+curl http://localhost:3000/health    # Gateway
+curl http://localhost:8002/health    # Detection Engine
+curl http://localhost:8003/health    # PCAP Processor
+curl http://localhost:8004/health    # ArmorIQ Agent
+```
+
+All return the same standard shape:
+```json
+{
+  "status":  "ok",
+  "service": "gateway",
+  "uptime":  143
+}
+```
+
+> The full `/api/health` endpoint on the gateway also includes DB status, memory usage, and service URLs.
+
+---
+
+## Seed Demo Data
+
+```bash
+node backend/scripts/seed.js
+# Creates: 80 system logs, 50 attack events, proportional alerts
 ```
 
 ---
@@ -105,47 +255,50 @@ uvicorn main:app --port 8001 --reload
 
 ```
 SENTINAL/
-├── backend/                        # Service 1 — Gateway API (Node.js)
-│   ├── server.js
-│   ├── .env.example
-│   ├── package.json
-│   ├── doc/                        # API & architecture docs
-│   ├── scripts/
-│   │   └── seed.js
-│   └── src/
-│       ├── config/                 # DB & env config
-│       ├── controllers/            # Route handlers
-│       ├── middleware/             # Express middleware
-│       ├── models/                 # Mongoose schemas
-│       ├── routes/                 # API route definitions
-│       ├── services/               # Business logic
-│       ├── sockets/                # Socket.io event handlers
-│       ├── tests/                  # Unit & integration tests
-│       ├── utils/                  # Shared helpers
-│       └── validators/             # Request validation
+├── .env.example                    ← copy to .env and fill in values
+├── .env                            ← YOUR secrets (never commit)
+├── ecosystem.config.js             ← PM2 process config (all 4 services)
+├── start.sh                        ← start all services
+├── stop.sh                         ← stop all services
+├── status.sh                       ← check all health endpoints
 │
-├── dashboard/                      # Service 4 — React Dashboard
+├── config/
+│   └── envValidator.js             ← startup env guard (exits if vars missing)
+│
+├── backend/                        ← Gateway API (Node.js)
+│   ├── server.js
 │   ├── package.json
 │   └── src/
-│       ├── App.jsx
-│       ├── main.jsx
-│       ├── components/             # Reusable UI components
-│       ├── hooks/                  # Custom React hooks
-│       ├── pages/                  # Page-level views
-│       ├── services/               # API & Socket.io clients
-│       ├── styles/                 # Global CSS / themes
-│       └── utils/                  # Frontend helpers
+│       ├── config/                 ← DB connection
+│       ├── controllers/            ← Route handlers
+│       ├── middleware/             ← Rate limiter, auth
+│       ├── models/                 ← Mongoose schemas
+│       ├── routes/                 ← API route definitions
+│       ├── services/               ← Business logic, service connectors
+│       ├── sockets/                ← Socket.io event handlers
+│       ├── tests/                  ← Unit & integration tests
+│       └── utils/                  ← Logger, helpers
 │
 ├── services/
-│   ├── detection-engine/           # Service 3 — Python/FastAPI ML engine
-│   ├── armoriq-agent/              # Service 5 — LangChain remediation agent
-│   ├── pcap-processor/             # Service 2 — Scapy PCAP forensics
-│   └── middleware/                 # Express middleware package source
+│   ├── detection-engine/           ← Python FastAPI — rule-based + adversarial detection
+│   ├── armoriq-agent/              ← Python FastAPI — OpenClaw policy enforcement
+│   ├── pcap-processor/             ← Python FastAPI + Scapy — PCAP forensics
+│   └── middleware/                 ← Express middleware package source
 │
-├── demo-target/                    # Sample vulnerable app for demos
-├── scripts/                        # Repo-level helper scripts
-├── MASTER_REFERENCE.md             # Full architecture & design reference
-└── .gitignore
+├── dashboard/                      ← React + Vite frontend
+│   └── src/
+│       ├── components/
+│       ├── pages/
+│       ├── hooks/
+│       └── services/               ← API + Socket.io clients
+│
+├── scripts/
+│   ├── validate-env.sh             ← pre-deploy env + health validator
+│   ├── simulate_attack.sh          ← attack simulation (demo)
+│   └── simulate_attack.py
+│
+├── demo-target/                    ← Sample vulnerable app for demos
+└── logs/                           ← PM2 log output (git-ignored)
 ```
 
 ---
@@ -153,7 +306,9 @@ SENTINAL/
 ## API Reference (Gateway — port 3000)
 
 | Method | Endpoint | Description |
-|--------|----------|-------------|
+|---|---|---|
+| GET | `/health` | Liveness probe (no DB required — for AWS ALB) |
+| GET | `/api/health` | Full health: DB status + memory + service URLs |
 | POST | `/api/logs/ingest` | Ingest HTTP request metadata |
 | GET | `/api/logs/recent` | Last 20 system logs |
 | GET | `/api/attacks/recent` | Last 20 attack events |
@@ -162,14 +317,14 @@ SENTINAL/
 | GET | `/api/service-status` | Health of all microservices |
 | GET | `/api/alerts` | Alert feed |
 | PATCH | `/api/alerts/:id/read` | Mark an alert as read |
-| GET | `/api/health` | Basic uptime check |
+| POST | `/api/pcap/upload` | Upload `.pcap` / `.pcapng` for analysis |
+| GET | `/api/audit` | Audit log of ArmorIQ decisions |
+| GET | `/api/actions` | ArmorIQ action queue |
 
-### Socket.io Events (same port 3000)
-
-All events carry: `{ event: string, timestamp: string, data: {...} }`
+### Socket.io Events (port 3000)
 
 | Event | Trigger |
-|-------|---------|
+|---|---|
 | `attack:new` | New attack detected |
 | `alert:new` | New high/critical alert created |
 | `service:status` | Microservice health change |
@@ -180,45 +335,74 @@ All events carry: `{ event: string, timestamp: string, data: {...} }`
 ## Data Models
 
 ### AttackEvent
+
 | Field | Values |
-|-------|--------|
-| `attackType` | `sqli` \| `xss` \| `traversal` \| `command_injection` \| `ssrf` \| `lfi_rfi` \| `brute_force` \| `hpp` \| `xxe` \| `webshell` \| `unknown` |
+|---|---|
+| `attackType` | `sqli` \| `xss` \| `traversal` \| `command_injection` \| `ssrf` \| `lfi_rfi` \| `brute_force` \| `hpp` \| `xxe` \| `webshell` \| `recon` \| `ddos` \| `unknown` |
 | `severity` | `low` \| `medium` \| `high` \| `critical` |
 | `status` | `attempt` \| `successful` \| `blocked` |
 | `detectedBy` | `rule` \| `ml` \| `both` |
 | `confidence` | `0.0 – 1.0` |
 
 ### Alert
+
 | Field | Values |
-|-------|--------|
+|---|---|
 | `type` | `attack_detected` \| `service_down` \| `rate_limit` \| `anomaly` |
 | `severity` | `low` \| `medium` \| `high` \| `critical` |
 
-Alerts are auto-created for every `high` or `critical` attack event.
+---
+
+## Environment Variables Reference
+
+See [`.env.example`](.env.example) for the full annotated list.
+
+| Variable | Required | Description |
+|---|---|---|
+| `MONGO_URI` | ✅ | MongoDB Atlas connection string |
+| `GATEWAY_PORT` | ✅ | Express Gateway port (default: 3000) |
+| `DETECTION_PORT` | ✅ | Detection Engine port (default: 8002) |
+| `PCAP_PORT` | ✅ | PCAP Processor port (default: 8003) |
+| `ARMORIQ_PORT` | ✅ | ArmorIQ Agent port (default: 8004) |
+| `JWT_SECRET` | ✅ | JWT signing secret (min 32 chars) |
+| `DETECTION_URL` | ✅ | Internal URL of Detection Engine |
+| `PCAP_URL` | ✅ | Internal URL of PCAP Processor |
+| `ARMORIQ_URL` | ✅ | Internal URL of ArmorIQ Agent |
+| `GATEWAY_URL` | ✅ | Gateway URL (used by ArmorIQ to call back) |
+| `GEMINI_API_KEY` | ⚠️ | Google Gemini key for ArmorIQ AI decisions |
+| `NODE_ENV` | ⚠️ | `development` \| `production` \| `test` |
+| `LOG_LEVEL` | ⚠️ | `error` \| `warn` \| `info` \| `debug` |
+
+> **The system will refuse to start** if any ✅ variable is missing, printing a clear error message with the exact fix. See [`config/envValidator.js`](config/envValidator.js).
 
 ---
 
-## Service Status
+## Troubleshooting
 
-| Service | Tech | Port | Status |
-|---------|------|------|--------|
-| Gateway API | Node.js + Express + Socket.io | 3000 | ✅ Live |
-| PCAP Processor | Python + Scapy | 8001 | 🚧 In Progress |
-| Detection Engine | Python + FastAPI | 8002 | ✅ Live |
-| ArmorIQ Agent | Python + LangChain | 8003 | 🚧 In Progress |
-| React Dashboard | React + Vite | 5173 | ✅ Live |
-| Data Layer | MongoDB Atlas | — | ✅ Live |
+**Gateway won't start — "Missing Environment Variables"**
+```bash
+./scripts/validate-env.sh --env-only
+# Shows exactly which variables are missing
+```
 
----
+**Services start but detection isn't working**
+```bash
+./status.sh
+# Check which service is returning non-200
+pm2 logs sentinal-detection   # see Python error
+```
 
-## Roadmap
+**Port already in use**
+```bash
+lsof -i :8002        # find what's using the port
+# Change DETECTION_PORT in .env, then ./stop.sh && ./start.sh
+```
 
-- [ ] ArmorIQ Agent: action queue, human-in-the-loop approval flow
-- [ ] PCAP Processor: full Scapy pipeline integration
-- [ ] Detection Engine: fix `status` field (currently hardcoded `unknown`, should derive from `responseCode`)
-- [ ] IP Intelligence: integrate AbuseIPDB + IPInfo into forensics controller
-- [ ] MongoDB collections: `action_queue`, `audit_log`, `ip_intelligence`
-- [ ] npm publish `services/middleware` as a standalone package
+**PM2 processes keep restarting**
+```bash
+pm2 logs             # see crash reason
+pm2 monit            # live monitor
+```
 
 ---
 
@@ -227,7 +411,8 @@ Alerts are auto-created for every `high` or `critical` attack event.
 1. Fork the repo
 2. Create a feature branch: `git checkout -b feat/your-feature`
 3. Commit your changes: `git commit -m 'feat: add your feature'`
-4. Push and open a Pull Request
+4. Validate before pushing: `./scripts/validate-env.sh --env-only`
+5. Push and open a Pull Request
 
 ---
 

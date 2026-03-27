@@ -10,15 +10,15 @@ const AttackEvent = require('../models/AttackEvent');
 const emitter     = require('../utils/eventEmitter');
 const logger      = require('../utils/logger');
 
-// ── Service URL ──────────────────────────────────────────────────────────────
-// PCAP Processor runs on port 8003 by default (see services/pcap-processor/.env)
-const PCAP_SERVICE_URL = process.env.PCAP_SERVICE_URL || 'http://localhost:8003';
+// ── Service URL ────────────────────────────────────────────────────────
+// Supports both new centralized PCAP_URL and old PCAP_SERVICE_URL (backward compat)
+const PCAP_SERVICE_URL =
+  process.env.PCAP_URL ||
+  process.env.PCAP_SERVICE_URL ||
+  'http://localhost:8003';
 
-// ── Attack type normaliser ───────────────────────────────────────────────────
-// Maps human-readable labels (from Detection Engine) + new local detector keys
-// to the AttackEvent model enum values.
+// ── Attack type normaliser ──────────────────────────────────────────────
 const ATTACK_TYPE_MAP = {
-  // Detection Engine labels
   'SQL Injection':            'sqli',
   'XSS':                      'xss',
   'Path Traversal':           'traversal',
@@ -30,9 +30,7 @@ const ATTACK_TYPE_MAP = {
   'XXE':                      'xxe',
   'Webshell':                 'webshell',
   'Typosquatting':            'unknown',
-  // Local rule-based detector keys (attack_type field in local_attacks[])
   'SQL_INJECTION':            'sqli',
-  'XSS':                      'xss',
   'PORT_SCAN':                'recon',
   'SYN_FLOOD':                'ddos',
   'DDOS':                     'ddos',
@@ -41,19 +39,16 @@ const ATTACK_TYPE_MAP = {
   'BRUTE_FORCE':              'brute_force',
 };
 
-// ── Severity normaliser ──────────────────────────────────────────────────────
-// Local detector uses CRITICAL/HIGH/MEDIUM/LOW; model uses lowercase.
 const normaliseSeverity = (s) => {
   if (!s) return 'medium';
   const map = { CRITICAL: 'critical', HIGH: 'high', MEDIUM: 'medium', LOW: 'low' };
   return map[s.toUpperCase()] || s.toLowerCase();
 };
 
-// ── Multer ───────────────────────────────────────────────────────────────────
-// Accept .pcap and .pcapng; save to /tmp/sentinal-uploads
+// ── Multer ───────────────────────────────────────────────────────────────────────────
 const upload = multer({
   dest: path.join('/tmp', 'sentinal-uploads'),
-  limits: { fileSize: 500 * 1024 * 1024 }, // 500 MB  (matches MAX_PCAP_SIZE_MB in processor)
+  limits: { fileSize: parseInt(process.env.MAX_PCAP_SIZE_MB || '500') * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
     const ok = file.originalname.endsWith('.pcap')
              || file.originalname.endsWith('.pcapng')
@@ -65,18 +60,6 @@ const upload = multer({
 /**
  * POST /api/pcap/upload
  * Body: multipart/form-data  field: "pcap"  (the capture file)
- *
- * Flow:
- *   1. multer saves file to /tmp/sentinal-uploads/<uuid>
- *   2. POST filepath to PCAP Processor → ProcessResponse v2 schema:
- *        { filepath, total_packets, parsed_packets, total_flows,
- *          http_requests_sent, local_attacks[], engine_attacks[],
- *          skipped_engine, processing_time_s }
- *   3. Merge local_attacks + engine_attacks into one canonical list
- *   4. Persist SystemLog + AttackEvent per confirmed attack
- *   5. Emit attack:new per confirmed attack (dashboard live feed)
- *   6. Delete tmp file
- *   7. Return summary
  */
 router.post('/upload', upload.single('pcap'), async (req, res) => {
   if (!req.file) {
@@ -89,13 +72,12 @@ router.post('/upload', upload.single('pcap'), async (req, res) => {
   const tmpPath = req.file.path;
 
   try {
-    // ── Step 2: call PCAP Processor ──────────────────────────────────────────
-    logger.info(`[PCAP] Sending to processor: ${tmpPath}`);
+    logger.info(`[PCAP] Sending to processor at ${PCAP_SERVICE_URL}: ${tmpPath}`);
 
     const pcapResp = await axios.post(
       `${PCAP_SERVICE_URL}/process`,
       { filepath: tmpPath, projectId: req.body.projectId || 'pcap-upload' },
-      { timeout: 300_000 },   // 5 min — allow large files
+      { timeout: 300_000 },
     );
 
     const {
@@ -114,14 +96,8 @@ router.post('/upload', upload.single('pcap'), async (req, res) => {
       `time=${processing_time_s}s`
     );
 
-    // ── Step 3: normalise into one list ─────────────────────────────────────
-    //
-    // local_attacks  → { attack_type, severity, src_ip, dst_ip, description, evidence }
-    // engine_attacks → { threat_detected, threat_type, severity, confidence,
-    //                    explanation, ip, url, ... }
     const allAttacks = [];
 
-    // Local rule-based detections
     for (const a of local_attacks) {
       allAttacks.push({
         source:      'local',
@@ -138,7 +114,6 @@ router.post('/upload', upload.single('pcap'), async (req, res) => {
       });
     }
 
-    // Detection Engine results (HTTP-layer attacks)
     for (const a of engine_attacks) {
       if (!a.threat_detected) continue;
       allAttacks.push({
@@ -156,7 +131,6 @@ router.post('/upload', upload.single('pcap'), async (req, res) => {
       });
     }
 
-    // ── Step 4 + 5: persist & emit ───────────────────────────────────────────
     const savedAttacks = [];
     const projectId = req.body.projectId || 'pcap-upload';
 
@@ -184,7 +158,7 @@ router.post('/upload', upload.single('pcap'), async (req, res) => {
           attackType:   a.attackType,
           severity:     a.severity,
           status,
-          detectedBy:   a.source === 'engine' ? 'rule' : 'rule',
+          detectedBy:   'rule',
           confidence:   a.confidence,
           payload:      a.url || a.description || '',
           explanation:  a.explanation || a.description || '',
@@ -235,7 +209,6 @@ router.post('/upload', upload.single('pcap'), async (req, res) => {
     });
 
   } finally {
-    // Always clean up tmp file
     fs.unlink(tmpPath, () => {});
   }
 });

@@ -2,7 +2,7 @@
 	"info": {
 		"_postman_id": "39541497-7df66b3d-6d86-494c-9ba7-b3b943d50de3",
 		"name": "SENTINAL — Complete API + Attack Test Collection",
-		"description": "Production-verified Postman collection for all SENTINAL services.\n\nServices covered:\n- Gateway API (:3000)\n- Detection Engine (:8002)\n- PCAP Processor (:8003)\n- ArmorIQ Agent (:8004)\n\nIncludes: health checks, normal flows, and controlled attack simulations for each service.\n\nBase URL variable: {{base}} = http://98.82.8.144:3000\nSet in Postman Environment.",
+		"description": "Production-verified Postman collection for all SENTINAL services.\n\nServices covered:\n\n- Gateway API (:3000)\n    \n- Detection Engine (:8002)\n    \n- PCAP Processor (:8003)\n    \n- ArmorIQ Agent (:8004)\n    \n\nIncludes: health checks, normal flows, and controlled attack simulations for each service.\n\nBase URL variable: {{base}} = [http://98.82.8.144:3000](http://98.82.8.144:3000)  \nSet in Postman Environment.",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
 	},
 	"item": [

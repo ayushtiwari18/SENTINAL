@@ -15,11 +15,14 @@ Directory structure:
 from pathlib import Path
 from dotenv import load_dotenv
 import os
+import time
 
-# Load root .env FIRST — before any other imports that may read env vars
+# Load root .env FIRST — before any other imports
 _env_path = Path(__file__).resolve().parents[3] / ".env"
 load_dotenv(dotenv_path=_env_path, override=False)
-# override=False: system/shell env vars take priority (important for cloud/docker)
+
+# Capture start time immediately after env load
+_start_time = time.time()
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -31,7 +34,6 @@ from app.decoder import decode_and_scan
 from app.features import extract_features
 import json
 import logging
-import time
 
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
 logging.basicConfig(level=getattr(logging, LOG_LEVEL, logging.INFO))
@@ -39,8 +41,9 @@ logger = logging.getLogger("detection-engine")
 
 logger.info(f"[DETECTION-ENGINE] Loading env from: {_env_path}")
 logger.info(f"[DETECTION-ENGINE] .env found: {_env_path.exists()}")
+logger.info(f"[DETECTION-ENGINE] Port: {os.getenv('DETECTION_PORT', '8002')}")
 
-app = FastAPI(title="SENTINEL Detection Engine", version="1.0.0")
+app = FastAPI(title="SENTINAL Detection Engine", version="1.0.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -61,12 +64,15 @@ async def log_requests(request: Request, call_next):
 
 @app.get("/health")
 def health():
+    """Standard SENTINAL health probe. Used by Gateway serviceHealthService."""
     return {
-        "status": "ok",
-        "service": "detection-engine",
-        "version": "1.0.0",
-        "port": int(os.getenv("DETECTION_PORT", "8002")),
-        "uptime": round(time.time())
+        "status":      "ok",
+        "service":     "detection-engine",
+        "version":     "1.0.0",
+        "uptime":      int(time.time() - _start_time),   # seconds since process start
+        "port":        int(os.getenv("DETECTION_PORT", "8002")),
+        "environment": os.getenv("NODE_ENV", os.getenv("ENVIRONMENT", "development")),
+        "timestamp":   time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     }
 
 
@@ -102,10 +108,7 @@ def analyze(request: AnalyzeRequest):
         else:
             attack_status = "unknown"
 
-        request_data = {
-            "method": request.method,
-            "body": request.body
-        }
+        request_data = {"method": request.method, "body": request.body}
         score = score_request(request_data, rule_match)
 
         if rule_match:

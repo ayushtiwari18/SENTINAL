@@ -4,18 +4,23 @@ main.py — FastAPI entry point for SENTINAL PCAP Processor Service.
 Endpoints:
   GET  /health          — liveness probe
   POST /process         — process a PCAP file and return detection results
-  GET  /stats/{file}    — return processing statistics for a given file path
 
 Architecture (request flow):
   POST /process
       └─► pcap_loader.load_pcap()          # load & validate file
       └─► packet_parser.parse_packets()    # parse all packets
-      └─► flow_builder.build_flows()       # group into flows (+ src/dst aggregates)
+      └─► flow_builder.build_flows()       # group into flows
       └─► attack_detector.run_detections() # local rule-based detection
-      └─► attack_detector.extract_http_for_engine()  # HTTP reqs for remote engine
+      └─► attack_detector.extract_http_for_engine()
       └─► _forward_to_engine()             # async batch forward to Detection Engine
       └─► return ProcessResponse
 """
+# config.py handles load_dotenv from root .env — must be imported first
+from config import (
+    ANALYZE_ENDPOINT, BATCH_SIZE, HTTP_TIMEOUT,
+    SERVICE_HOST, SERVICE_PORT, LOG_LEVEL
+)
+
 import asyncio
 import os
 import time
@@ -25,12 +30,14 @@ import httpx
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
-from config import ANALYZE_ENDPOINT, BATCH_SIZE, HTTP_TIMEOUT
 from pcap_loader import load_pcap
 from packet_parser import parse_packets
 from flow_builder import build_flows
 from attack_detector import run_detections, extract_http_for_engine
 from logger import get_logger
+
+# Capture start time after config is loaded
+_start_time = time.time()
 
 log = get_logger(__name__)
 
@@ -41,7 +48,7 @@ app = FastAPI(
 )
 
 
-# ── Request / Response schemas ─────────────────────────────────────────────────
+# ── Request / Response schemas ────────────────────────────────────────────────────────
 
 class ProcessRequest(BaseModel):
     filepath:  str
@@ -69,11 +76,21 @@ class ProcessResponse(BaseModel):
     processing_time_s:  float
 
 
-# ── Routes ─────────────────────────────────────────────────────────────────────
+# ── Routes ─────────────────────────────────────────────────────────────────────────────
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "service": "pcap-processor", "version": "2.0.0"}
+    """Standard SENTINAL health probe. Used by Gateway serviceHealthService."""
+    return {
+        "status":      "ok",
+        "service":     "pcap-processor",
+        "version":     "2.0.0",
+        "uptime":      int(time.time() - _start_time),   # seconds since process start
+        "port":        SERVICE_PORT,
+        "environment": os.getenv("NODE_ENV", os.getenv("ENVIRONMENT", "development")),
+        "timestamp":   time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "detection_engine": ANALYZE_ENDPOINT
+    }
 
 
 @app.post("/process", response_model=ProcessResponse)
@@ -81,7 +98,6 @@ async def process_pcap(req: ProcessRequest):
     t_start = time.perf_counter()
     log.info("=== /process request: filepath=%s projectId=%s ===", req.filepath, req.projectId)
 
-    # 1. Load
     try:
         packets = load_pcap(req.filepath)
     except ValueError as e:
@@ -90,8 +106,6 @@ async def process_pcap(req: ProcessRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
     total_packets = len(packets)
-
-    # 2. Parse
     parsed = parse_packets(packets)
 
     if not parsed:
@@ -107,17 +121,13 @@ async def process_pcap(req: ProcessRequest):
             processing_time_s=round(time.perf_counter() - t_start, 3),
         )
 
-    # 3. Build flows
     flows, src_view, dst_view = build_flows(parsed)
-
-    # 4. Local rule-based detection
     local_detections = run_detections(flows, src_view, dst_view)
     local_attacks    = [AttackEvent(**d.to_dict()) for d in local_detections]
 
-    # 5. Forward HTTP requests to Detection Engine
-    http_requests   = extract_http_for_engine(flows, req.projectId)
-    engine_attacks  = []
-    skipped_engine  = 0
+    http_requests  = extract_http_for_engine(flows, req.projectId)
+    engine_attacks = []
+    skipped_engine = 0
 
     if http_requests:
         engine_attacks, skipped_engine = await _forward_to_engine(http_requests)
@@ -142,10 +152,9 @@ async def process_pcap(req: ProcessRequest):
     )
 
 
-# ── Internal helpers ───────────────────────────────────────────────────────────
+# ── Internal helpers ───────────────────────────────────────────────────────────────────
 
 async def _forward_to_engine(http_requests: list) -> tuple[list, int]:
-    """Batch-forward HTTP requests to Detection Engine and collect attack results."""
     attacks = []
     skipped = 0
 
@@ -179,8 +188,7 @@ async def _call_engine(client: httpx.AsyncClient, req: dict) -> Optional[dict]:
     return None
 
 
-# ── Dev runner ─────────────────────────────────────────────────────────────────
+# ── Dev runner ───────────────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     import uvicorn
-    from config import SERVICE_HOST, SERVICE_PORT
     uvicorn.run("main:app", host=SERVICE_HOST, port=SERVICE_PORT, reload=False)

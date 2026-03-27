@@ -10,24 +10,18 @@ Directory structure:
     services/
       armoriq-agent/
         main.py                    ← this file
-
-Responsibilities:
-  1. Receive attack context from Gateway (POST /respond)
-  2. Build structured intents via intent_builder
-  3. Evaluate each intent via OpenClaw runtime
-     Fallback: policy_engine.py if OpenClaw is unavailable
-  4. Execute ALLOWED actions via executor
-  5. Return BLOCKED actions as actionsQueued for human review
-  6. Log every decision to audit_log via audit_logger
 """
 from pathlib import Path
 from dotenv import load_dotenv
 import os
+import time
 
 # Load root .env FIRST — before any other imports
 _env_path = Path(__file__).resolve().parents[2] / ".env"
 load_dotenv(dotenv_path=_env_path, override=False)
-# override=False: system env vars (e.g. AWS, Docker) take priority over .env
+
+# Capture start time immediately after env load
+_start_time = time.time()
 
 import logging
 from fastapi import FastAPI, Request
@@ -49,12 +43,12 @@ logger = logging.getLogger("armoriq")
 
 logger.info(f"[ARMORIQ] Loading env from: {_env_path}")
 logger.info(f"[ARMORIQ] .env found: {_env_path.exists()}")
-logger.info(f"[ARMORIQ] GATEWAY_URL: {os.getenv('GATEWAY_URL', 'http://localhost:3000')}")
+logger.info(f"[ARMORIQ] GATEWAY_URL:  {os.getenv('GATEWAY_URL', 'http://localhost:3000')}")
 logger.info(f"[ARMORIQ] ARMORIQ_PORT: {os.getenv('ARMORIQ_PORT', '8004')}")
 
 app = FastAPI(
     title="ArmorIQ Agent",
-    description="Intent-boundary enforcement for SENTINEL. OpenClaw-powered policy runtime.",
+    description="Intent-boundary enforcement for SENTINAL. OpenClaw-powered policy runtime.",
     version="2.0.0"
 )
 
@@ -69,32 +63,31 @@ app.add_middleware(
 def _evaluate_with_fallback(intent):
     """
     Evaluate intent via OpenClaw runtime.
-    Falls back to policy_engine.evaluate() if OpenClaw is unavailable or crashes.
+    Falls back to policy_engine.evaluate() if OpenClaw is unavailable.
     NEVER raises — always returns a DecisionModel.
     """
     try:
         return openclaw_runtime.evaluate(intent)
     except Exception as exc:
-        logger.error(
-            f"[OPENCLAW] Runtime error: {exc} — falling back to policy_engine (RULE-based)"
-        )
+        logger.error(f"[OPENCLAW] Runtime error: {exc} — falling back to policy_engine")
         return _fallback_evaluate(intent)
 
 
 @app.get("/health")
 def health():
-    import time
+    """Standard SENTINAL health probe. Used by Gateway serviceHealthService."""
     openclaw_ok = openclaw_runtime.is_loaded()
     return {
-        "status": "ok",
-        "service": "armoriq-agent",
-        "version": "2.0.0",
-        "uptime": round(time.time()),
-        "port": int(os.getenv("ARMORIQ_PORT", "8004")),
+        "status":      "ok",
+        "service":     "armoriq-agent",
+        "version":     "2.0.0",
+        "uptime":      int(time.time() - _start_time),   # seconds since process start
+        "port":        int(os.getenv("ARMORIQ_PORT", "8004")),
+        "environment": os.getenv("NODE_ENV", os.getenv("ENVIRONMENT", "development")),
+        "timestamp":   time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "enforcement": "ArmorClaw-v1" if openclaw_ok else "ArmorIQ-Policy-v1 (fallback)",
         "openclaw_loaded": openclaw_ok,
-        "policy_source": "policy.yaml" if openclaw_ok else "policy_engine.py (fallback)",
-        "gateway_url": os.getenv("GATEWAY_URL", "http://localhost:3000"),
+        "gateway_url": os.getenv("GATEWAY_URL", "http://localhost:3000")
     }
 
 
@@ -126,7 +119,7 @@ async def respond(body: RespondRequest):
     audit_count      = 0
 
     for intent in intents:
-        action = intent.proposed_action.action
+        action   = intent.proposed_action.action
         decision = _evaluate_with_fallback(intent)
 
         logger.info(

@@ -8,7 +8,7 @@
  */
 import { io } from 'socket.io-client';
 
-const GATEWAY_URL = 'http://localhost:3000';
+const GATEWAY_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:3000';
 
 const socket = io(GATEWAY_URL, {
   transports: ['websocket', 'polling'],

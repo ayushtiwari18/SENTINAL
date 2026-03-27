@@ -1,12 +1,38 @@
-/logs
+# Dependency directories
 node_modules
 dist
+
+# Environment files — NEVER commit real secrets
 .env
+.env.local
+.env.production
+.env.staging
+
+# Allow example/template files to be committed
+!.env.example
+!.env.backup/
+
+# Logs
+/logs
+*.log
+
+# OS/editor
 .DS_Store
 .idea
 .vscode
-*.log
 *.tmp
 *.bak
 *.swp
 *.swo
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+venv/
+.venv/
+
+# Build artifacts
+build/
+*.egg-info/

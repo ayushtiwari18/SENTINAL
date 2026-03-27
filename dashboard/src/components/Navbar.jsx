@@ -15,6 +15,7 @@ const BASE_LINKS = [
   { to: '/action-queue', label: 'Action Queue',  badge: 'queue' },
   { to: '/audit',        label: 'Audit' },
   { to: '/services',     label: 'Services' },
+  { to: '/simulate',     label: '⚔️ Simulate',   badge: null },
   { to: '/settings',     label: 'Settings' },
   { to: '/docs',         label: 'Docs' },
 ];
@@ -59,7 +60,10 @@ export default function Navbar() {
           to={l.to}
           style={({ isActive }) => ({
             ...styles.link,
-            color: isActive ? '#00d4aa' : '#aaa',
+            color: l.to === '/simulate'
+              ? (isActive ? '#ff4444' : '#ff8888')
+              : (isActive ? '#00d4aa' : '#aaa'),
+            fontWeight: l.to === '/simulate' ? 700 : 'normal',
           })}
         >
           {l.label}

@@ -13,6 +13,7 @@ import Docs            from './pages/Docs';
 import PcapAnalyzer    from './pages/PcapAnalyzer';
 import ActionQueuePage from './pages/ActionQueuePage';
 import AuditLog        from './pages/AuditLog';
+import SimulateAttack  from './pages/SimulateAttack';
 import NotFound        from './pages/NotFound';
 
 export default function App() {
@@ -33,6 +34,8 @@ export default function App() {
           {/* ArmorIQ enforcement pages */}
           <Route path="/action-queue"  element={<ActionQueuePage />} />
           <Route path="/audit"         element={<AuditLog />} />
+          {/* Demo simulator */}
+          <Route path="/simulate"      element={<SimulateAttack />} />
         </Route>
         <Route path="*" element={<NotFound />} />
       </Routes>

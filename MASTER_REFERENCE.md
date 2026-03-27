@@ -1,6 +1,6 @@
 # SENTINAL — Master Reference Document
 
-> **Version:** 7.0 · **Date:** 2026-03-27 · **Status:** Living document — single source of truth
+> **Version:** 8.0 · **Date:** 2026-03-27 · **Status:** Living document — single source of truth
 >
 > Only one doc file exists in this repo. This is it.
 > Do NOT create REPOSITORY_AUDIT.md, CURRENT_POLICY_FLOW.md, SYSTEM_BUG_REPORT.md,
@@ -24,8 +24,9 @@
 12. [Response Envelope Standard](#12-response-envelope)
 13. [Demo Day Guide](#13-demo-day)
 14. [Production Deployment — AWS EC2 (Full Guide)](#14-production-deployment)
-15. [Changelog](#15-changelog)
-16. [MongoDB Atlas Track](#16-mongodb-atlas-track)
+15. [AWS Academy — Every Session Checklist](#15-aws-academy)
+16. [Changelog](#16-changelog)
+17. [MongoDB Atlas Track](#17-mongodb-atlas-track)
 
 ---
 
@@ -63,14 +64,12 @@
 │  PCAP          │  │  DETECTION ENGINE     │  │  ARMORIQ AGENT           │
 │  PROCESSOR     │  │  (Python :8002)       │  │  (Python :8004)          │
 │  (Python :8003)│  │                       │  │                          │
-│                │  │  POST /analyze        │  │  POST /respond           │
-│  POST /process │  │  45-rule engine       │  │                          │
-│  8 detectors   │  │  adversarial decoder  │  │  intent_builder.py       │
-│  full pipeline │  │  HTTP-status layer    │  │  openclaw_runtime.py     │
+│  POST /process │  │  POST /analyze        │  │  POST /respond           │
+│  8 detectors   │  │  45-rule engine       │  │  intent_builder.py       │
+│  full pipeline │  │  adversarial decoder  │  │  openclaw_runtime.py     │
 │  10/10 tests ✅│  │  ML optional          │  │  policy_engine.py (fbck) │
 └────────────────┘  └───────────────────────┘  │  executor.py             │
                                                │  audit_logger.py         │
-                                               │  models.py               │
                                                │  policy.yaml             │
                                                └──────────────────────────┘
                                                           │
@@ -90,15 +89,8 @@
                                                   ▼
 ┌──────────────────────────────────────────────────────────────────────┐
 │              SERVICE 5 — REACT DASHBOARD  (Vite :5173)               │
-│                                                                      │
-│  /dashboard    → Stats, live attack feed, service health             │
-│  /attacks      → AttackEvent table + forensics drawer                │
-│  /alerts       → attack_detected (red) + armoriq_action (purple)     │
-│  /action-queue → Approve / Reject blocked actions                    │
-│  /audit        → Full OpenClaw decision log, live via socket         │
-│  /pcap         → Upload .pcap → full pipeline                        │
-│  /logs         → Raw SystemLogs                                      │
-│  /services     → Health ping all 4 services                          │
+│  /dashboard /attacks /alerts /action-queue /audit /pcap /logs        │
+│  /services  → Health ping all 4 services                             │
 └──────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -137,7 +129,8 @@ SENTINAL/
 ├── .gitignore
 ├── README.md
 ├── MASTER_REFERENCE.md              ← this file (only doc)
-├── ecosystem.config.js              PM2 process manager config (all 4 services)
+├── ecosystem.config.js              PM2 config — uses absolute .venv Python paths
+├── deploy.sh                        ← ONE-COMMAND full deploy for AWS Academy
 ├── start.sh  /  stop.sh  /  status.sh
 │
 ├── backend/                         SERVICE 1: Gateway API (Node :3000)
@@ -157,7 +150,7 @@ SENTINAL/
 │       └── utils/
 │
 ├── dashboard/                       SERVICE 5: React SPA (Vite :5173)
-│   ├── .env.production              VITE_API_URL + VITE_SOCKET_URL
+│   ├── .env.production              VITE_API_URL + VITE_SOCKET_URL (set by deploy.sh)
 │   ├── vite.config.js
 │   └── src/
 │       ├── components/              (8 components)
@@ -365,9 +358,9 @@ servicestatuses:{ serviceName(unique), status, lastChecked, responseTimeMs, erro
 | ArmorIQ + OpenClaw | 7/7 pytest pass, live enforcement confirmed |
 | React Dashboard — 10 pages | Live data, no Network Error |
 | PM2 — 5 services | All online, saved, auto-restart enabled |
-| AWS EC2 deployment | All services live at 44.201.147.239 |
+| AWS EC2 deployment | All services live — deploy.sh confirmed working |
 | MongoDB Atlas | IP allowlisted to EC2, Atlas Search live |
-| validate-env.sh | 16/16 checks pass |
+| deploy.sh | Full auto-deploy in ~12 min on fresh Ubuntu instance |
 
 ### 🟡 PARTIAL
 | Feature | What's Missing |
@@ -392,14 +385,16 @@ servicestatuses:{ serviceName(unique), status, lastChecked, responseTimeMs, erro
 | ArmorIQ Agent | 8004 | `cd services/armoriq-agent && source .venv/bin/activate && uvicorn main:app --port 8004` |
 | Dashboard | 5173 | `cd dashboard && npm run dev` |
 
-### Production (current live)
-| Service | Port | Public URL |
-|---------|------|------------|
-| Gateway | 3000 | `http://44.201.147.239:3000` |
-| Detection Engine | 8002 | `http://44.201.147.239:8002` |
-| PCAP Processor | 8003 | `http://44.201.147.239:8003` |
-| ArmorIQ Agent | 8004 | `http://44.201.147.239:8004` |
-| Dashboard | 5173 | `http://44.201.147.239:5173` |
+### Production (dynamic — changes each AWS Academy session)
+| Service | Port | URL Pattern |
+|---------|------|-------------|
+| Gateway | 3000 | `http://<CURRENT_IP>:3000` |
+| Detection Engine | 8002 | `http://<CURRENT_IP>:8002` |
+| PCAP Processor | 8003 | `http://<CURRENT_IP>:8003` |
+| ArmorIQ Agent | 8004 | `http://<CURRENT_IP>:8004` |
+| Dashboard | 5173 | `http://<CURRENT_IP>:5173` |
+
+> ⚠️ IP changes every AWS Academy session. `deploy.sh` auto-detects and sets it.
 
 ---
 
@@ -431,10 +426,12 @@ servicestatuses:{ serviceName(unique), status, lastChecked, responseTimeMs, erro
 
 ### Health Check
 ```bash
-./status.sh   # production
-# or individually:
+# On EC2 (local)
 curl http://localhost:3000/health
 curl http://localhost:8004/health   # must show openclaw_loaded:true
+
+# From browser / local machine
+curl http://<EC2_IP>:3000/health
 ```
 
 ### Ingest Test
@@ -462,7 +459,7 @@ curl -X POST http://localhost:8004/respond -H "Content-Type: application/json" \
 ### Full E2E
 ```bash
 bash demo-target/attack.sh
-# Watch: http://44.201.147.239:5173
+# Watch dashboard: http://<EC2_IP>:5173
 ```
 
 ### Judge Pitch
@@ -475,7 +472,7 @@ bash demo-target/attack.sh
 
 ## 14. Production Deployment — AWS EC2 (Full Guide)
 
-This is the complete step-by-step guide to deploy SENTINAL on a **fresh AWS EC2 Ubuntu instance** from your local machine using a `.pem` key.
+This is the complete step-by-step guide to deploy SENTINAL on a **fresh AWS EC2 Ubuntu instance**.
 
 ---
 
@@ -484,405 +481,211 @@ This is the complete step-by-step guide to deploy SENTINAL on a **fresh AWS EC2 
 1. Go to [AWS Console](https://console.aws.amazon.com) → **EC2** → **Launch Instance**
 2. **Name:** `sentinal-server`
 3. **AMI:** Ubuntu Server 22.04 LTS (64-bit x86)
-4. **Instance type:** `t2.medium` (minimum — needs RAM for 4 Python services)
-5. **Key pair:**
-   - Click **Create new key pair**
-   - Name: `sentinal-key`
-   - Type: RSA, Format: `.pem`
-   - Click **Create** — downloads `sentinal-key.pem` to your machine
+4. **Instance type:** `t3.micro` (AWS Academy default)
+5. **Key pair:** Select existing `sentinal-key` (or create new → download `.pem`)
 6. **Security Group** — Add these inbound rules:
 
-| Type | Port | Source |
-|------|------|--------|
-| SSH | 22 | My IP (or 0.0.0.0/0 for dev) |
-| Custom TCP | 3000 | 0.0.0.0/0 |
-| Custom TCP | 5173 | 0.0.0.0/0 |
-| Custom TCP | 8002 | 0.0.0.0/0 |
-| Custom TCP | 8003 | 0.0.0.0/0 |
-| Custom TCP | 8004 | 0.0.0.0/0 |
+| Port | Source | Purpose |
+|------|--------|---------|
+| 22 | 0.0.0.0/0 | SSH |
+| 3000 | 0.0.0.0/0 | Gateway API |
+| 5173 | 0.0.0.0/0 | Dashboard |
+| 8002 | 0.0.0.0/0 | Detection Engine |
+| 8003 | 0.0.0.0/0 | PCAP Processor |
+| 8004 | 0.0.0.0/0 | ArmorIQ Agent |
 
 7. **Storage:** 20 GB gp3
-8. Click **Launch Instance**
-9. Wait ~2 min → copy the **Public IPv4 address** (e.g. `44.201.147.239`)
+8. Click **Launch Instance** → wait 2 min → copy **Public IPv4**
 
 ---
 
-### PART B — Local Machine: Connect via SSH
+### PART B — Connect to Instance
 
-**On Windows (PowerShell) or Mac/Linux Terminal:**
+**Option 1 — EC2 Instance Connect (recommended for AWS Academy)**
+1. AWS Console → your instance → **Connect** button
+2. Tab: **EC2 Instance Connect** → Username: `ubuntu` → **Connect**
+3. Browser terminal opens instantly — no `.pem` needed
 
+**Option 2 — SSH from Linux/Mac**
 ```bash
-# Step 1 — Fix .pem permissions (required on Mac/Linux)
-chmod 400 ~/Downloads/sentinal-key.pem
-
-# Step 2 — SSH into the instance
-ssh -i ~/Downloads/sentinal-key.pem ubuntu@44.201.147.239
-
-# If on Windows (PowerShell), use:
-ssh -i C:\Users\YourName\Downloads\sentinal-key.pem ubuntu@44.201.147.239
-
-# You should see:
-# ubuntu@ip-172-31-xx-xx:~$
+chmod 400 ~/.ssh/sentinal-key.pem
+ssh -i ~/.ssh/sentinal-key.pem ubuntu@<EC2_PUBLIC_IP>
 ```
 
-> **Tip:** If you get `WARNING: UNPROTECTED PRIVATE KEY FILE` on Windows,
-> right-click the .pem → Properties → Security → Advanced → Remove all inherited permissions,
-> add only your user with Read access.
+**Option 3 — SSH from Windows (PowerShell)**
+```powershell
+ssh -i C:\Users\YourName\.ssh\sentinal-key.pem ubuntu@<EC2_PUBLIC_IP>
+```
+
+> If SSH times out: check Security Group has port 22 open to `0.0.0.0/0`
 
 ---
 
-### PART C — EC2: Install System Dependencies
+### PART C — One-Command Deploy (deploy.sh)
 
-Run all of these on the EC2 server after SSH:
+Once inside the terminal (EC2 Instance Connect or SSH), run:
 
 ```bash
-# Update system
-sudo apt update && sudo apt upgrade -y
-
-# Install Node.js 20
-curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-sudo apt install -y nodejs
-node --version   # should show v20.x
-npm --version    # should show 10.x
-
-# Install Python 3.11 + venv + pip
-sudo apt install -y python3.11 python3.11-venv python3-pip python3-dev
-python3 --version   # should show Python 3.11.x
-
-# Install build tools (needed for some Python packages)
-sudo apt install -y build-essential libssl-dev libffi-dev
-
-# Install libpcap (needed for PCAP Processor)
-sudo apt install -y libpcap-dev
-
-# Install PM2 globally
-sudo npm install -g pm2
-
-# Install serve globally (for dashboard static files)
-sudo npm install -g serve
-
-# Verify PM2
-pm2 --version   # should show 5.x
+curl -s https://raw.githubusercontent.com/ayushtiwari18/SENTINAL/main/deploy.sh | bash
 ```
+
+**What deploy.sh does automatically:**
+1. Detects EC2 public IP via `checkip.amazonaws.com`
+2. `apt install` — Node.js 20, Python3, venv, pip, build tools, libpcap, PM2, serve
+3. `git clone` repo (or `git pull` if exists)
+4. Creates Python `.venv` + `pip install -r requirements.txt` for all 3 services
+5. `npm install` for backend + dashboard
+6. Creates `.env` — auto-sets `PUBLIC_URL`, `JWT_SECRET`, `API_SECRET` — **prompts for MONGO_URI**
+7. Writes `dashboard/.env.production` with current IP
+8. `npm run build` dashboard
+9. Rewrites `ecosystem.config.js` with absolute `.venv` Python paths
+10. `pm2 start` all 5 services
+11. Health checks all 4 backend services
+12. Prints Atlas IP allowlist reminder
+
+**Total time: ~10–12 minutes**
 
 ---
 
-### PART D — EC2: Clone the Repo
+### PART D — After deploy.sh: Update MongoDB Atlas
 
-```bash
-cd ~
-git clone https://github.com/ayushtiwari18/SENTINAL.git
-cd ~/SENTINAL
-ls
-# Should see: backend  dashboard  services  scripts  ecosystem.config.js  etc.
-```
+1. Open [MongoDB Atlas](https://cloud.mongodb.com) → **Network Access**
+2. Delete any old IP entries
+3. **Add IP Address** → enter the IP printed by deploy.sh → **Confirm**
+4. Wait 30 seconds → test: `curl http://localhost:3000/health`
 
 ---
 
-### PART E — EC2: Set Up Python Virtual Environments
-
-Each Python service needs its own venv. Run all of these:
+### PART E — Verify
 
 ```bash
-# ── Detection Engine ──────────────────────────────────────────────────
-cd ~/SENTINAL/services/detection-engine
-python3 -m venv .venv
-source .venv/bin/activate
-pip install --upgrade pip
-pip install -r requirements.txt
-deactivate
-
-# ── PCAP Processor ────────────────────────────────────────────────────
-cd ~/SENTINAL/services/pcap-processor
-python3 -m venv .venv
-source .venv/bin/activate
-pip install --upgrade pip
-pip install -r requirements.txt
-deactivate
-
-# ── ArmorIQ Agent ─────────────────────────────────────────────────────
-cd ~/SENTINAL/services/armoriq-agent
-python3 -m venv .venv
-source .venv/bin/activate
-pip install --upgrade pip
-pip install -r requirements.txt
-deactivate
-
-# Verify venvs exist:
-ls ~/SENTINAL/services/detection-engine/.venv/bin/python3
-ls ~/SENTINAL/services/pcap-processor/.venv/bin/python3
-ls ~/SENTINAL/services/armoriq-agent/.venv/bin/python3
-```
-
----
-
-### PART F — EC2: Install Node.js Dependencies
-
-```bash
-# Backend (Gateway API)
-cd ~/SENTINAL/backend
-npm install --omit=dev
-
-# Dashboard
-cd ~/SENTINAL/dashboard
-npm install
-```
-
----
-
-### PART G — EC2: Configure Environment
-
-```bash
-cd ~/SENTINAL
-
-# Create .env from template
-cp .env.example .env
-
-# Generate JWT_SECRET (copy the output)
-node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-
-# Generate API_SECRET (run again, different value)
-node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-
-# Open .env and fill in values
-nano .env
-```
-
-**Required values to fill in `.env`:**
-
-```bash
-# ── Core
-NODE_ENV=production
-LOG_LEVEL=info
-PUBLIC_URL=http://<YOUR_EC2_PUBLIC_IP>
-
-# ── Ports (keep as-is)
-GATEWAY_PORT=3000
-DETECTION_PORT=8002
-PCAP_PORT=8003
-ARMORIQ_PORT=8004
-
-# ── Internal URLs (keep as localhost)
-DETECTION_URL=http://localhost:8002
-PCAP_URL=http://localhost:8003
-ARMORIQ_URL=http://localhost:8004
-GATEWAY_URL=http://localhost:3000
-
-# ── Database  ← MOST IMPORTANT
-# Get from: MongoDB Atlas → your cluster → Connect → Drivers → copy SRV string
-MONGO_URI=mongodb+srv://USERNAME:PASSWORD@cluster0.xxxxx.mongodb.net/sentinal
-#          ⚠️ MUST be MONGO_URI — not MONGO_URL
-
-# ── Secrets  ← paste the two hex strings you generated above
-JWT_SECRET=<paste 64-char hex here>
-API_SECRET=<paste 64-char hex here>
-
-# ── Optional
-GEMINI_API_KEY=none
-```
-
-**Save** (`Ctrl+O`, `Enter`, `Ctrl+X`) then validate:
-
-```bash
-chmod +x ~/SENTINAL/scripts/validate-env.sh
-./scripts/validate-env.sh --env-only
-# Must show: ✓ 16 passed   ✖ 0 failed   ALL CHECKS PASSED
-```
-
----
-
-### PART H — EC2: Configure Dashboard for Production
-
-The dashboard `.env.production` is already in the repo with the current EC2 IP.
-If deploying to a **different IP**, update it:
-
-```bash
-nano ~/SENTINAL/dashboard/.env.production
-```
-
-```bash
-VITE_API_URL=http://<YOUR_EC2_PUBLIC_IP>:3000
-VITE_SOCKET_URL=http://<YOUR_EC2_PUBLIC_IP>:3000
-```
-
-Then build the dashboard:
-
-```bash
-cd ~/SENTINAL/dashboard
-npm run build
-# Creates dashboard/dist/ — static files served by PM2+serve
-```
-
----
-
-### PART I — EC2: Start All Services with PM2
-
-```bash
-cd ~/SENTINAL
-
-# Create logs directory
-mkdir -p logs
-
-# Start all 4 backend services (uses ecosystem.config.js)
-pm2 start ecosystem.config.js
-
-# Start dashboard (serves built static files)
-pm2 start "serve -s dist -l 5173" --name sentinal-dashboard --cwd ~/SENTINAL/dashboard
-
-# Check all are online
 pm2 list
-```
+# All 5 services should show: online
 
-**Expected output:**
-```
-┌────┬────────────────────┬──────┬───────────┬──────────┐
-│ id │ name               │ ↺    │ status    │ memory   │
-├────┼────────────────────┼──────┼───────────┼──────────┤
-│ 0  │ sentinal-gateway   │ 0    │ online    │ ~80mb    │
-│ 1  │ sentinal-detection │ 0    │ online    │ ~50mb    │
-│ 2  │ sentinal-pcap      │ 0    │ online    │ ~70mb    │
-│ 3  │ sentinal-armoriq   │ 0    │ online    │ ~60mb    │
-│ 4  │ sentinal-dashboard │ 0    │ online    │ ~10mb    │
-└────┴────────────────────┴──────┴───────────┴──────────┘
+curl http://localhost:3000/health
+curl http://localhost:8002/health
+curl http://localhost:8003/health
+curl http://localhost:8004/health
+# All should return HTTP 200
+
+# Open dashboard in browser:
+# http://<EC2_IP>:5173
 ```
 
 ---
 
-### PART J — EC2: Enable Auto-Start on Reboot
+### Day-to-Day Operations
 
 ```bash
-# Save current process list
-pm2 save
+pm2 list                          # show all processes
+pm2 logs sentinal-gateway         # tail gateway logs
+pm2 logs --lines 50 --nostream    # last 50 lines all services
+pm2 restart sentinal-gateway      # restart one service
+pm2 restart all                   # restart everything
 
-# Generate systemd startup script
-pm2 startup
-# It prints a command like:
-# sudo env PATH=$PATH:/usr/bin /usr/lib/node_modules/pm2/bin/pm2 startup systemd -u ubuntu --hp /home/ubuntu
-
-# COPY that exact command and run it
-sudo env PATH=$PATH:/usr/bin /usr/lib/node_modules/pm2/bin/pm2 startup systemd -u ubuntu --hp /home/ubuntu
-
-# Save again after running the sudo command
-pm2 save
-```
-
----
-
-### PART K — Verify Full Deployment
-
-```bash
-# 1. Full health check
-./status.sh
-# Expected: ✓ Gateway HTTP 200  ✓ Detection HTTP 200  ✓ PCAP HTTP 200  ✓ ArmorIQ HTTP 200
-
-# 2. Test log ingest + attack detection
-curl -s -X POST http://localhost:3000/api/logs/ingest \
-  -H "Content-Type: application/json" \
-  -d '{"projectId":"prod-test","method":"GET",
-       "url":"/search?q=<script>alert(1)</script>",
-       "ip":"1.2.3.4","headers":{},"queryParams":{},"body":{}}' \
-  | python3 -m json.tool
-# Expected: { "success": true, "data": { "id": "..." } }
-
-# 3. Verify from your local machine (replace with your EC2 IP)
-curl http://44.201.147.239:3000/health
-curl http://44.201.147.239:8002/health
-curl http://44.201.147.239:8003/health
-curl http://44.201.147.239:8004/health
-
-# 4. Open dashboard in browser
-# http://44.201.147.239:5173
-```
-
----
-
-### PART L — MongoDB Atlas: Whitelist EC2 IP
-
-1. Go to [MongoDB Atlas](https://cloud.mongodb.com)
-2. Your project → **Network Access** → **IP Access List**
-3. Click **Edit** on `0.0.0.0/0` (if it exists) → **Delete** it
-4. Click **Add IP Address** → enter `44.201.147.239` → **Confirm**
-5. Wait ~30 seconds for it to apply
-6. Test connection: `./scripts/validate-env.sh --env-only` should still pass
-
----
-
-### PART M — Day-to-Day Operations
-
-```bash
-# View all processes
-pm2 list
-
-# Tail logs for a specific service
-pm2 logs sentinal-gateway
-pm2 logs sentinal-detection
-pm2 logs sentinal-armoriq
-
-# Last 50 lines from all services (no tail)
-pm2 logs --lines 50 --nostream
-
-# Restart one service
-pm2 restart sentinal-gateway
-
-# Restart everything
-pm2 restart all
-
-# Stop everything
-pm2 stop all
-
-# Full health check
-./status.sh
-
-# After git pull + code changes:
+# After code changes:
 git pull origin main
 cd ~/SENTINAL/dashboard && npm run build
-pm2 restart all
-pm2 save
+pm2 restart all && pm2 save
 ```
 
 ---
 
-### Current Infrastructure
-
-| Item | Value |
-|------|-------|
-| Provider | AWS EC2 |
-| Instance type | Ubuntu 22.04 LTS |
-| Public IP | `44.201.147.239` |
-| Internal hostname | `ip-172-31-84-131` |
-| Process manager | PM2 v5 |
-| MongoDB | Atlas cloud — `cluster0.lenxm5v.mongodb.net` |
-| Atlas IP allowlist | `44.201.147.239` only |
-| Dashboard URL | `http://44.201.147.239:5173` |
-
-### Known Issues Fixed During This Deployment
+### Known Issues Fixed
 
 | Issue | Fix |
 |-------|-----|
-| `validate-env.sh` broken `cd` on line 30 | Rewrote script with correct `$(dirname "${BASH_SOURCE[0]}")/..` |
-| `.env` had `MONGO_URL` instead of `MONGO_URI` | Renamed — Joi validator requires exact name `MONGO_URI` |
-| `api.js` hardcoded `baseURL: 'http://localhost:3000'` | Now reads `import.meta.env.VITE_API_URL` |
-| `socket.js` hardcoded `GATEWAY_URL = 'http://localhost:3000'` | Now reads `import.meta.env.VITE_SOCKET_URL` |
-| `ecosystem.config.js` partially corrupted | Fully rewritten with correct `.venv` Python paths |
-| Dashboard showing `Network Error` in prod | Fixed by adding `dashboard/.env.production` with EC2 IP |
+| `validate-env.sh` broken `cd` on line 30 | Rewrote with correct `$(dirname "${BASH_SOURCE[0]}")/..` |
+| `.env` had `MONGO_URL` instead of `MONGO_URI` | Renamed — Joi validator requires `MONGO_URI` |
+| `api.js` hardcoded `localhost:3000` | Now reads `import.meta.env.VITE_API_URL` |
+| `socket.js` hardcoded `localhost:3000` | Now reads `import.meta.env.VITE_SOCKET_URL` |
+| `ecosystem.config.js` corrupted | deploy.sh rewrites it with absolute `.venv` paths |
+| Dashboard `Network Error` in prod | Fixed by `dashboard/.env.production` with EC2 IP |
+| Gateway HTTP 000 after deploy | MONGO_URI was stale in `.env` — must paste correct Atlas URI |
+| EC2 Instance Connect failing | Reboot or Stop+Start the instance |
+| SSH connection timeout | Security Group port 22 source was set to `My IP` — change to `0.0.0.0/0` |
 
 ---
 
-## 15. Changelog
+## 15. AWS Academy — Every Session Checklist
+
+> AWS Academy labs auto-terminate after ~4 hours. Every session = fresh Ubuntu instance + new IP.
+> MongoDB Atlas data **persists** (cloud). EC2 data does **not**.
+
+### What Changes Each Session
+
+| Item | Persists? | Action needed |
+|------|-----------|---------------|
+| EC2 instance | ❌ Gone | Launch new instance |
+| Public IP | ❌ Changes | Get new IP from console |
+| All installed software | ❌ Gone | `deploy.sh` reinstalls everything |
+| `.env` file | ❌ Gone | `deploy.sh` recreates (prompts MONGO_URI) |
+| MongoDB Atlas data | ✅ Persists | Just update IP allowlist |
+| GitHub repo code | ✅ Persists | `deploy.sh` clones latest |
+| `.pem` key | ✅ Persists (if same key pair used) | Reuse existing `sentinal-key` |
+
+### Every New Session — 4 Steps
+
+**Step 1 — Launch new EC2 instance**
+- AWS Console → EC2 → Launch Instance
+- Ubuntu 22.04, t3.micro, key pair: `sentinal-key` (existing)
+- Security Group: all 6 ports open (22, 3000, 5173, 8002, 8003, 8004)
+
+**Step 2 — Connect via EC2 Instance Connect**
+- Instance → **Connect** → **EC2 Instance Connect** → **Connect**
+- (SSH from Linux: `ssh -i ~/.ssh/sentinal-key.pem ubuntu@<NEW_IP>`)
+
+**Step 3 — Run deploy script**
+```bash
+curl -s https://raw.githubusercontent.com/ayushtiwari18/SENTINAL/main/deploy.sh | bash
+```
+- When prompted: paste your `MONGO_URI` from MongoDB Atlas
+
+**Step 4 — Update MongoDB Atlas IP**
+- Atlas → Network Access → delete old IP → add new IP shown by deploy.sh
+
+✅ Done. Dashboard live at `http://<NEW_IP>:5173`
+
+### Getting Your MONGO_URI
+
+1. Go to [MongoDB Atlas](https://cloud.mongodb.com)
+2. Click your cluster → **Connect** → **Drivers**
+3. Copy the string:
+```
+mongodb+srv://USERNAME:PASSWORD@cluster0.xxxxx.mongodb.net/sentinal
+```
+4. Replace `<password>` with your actual Atlas password
+5. Keep this string saved somewhere safe — you'll need it every session
+
+### Troubleshooting This Session
+
+| Problem | Fix |
+|---------|-----|
+| EC2 Instance Connect fails | Reboot instance → try again |
+| SSH times out | Security Group → Port 22 → change source to `0.0.0.0/0` |
+| Gateway HTTP 000 after deploy | Wrong/empty MONGO_URI → `nano ~/SENTINAL/.env` → fix → `pm2 restart sentinal-gateway` |
+| Services stopped | `pm2 resurrect` or `pm2 start ecosystem.config.js` |
+| Dashboard shows Network Error | `nano ~/SENTINAL/dashboard/.env.production` → update IP → `npm run build` → `pm2 restart sentinal-dashboard` |
+| Atlas connection refused | IP allowlist not updated → Atlas → Network Access → add current IP |
+
+---
+
+## 16. Changelog
 
 | Date | Version | Change |
 |------|---------|--------|
 | 2026-03-26 | 1.0 | Initial doc + PCAP Processor built |
 | 2026-03-26 | 2.0 | ArmorIQ Agent + ActionQueue + AuditLog + sentinel-middleware |
-| 2026-03-26 | 3.0 | Fix1: typed Pydantic models + dot-access. Fix2: executor safe HTTP. Fix3: audit:new socket event. Demo Target E2E |
-| 2026-03-26 | 4.0 | openclaw_runtime.py + policy.yaml added. 4 redundant doc files deleted |
-| 2026-03-27 | 5.0 | MongoDB Atlas Track: Atlas Search, $facet aggregation, all 6 collections verified |
-| 2026-03-27 | 6.0 | Production deployment on AWS EC2: PM2, env fixes, dashboard API URL fix, Atlas IP allowlist |
-| 2026-03-27 | 7.0 | **Full AWS EC2 deploy guide** added (Parts A–M): .pem key, EC2 launch, Security Group, apt install, Python venvs, npm install, .env setup, validate-env, dashboard build, PM2 start + startup + save, MongoDB Atlas IP allowlist, day-to-day commands |
+| 2026-03-26 | 3.0 | Pydantic models fix, executor safe HTTP, audit:new socket, Demo Target E2E |
+| 2026-03-26 | 4.0 | openclaw_runtime.py + policy.yaml. 4 redundant docs deleted |
+| 2026-03-27 | 5.0 | MongoDB Atlas Track: Atlas Search, $facet, all 6 collections verified |
+| 2026-03-27 | 6.0 | Production deploy: PM2, env fixes, VITE_API_URL fix, Atlas IP allowlist |
+| 2026-03-27 | 7.0 | Full AWS EC2 deploy guide Parts A–M: .pem, EC2 launch, apt install, venvs, PM2 |
+| 2026-03-27 | 8.0 | **AWS Academy strategy**: `deploy.sh` one-command deploy, §15 per-session checklist, IP change workflow, MONGO_URI prompt, Atlas IP update reminder, troubleshooting table, ecosystem.config.js absolute venv paths in deploy.sh |
 
 ---
 
-## 16. MongoDB Atlas Track
+## 17. MongoDB Atlas Track
 
 ### Connection — `backend/src/config/database.js`
 - URI from `process.env.MONGO_URI` — fails fast if missing
@@ -910,9 +713,9 @@ pm2 save
 
 ### Live Production Evidence (2026-03-27)
 ```
-./status.sh                           → 16 passed, 0 warnings, 0 failed
-GET /health (all 4 services)          → HTTP 200, uptime confirmed
-POST /api/logs/ingest (XSS)           → { success:true, id:"69c64d4bd30dcf7649d14622" }
-GET /api/stats                        → totalLogs:125, totalAttacks:77
-Dashboard http://44.201.147.239:5173  → Live data, all 10 pages render
+deploy.sh run on fresh Ubuntu 24.04 instance (98.94.36.226)
+All 5 services: online via PM2
+Health checks: gateway ✓  detection ✓  pcap ✓  armoriq ✓
+MongoDB Atlas: IP allowlisted, connection confirmed
+Dashboard: http://98.94.36.226:5173 — live data, all pages render
 ```

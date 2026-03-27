@@ -1,18 +1,29 @@
 /**
  * SENTINAL Gateway — Entry Point
  *
- * dotenv is configured to load from the ROOT .env file.
- * Root = two directories up from backend/ → project root.
+ * STARTUP ORDER (must not be changed):
+ *   1. dotenv    — load root .env FIRST
+ *   2. validateEnv — verify all required vars exist, exit if not
+ *   3. Express app setup
+ *   4. Database connection
+ *   5. Socket.io init
+ *   6. Listen
  *
- * Directory structure:
- *   SENTINAL/           ← project root (where .env lives)
- *     backend/
- *       server.js       ← this file (2 levels deep)
+ * dotenv path: ROOT of repo (‘../‘ relative to backend/)
  */
 const path = require('path');
+
+// Step 1 — Load environment variables from root .env
 require('dotenv').config({
   path: path.resolve(__dirname, '../.env')
 });
+
+// Step 2 — Validate all required env vars BEFORE anything else
+// This will print clear errors and exit if any required var is missing.
+const { validateEnv } = require('../config/envValidator');
+if (process.env.NODE_ENV !== 'test') {
+  validateEnv();
+}
 
 const http     = require('http');
 const express  = require('express');
@@ -21,30 +32,22 @@ const mongoose = require('mongoose');
 const morgan   = require('morgan');
 const helmet   = require('helmet');
 
-const { connectDB }            = require('./src/config/database');
-const { initSocketServer }     = require('./src/sockets/socketServer');
-const logger                   = require('./src/utils/logger');
-const { globalLimiter }        = require('./src/middleware/rateLimiter');
+const { connectDB }         = require('./src/config/database');
+const { initSocketServer }  = require('./src/sockets/socketServer');
+const logger                = require('./src/utils/logger');
+const { globalLimiter }     = require('./src/middleware/rateLimiter');
 
 // ── Process-level safety nets ───────────────────────────────────────────────────
-process.on('uncaughtException', (err) => {
-  logger.error(`[SERVER] Uncaught Exception: ${err.message}`);
-});
-process.on('unhandledRejection', (reason) => {
-  logger.error(`[SERVER] Unhandled Rejection: ${reason}`);
-});
+process.on('uncaughtException',  (err)    => logger.error(`[SERVER] Uncaught Exception: ${err.message}`));
+process.on('unhandledRejection', (reason) => logger.error(`[SERVER] Unhandled Rejection: ${reason}`));
 
 // ── MongoDB disconnect auto-reconnect ───────────────────────────────────────────
 mongoose.connection.on('disconnected', () => {
-  logger.warn('[DATABASE] MongoDB Atlas disconnected. Attempting reconnect...');
+  logger.warn('[DATABASE] MongoDB disconnected. Attempting reconnect in 5s...');
   setTimeout(() => connectDB(), 5000);
 });
-mongoose.connection.on('reconnected', () => {
-  logger.info('[DATABASE] MongoDB Atlas reconnected successfully.');
-});
-mongoose.connection.on('error', (err) => {
-  logger.error(`[DATABASE] MongoDB connection error: ${err.message}`);
-});
+mongoose.connection.on('reconnected', () => logger.info('[DATABASE] MongoDB reconnected.'));
+mongoose.connection.on('error', (err)    => logger.error(`[DATABASE] Error: ${err.message}`));
 
 const app        = express();
 const httpServer = http.createServer(app);
@@ -77,24 +80,23 @@ app.use((req, res) => {
 });
 
 // Global Error Handler
-app.use((err, req, res, next) => {
+app.use((err, req, res, next) => { // eslint-disable-line no-unused-vars
   logger.error(err.message);
   res.status(500).json({ success: false, message: 'Internal server error', code: 'SERVER_ERROR' });
 });
 
 // ── Startup ─────────────────────────────────────────────────────────────────────────────
-const PORT = process.env.GATEWAY_PORT || process.env.PORT || 3000;
+const PORT = parseInt(process.env.GATEWAY_PORT || process.env.PORT || '3000');
 
 if (process.env.NODE_ENV !== 'test') {
   connectDB().then(() => {
     initSocketServer(httpServer);
-    httpServer.listen(PORT, () => {
-      logger.info(`[SERVER] SENTINEL Gateway running on port ${PORT}`);
-      logger.info(`[SERVER] Environment: ${process.env.NODE_ENV || 'development'}`);
-      logger.info(`[SERVER] MongoDB: ${process.env.MONGO_URI ? 'URI loaded ✓' : 'URI MISSING ✗'}`);
-      logger.info(`[SERVER] Detection Engine: ${process.env.DETECTION_URL || process.env.DETECTION_ENGINE_URL || 'http://localhost:8002'}`);
-      logger.info(`[SERVER] ArmorIQ Agent:    ${process.env.ARMORIQ_URL || 'http://localhost:8004'}`);
-      logger.info(`[SERVER] PCAP Processor:   ${process.env.PCAP_URL || process.env.PCAP_SERVICE_URL || 'http://localhost:8003'}`);
+    httpServer.listen(PORT, '0.0.0.0', () => {
+      logger.info(`[SERVER] ✓ SENTINEL Gateway running  →  http://0.0.0.0:${PORT}`);
+      logger.info(`[SERVER]   Environment : ${process.env.NODE_ENV || 'development'}`);
+      logger.info(`[SERVER]   Detection   : ${process.env.DETECTION_URL || process.env.DETECTION_ENGINE_URL || 'http://localhost:8002'}`);
+      logger.info(`[SERVER]   ArmorIQ     : ${process.env.ARMORIQ_URL || 'http://localhost:8004'}`);
+      logger.info(`[SERVER]   PCAP        : ${process.env.PCAP_URL || process.env.PCAP_SERVICE_URL || 'http://localhost:8003'}`);
     });
   });
 }

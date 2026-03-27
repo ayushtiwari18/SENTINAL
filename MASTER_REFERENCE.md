@@ -1,6 +1,6 @@
 # SENTINAL — Master Reference Document
 
-> **Version:** 8.0 · **Date:** 2026-03-27 · **Status:** Living document — single source of truth
+> **Version:** 9.0 · **Date:** 2026-03-27 · **Status:** Living document — single source of truth
 >
 > Only one doc file exists in this repo. This is it.
 > Do NOT create REPOSITORY_AUDIT.md, CURRENT_POLICY_FLOW.md, SYSTEM_BUG_REPORT.md,
@@ -90,7 +90,7 @@
 ┌──────────────────────────────────────────────────────────────────────┐
 │              SERVICE 5 — REACT DASHBOARD  (Vite :5173)               │
 │  /dashboard /attacks /alerts /action-queue /audit /pcap /logs        │
-│  /services  → Health ping all 4 services                             │
+│  /services /simulate → all 14 pages, Socket.io live updates          │
 └──────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -126,12 +126,17 @@ POST :8004/respond
 SENTINAL/
 ├── .env                             ← NOT committed (gitignored). See §14 for values.
 ├── .env.example                     template for all env vars
+├── .env.backup/                     directory (gitignored)
 ├── .gitignore
 ├── README.md
 ├── MASTER_REFERENCE.md              ← this file (only doc)
+├── SPONSOR_TRACK_REPORT.md          ArmorIQ/sponsor track submission doc
+├── SENTINAL_Postman_Collection.json ← complete Postman v2.1 collection (40+ requests)
 ├── ecosystem.config.js              PM2 config — uses absolute .venv Python paths
 ├── deploy.sh                        ← ONE-COMMAND full deploy for AWS Academy
-├── start.sh  /  stop.sh  /  status.sh
+├── start.sh                         start all PM2 services
+├── stop.sh                          stop all PM2 services
+├── status.sh                        check all service health
 │
 ├── backend/                         SERVICE 1: Gateway API (Node :3000)
 │   ├── server.js
@@ -142,10 +147,42 @@ SENTINAL/
 │   └── src/
 │       ├── config/database.js
 │       ├── controllers/             (10 controllers)
+│       │   ├── attackController.js
+│       │   ├── alertController.js
+│       │   ├── actionQueueController.js
+│       │   ├── auditController.js
+│       │   ├── armoriqController.js
+│       │   ├── logController.js
+│       │   ├── pcapController.js
+│       │   ├── statsController.js
+│       │   ├── serviceStatusController.js
+│       │   └── forensicsController.js
 │       ├── models/                  (6 models)
+│       │   ├── SystemLog.js
+│       │   ├── AttackEvent.js
+│       │   ├── Alert.js
+│       │   ├── ActionQueue.js
+│       │   ├── AuditLog.js
+│       │   └── ServiceStatus.js
 │       ├── routes/                  (11 route files)
+│       │   ├── health.js            GET /health
+│       │   ├── logs.js              POST /api/logs/ingest · GET /api/logs/recent
+│       │   ├── attacks.js           GET recent · search · search/stats · :id/forensics
+│       │   ├── alerts.js            GET /api/alerts · PATCH :id/read
+│       │   ├── actions.js           GET pending · POST :id/approve · POST :id/reject
+│       │   ├── audit.js             GET /api/audit · POST /api/audit/ingest
+│       │   ├── armoriq.js           POST /api/armoriq/trigger
+│       │   ├── pcap.js              POST /api/pcap/upload · GET jobs · GET :id
+│       │   ├── stats.js             GET /api/stats
+│       │   ├── serviceStatus.js     GET /api/service-status
+│       │   └── forensics.js         GET /api/attacks/:id/forensics
 │       ├── services/                (5 services)
-│       ├── sockets/broadcastService.js
+│       │   ├── attackService.js     creates AttackEvent + Alert + emits sockets
+│       │   ├── detectionConnector.js POST :8002/analyze
+│       │   ├── armoriqConnector.js  POST :8004/respond
+│       │   ├── serviceHealthService.js polls all 4 services
+│       │   └── statsService.js      aggregate stats + emit stats:update
+│       ├── sockets/broadcastService.js  Socket.io emit helpers
 │       ├── tests/                   (8 test files)
 │       └── utils/
 │
@@ -153,15 +190,46 @@ SENTINAL/
 │   ├── .env.production              VITE_API_URL + VITE_SOCKET_URL (set by deploy.sh)
 │   ├── vite.config.js
 │   └── src/
+│       ├── App.jsx                  Router — 14 routes total
+│       ├── main.jsx
 │       ├── components/              (8 components)
-│       ├── hooks/                   (3 hooks)
-│       ├── pages/                   (13 pages)
+│       │   ├── AppLayout.jsx        Navbar + Outlet wrapper
+│       │   ├── Navbar.jsx           Nav links + live badge counters (alerts, queue)
+│       │   ├── ActionQueue.jsx      Pending actions table + approve/reject buttons
+│       │   ├── AlertsPanel.jsx      Live alert feed
+│       │   ├── LiveAttackFeed.jsx   Real-time attack event list
+│       │   ├── StatsPanel.jsx       Summary stat cards
+│       │   ├── SystemStatus.jsx     Service health indicators
+│       │   └── ForensicsDrawer.jsx  Slide-in forensics detail panel
+│       ├── hooks/
+│       │   ├── useSocket.js         Socket.io event subscription hook
+│       │   └── [other hooks]
+│       ├── pages/                   (14 pages)
+│       │   ├── Landing.jsx          /  → entry/splash page
+│       │   ├── Dashboard.jsx        /dashboard → StatsPanel + LiveAttackFeed + SystemStatus
+│       │   ├── Attacks.jsx          /attacks → full attack events table
+│       │   ├── ForensicsPage.jsx    /attacks/:id → forensics detail page
+│       │   ├── Alerts.jsx           /alerts → alerts management
+│       │   ├── Logs.jsx             /logs → system logs viewer
+│       │   ├── PcapAnalyzer.jsx     /pcap → PCAP upload + results
+│       │   ├── ActionQueuePage.jsx  /action-queue → blocked action approvals
+│       │   ├── AuditLog.jsx         /audit → full audit trail
+│       │   ├── Services.jsx         /services → all 4 service health pings
+│       │   ├── Settings.jsx         /settings → configuration panel
+│       │   ├── Docs.jsx             /docs → documentation viewer
+│       │   ├── SimulateAttack.jsx   /simulate → one-click attack simulator (demo tool)
+│       │   └── NotFound.jsx         /* → 404
 │       └── services/
-│           ├── api.js               reads VITE_API_URL (not hardcoded)
-│           └── socket.js            reads VITE_SOCKET_URL (not hardcoded)
+│           ├── api.js               all API calls — reads VITE_API_URL (not hardcoded)
+│           └── socket.js            Socket.io client — reads VITE_SOCKET_URL (not hardcoded)
 │
 ├── config/
-├── demo-target/                     E2E harness (Express :4000)
+│
+├── demo-target/                     E2E harness — vulnerable Express app (:4000)
+│   ├── server.js                    routes: / /users /login /search /file
+│   │                                uses sentinel-middleware → Gateway :3000
+│   ├── attack.sh                    shell script to fire all attack types
+│   └── package.json
 │
 ├── scripts/
 │   ├── validate-env.sh              pre-deploy validator (16 checks)
@@ -170,23 +238,39 @@ SENTINAL/
 │
 └── services/
     ├── armoriq-agent/               SERVICE 4: Python/FastAPI :8004
-    │   ├── main.py  intent_builder.py  openclaw_runtime.py
-    │   ├── policy_engine.py  executor.py  audit_logger.py
-    │   ├── models.py  policy.yaml  requirements.txt
-    │   └── tests/test_enforcement.py
+    │   ├── main.py                  FastAPI app — POST /respond  GET /health
+    │   ├── intent_builder.py        builds 5–6 IntentModel objects per attack
+    │   ├── openclaw_runtime.py      PRIMARY — loads policy.yaml, RULE_001→DEFAULT
+    │   ├── policy_engine.py         FALLBACK — hardcoded rules
+    │   ├── executor.py              fires ALLOW decisions via HTTP
+    │   ├── audit_logger.py          POSTs every decision to /api/audit/ingest
+    │   ├── models.py                Pydantic models
+    │   ├── policy.yaml              declarative: allowed_actions, blocked_actions
+    │   ├── requirements.txt
+    │   └── tests/test_enforcement.py  (7/7 pass)
     │
     ├── detection-engine/            SERVICE 3: Python/FastAPI :8002
     │   └── app/
-    │       ├── main.py  rules.py  adversarial.py
-    │       └── [classifier.py]  (ML optional)
+    │       ├── main.py              FastAPI app — POST /analyze  GET /health
+    │       ├── rules.py             45-rule detection engine
+    │       ├── adversarial.py       encoding/obfuscation decoder
+    │       └── [classifier.py]      ML model loader (optional — sentinel_v5.pkl)
     │
     ├── middleware/                  npm package: sentinel-middleware
-    │   └── src/  (index.js  config.js  sender.js  adapters/)
+    │   └── src/
+    │       ├── index.js
+    │       ├── config.js
+    │       ├── sender.js
+    │       └── adapters/
+    │           └── express.js       sentinel() Express middleware factory
     │
     └── pcap-processor/              SERVICE 2: Python/FastAPI :8003
-        ├── main.py  pcap_loader.py  packet_parser.py
-        ├── flow_builder.py  attack_detector.py
-        └── tests/
+        ├── main.py                  FastAPI app — POST /process  GET /health
+        ├── pcap_loader.py
+        ├── packet_parser.py
+        ├── flow_builder.py
+        ├── attack_detector.py       8 attack detectors
+        └── tests/                   (10/10 pass)
 ```
 
 ---
@@ -232,9 +316,18 @@ POST /api/pcap/upload → POST :8003/process
 → AttackEvent.create() per attack → emit(attack:new)
 ```
 
-### Flow C — Direct ArmorIQ Trigger (Demo)
+### Flow C — Direct ArmorIQ Trigger (Demo / Simulate Page)
 ```
 POST /api/armoriq/trigger → reportAttack() → full pipeline (Flow A steps 4–6)
+```
+
+### Flow D — SimulateAttack Dashboard Page
+```
+Browser: /simulate page → click attack button
+→ fetch POST /api/logs/ingest  (SQLi / XSS / Traversal / Command Injection)
+  OR fetch POST /api/armoriq/trigger  (Brute Force Critical)
+→ Dashboard Socket.io: attack:new / action:pending events received live
+→ /simulate right panel updates with real detections in real time
 ```
 
 ---
@@ -291,6 +384,16 @@ GET  /health    → { openclaw_loaded:bool, enforcement:'ArmorClaw-v1' }
 POST /process   Body: { filepath:string, projectId:string }
 GET  /health
 ```
+
+### Demo Target (`:4000`)
+```
+GET  /                              health check
+GET  /users                         returns demo user list
+POST /login                         Body: { username, password } — intentionally vulnerable
+GET  /search?q=<query>              reflects query — XSS/command injection target
+GET  /file?name=<filename>          path traversal target
+```
+> All demo-target routes pass through `sentinel-middleware` → Gateway automatically.
 
 ---
 
@@ -351,12 +454,14 @@ servicestatuses:{ serviceName(unique), status, lastChecked, responseTimeMs, erro
 | Feature | Evidence |
 |---------|----------|
 | Gateway API — 11 route files | All routes respond correctly |
-| MongoDB — 6 models | 125+ logs, 77+ attacks in production |
+| MongoDB — 6 models | 125+ logs, 78+ attacks in production |
 | Socket.io — 6 events | Live dashboard confirmed |
 | Detection pipeline | sqli/xss/traversal/command_injection classified |
 | PCAP Processor | 10/10 tests pass |
 | ArmorIQ + OpenClaw | 7/7 pytest pass, live enforcement confirmed |
-| React Dashboard — 10 pages | Live data, no Network Error |
+| React Dashboard — 14 pages | Live data, all pages functional |
+| SimulateAttack page `/simulate` | One-click attack simulator, live socket feed |
+| Postman Collection | 40+ requests, 8 folders, automated test scripts |
 | PM2 — 5 services | All online, saved, auto-restart enabled |
 | AWS EC2 deployment | All services live — deploy.sh confirmed working |
 | MongoDB Atlas | IP allowlisted to EC2, Atlas Search live |
@@ -384,6 +489,7 @@ servicestatuses:{ serviceName(unique), status, lastChecked, responseTimeMs, erro
 | PCAP Processor | 8003 | `cd services/pcap-processor && source .venv/bin/activate && uvicorn main:app --port 8003` |
 | ArmorIQ Agent | 8004 | `cd services/armoriq-agent && source .venv/bin/activate && uvicorn main:app --port 8004` |
 | Dashboard | 5173 | `cd dashboard && npm run dev` |
+| Demo Target | 4000 | `cd demo-target && node server.js` |
 
 ### Production (dynamic — changes each AWS Academy session)
 | Service | Port | URL Pattern |
@@ -408,6 +514,8 @@ servicestatuses:{ serviceName(unique), status, lastChecked, responseTimeMs, erro
 | `audit:new` | auditController | `{ id, action, status, reason, policy_rule_id, triggeredBy, ip, attackId, timestamp }` |
 | `service:status` | serviceHealthService | `{ serviceName, status, responseTimeMs, timestamp }` |
 | `stats:update` | statsService | stats payload |
+
+> `SimulateAttack.jsx` subscribes to `attack:new` and `action:pending` directly — live detections appear in the right panel of `/simulate` as soon as the backend processes them.
 
 ---
 
@@ -434,32 +542,52 @@ curl http://localhost:8004/health   # must show openclaw_loaded:true
 curl http://<EC2_IP>:3000/health
 ```
 
-### Ingest Test
-```bash
-curl -s -X POST http://localhost:3000/api/logs/ingest \
-  -H "Content-Type: application/json" \
-  -d '{"projectId":"demo","method":"GET","url":"/search?q=<script>alert(1)</script>",
-       "ip":"1.2.3.4","headers":{},"queryParams":{},"body":{}}'
-```
+### Option A — Browser Attack Simulator (No Terminal Needed)
+1. Open `http://<EC2_IP>:5173/simulate`
+2. Click any attack button — fires real payload to Gateway
+3. Switch tab to `/attacks` — new entry appears live
+4. Click **🚨 LAUNCH FULL ATTACK WAVE** — all 5 attacks fire with 1.2s stagger
+5. Right panel on `/simulate` shows live detections via Socket.io
 
-### ArmorIQ Demo — ALLOW (medium severity)
-```bash
-curl -X POST http://localhost:8004/respond -H "Content-Type: application/json" \
-  -d '{"attackId":"demo-1","ip":"5.5.5.5","attackType":"sqli","severity":"medium","confidence":0.9,"status":"attempt"}'
-# actionsExecuted: [send_alert, log_attack, rate_limit_ip]
-```
+**Attack buttons available:**
+| Button | Payload | Target Route |
+|--------|---------|--------------|
+| 💉 SQL Injection | `admin' OR '1'='1' --` in body | POST /api/logs/ingest |
+| ⚡ XSS Attack | `<script>alert(document.cookie)</script>` in URL | POST /api/logs/ingest |
+| 📁 Path Traversal | `/../../../etc/passwd` in query | POST /api/logs/ingest |
+| 💻 Command Injection | `hello; cat /etc/shadow` | POST /api/logs/ingest |
+| 🔨 Brute Force (CRITICAL) | severity:critical → triggers BLOCK | POST /api/armoriq/trigger |
 
-### ArmorIQ Demo — BLOCK (critical severity)
-```bash
-curl -X POST http://localhost:8004/respond -H "Content-Type: application/json" \
-  -d '{"attackId":"demo-2","ip":"6.6.6.6","attackType":"brute_force","severity":"critical","confidence":0.97,"status":"successful"}'
-# actionsQueued: [permanent_ban_ip(BLOCK), shutdown_endpoint(BLOCK)]
+### Option B — Postman (SENTINAL_Postman_Collection.json)
+Import from repo root or via:
 ```
+https://raw.githubusercontent.com/ayushtiwari18/SENTINAL/main/SENTINAL_Postman_Collection.json
+```
+Run **Folder 08 — End-to-End Demo Sequence** in order for full judge demo.
 
-### Full E2E
+### Option C — Shell Script (demo-target)
 ```bash
 bash demo-target/attack.sh
 # Watch dashboard: http://<EC2_IP>:5173
+```
+
+### Option D — Direct curl
+```bash
+# SQLi
+curl -s -X POST http://localhost:3000/api/logs/ingest \
+  -H "Content-Type: application/json" \
+  -d '{"projectId":"demo","method":"POST","url":"/login","ip":"1.2.3.4",
+       "headers":{},"queryParams":{},"body":{"username":"admin'"'"' OR '"'"'1'"'"'='"'"'1'"'"' --","password":"x"}}'
+
+# ArmorIQ ALLOW (medium)
+curl -X POST http://localhost:8004/respond -H "Content-Type: application/json" \
+  -d '{"attackId":"demo-1","ip":"5.5.5.5","attackType":"sqli","severity":"medium","confidence":0.9,"status":"attempt"}'
+# actionsExecuted: [send_alert, log_attack, rate_limit_ip]
+
+# ArmorIQ BLOCK (critical)
+curl -X POST http://localhost:8004/respond -H "Content-Type: application/json" \
+  -d '{"attackId":"demo-2","ip":"6.6.6.6","attackType":"brute_force","severity":"critical","confidence":0.97,"status":"successful"}'
+# actionsQueued: [permanent_ban_ip(BLOCK), shutdown_endpoint(BLOCK)]
 ```
 
 ### Judge Pitch
@@ -486,7 +614,7 @@ This is the complete step-by-step guide to deploy SENTINAL on a **fresh AWS EC2 
 6. **Security Group** — Add these inbound rules:
 
 | Port | Source | Purpose |
-|------|--------|---------|
+|------|--------|---------| 
 | 22 | 0.0.0.0/0 | SSH |
 | 3000 | 0.0.0.0/0 | Gateway API |
 | 5173 | 0.0.0.0/0 | Dashboard |
@@ -570,6 +698,9 @@ curl http://localhost:8004/health
 
 # Open dashboard in browser:
 # http://<EC2_IP>:5173
+
+# Open attack simulator:
+# http://<EC2_IP>:5173/simulate
 ```
 
 ---
@@ -681,7 +812,8 @@ mongodb+srv://USERNAME:PASSWORD@cluster0.xxxxx.mongodb.net/sentinal
 | 2026-03-27 | 5.0 | MongoDB Atlas Track: Atlas Search, $facet, all 6 collections verified |
 | 2026-03-27 | 6.0 | Production deploy: PM2, env fixes, VITE_API_URL fix, Atlas IP allowlist |
 | 2026-03-27 | 7.0 | Full AWS EC2 deploy guide Parts A–M: .pem, EC2 launch, apt install, venvs, PM2 |
-| 2026-03-27 | 8.0 | **AWS Academy strategy**: `deploy.sh` one-command deploy, §15 per-session checklist, IP change workflow, MONGO_URI prompt, Atlas IP update reminder, troubleshooting table, ecosystem.config.js absolute venv paths in deploy.sh |
+| 2026-03-27 | 8.0 | AWS Academy strategy: `deploy.sh` one-command deploy, §15 per-session checklist, IP change workflow, MONGO_URI prompt, Atlas IP update reminder, troubleshooting table, ecosystem.config.js absolute venv paths in deploy.sh |
+| 2026-03-27 | 9.0 | SimulateAttack page `/simulate` (14th page), Postman collection `SENTINAL_Postman_Collection.json` (40+ requests, 8 folders), updated folder structure with all 14 pages + demo-target routes, §13 demo options A–D, §4 Flow D for simulate page, socket subscription notes |
 
 ---
 
@@ -713,9 +845,11 @@ mongodb+srv://USERNAME:PASSWORD@cluster0.xxxxx.mongodb.net/sentinal
 
 ### Live Production Evidence (2026-03-27)
 ```
-deploy.sh run on fresh Ubuntu 24.04 instance (98.94.36.226)
+Server: AWS EC2 — 98.82.8.144
 All 5 services: online via PM2
 Health checks: gateway ✓  detection ✓  pcap ✓  armoriq ✓
 MongoDB Atlas: IP allowlisted, connection confirmed
-Dashboard: http://98.94.36.226:5173 — live data, all pages render
+Dashboard: http://98.82.8.144:5173 — 14 pages live, all data rendering
+Attack Simulator: http://98.82.8.144:5173/simulate — live socket feed confirmed
+Postman Collection: SENTINAL_Postman_Collection.json — 40+ requests, 8 folders
 ```

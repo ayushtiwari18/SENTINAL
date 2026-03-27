@@ -1,37 +1,34 @@
 /**
  * ActionQueue — ArmorIQ blocked actions with confirm modal + attack link.
+ * Full design system redesign. All business logic preserved.
  */
 import { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { getPendingActions, approveAction, rejectAction } from '../services/api';
 import { useSocket } from '../hooks/useSocket';
+import SeverityBadge from './ui/SeverityBadge';
+import EmptyState    from './ui/EmptyState';
+import LoadingState  from './ui/LoadingState';
 
-const RISK_COLOURS = {
-  permanent_ban_ip:      'bg-orange-900 border-orange-600',
-  shutdown_endpoint:     'bg-red-900 border-red-600',
-  purge_all_sessions:    'bg-yellow-900 border-yellow-600',
-  modify_firewall_rules: 'bg-red-900 border-red-600',
-};
-
-const RISK_LABEL = {
-  permanent_ban_ip:      { label: 'HIGH RISK',      cls: 'bg-orange-700' },
-  shutdown_endpoint:     { label: 'CRITICAL RISK',  cls: 'bg-red-700' },
-  purge_all_sessions:    { label: 'MEDIUM RISK',    cls: 'bg-yellow-700' },
-  modify_firewall_rules: { label: 'CRITICAL RISK',  cls: 'bg-red-700' },
+const RISK_META = {
+  permanent_ban_ip:      { label: 'HIGH RISK',      color: 'var(--color-high)',      border: 'var(--color-high)' },
+  shutdown_endpoint:     { label: 'CRITICAL RISK',  color: 'var(--color-critical)',  border: 'var(--color-critical)' },
+  purge_all_sessions:    { label: 'MEDIUM RISK',    color: 'var(--color-medium)',    border: 'var(--color-medium)' },
+  modify_firewall_rules: { label: 'CRITICAL RISK',  color: 'var(--color-critical)',  border: 'var(--color-critical)' },
 };
 
 export default function ActionQueue() {
   const [items,    setItems]    = useState([]);
   const [loading,  setLoading]  = useState(true);
-  const [removing, setRemoving] = useState(new Set()); // IDs fading out
-  const [confirm,  setConfirm]  = useState(null);      // { id, action, type: 'approve'|'reject' }
+  const [removing, setRemoving] = useState(new Set());
+  const [confirm,  setConfirm]  = useState(null);
 
   const load = async () => {
     try {
       const data = await getPendingActions();
       setItems(data || []);
     } catch (e) {
-      console.error('[ActionQueue] fetch failed:', e.message);
+      console.error('[ActionQueue]', e.message);
     } finally {
       setLoading(false);
     }
@@ -41,10 +38,7 @@ export default function ActionQueue() {
 
   useSocket('action:pending', useCallback((payload) => {
     const item = payload.data ?? payload;
-    setItems(prev => {
-      if (prev.find(i => i._id === item._id)) return prev;
-      return [item, ...prev];
-    });
+    setItems(prev => prev.find(i => i._id === item._id) ? prev : [item, ...prev]);
   }, []));
 
   const fadeOut = (id) => {
@@ -68,47 +62,37 @@ export default function ActionQueue() {
     }
   };
 
-  if (loading) return <p className="text-gray-400 text-sm">Loading action queue...</p>;
-
-  if (!items.length) {
-    return (
-      <div className="rounded-lg border border-gray-700 bg-gray-800 p-6 text-center text-gray-400 text-sm">
-        ✅ No pending actions — ArmorIQ has not blocked anything requiring review.
-      </div>
-    );
-  }
+  if (loading) return <LoadingState message="Loading action queue..." />;
+  if (!items.length) return (
+    <EmptyState
+      message="No pending actions — ArmorIQ has not blocked anything requiring review."
+      icon="✅"
+    />
+  );
 
   return (
     <>
       {/* Confirm Modal */}
       {confirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="bg-gray-900 border border-gray-700 rounded-xl p-6 w-full max-w-md shadow-2xl">
-            <h3 className="text-white font-bold text-lg mb-2">
+        <div style={styles.modalOverlay}>
+          <div style={styles.modal}>
+            <h3 style={styles.modalTitle}>
               {confirm.type === 'approve' ? '✅ Confirm Approve' : '❌ Confirm Reject'}
             </h3>
-            <p className="text-gray-300 text-sm mb-1">
-              Action: <span className="font-mono text-white">{confirm.action}</span>
+            <p style={styles.modalBody}>
+              Action: <code style={{ color: 'var(--color-text)', fontFamily: 'var(--font-mono)' }}>{confirm.action}</code>
             </p>
-            <p className="text-gray-400 text-sm mb-4">
+            <p style={{ ...styles.modalBody, color: 'var(--color-text-secondary)', marginBottom: 'var(--space-5)' }}>
               {confirm.type === 'approve'
                 ? 'This will authorise ArmorIQ to execute this action. Are you sure?'
                 : 'This will permanently reject this action. It will not be executed.'}
             </p>
-            <div className="flex gap-3 justify-end">
+            <div style={styles.modalActions}>
+              <button className="btn btn-ghost" onClick={() => setConfirm(null)}>Cancel</button>
               <button
-                onClick={() => setConfirm(null)}
-                className="px-4 py-1.5 rounded bg-gray-700 hover:bg-gray-600 text-white text-sm transition"
-              >
-                Cancel
-              </button>
-              <button
+                className={`btn ${confirm.type === 'approve' ? '' : 'btn-danger'}`}
+                style={confirm.type === 'approve' ? { background: 'var(--color-online)', color: '#000' } : {}}
                 onClick={handleConfirm}
-                className={`px-4 py-1.5 rounded text-white text-sm font-semibold transition ${
-                  confirm.type === 'approve'
-                    ? 'bg-green-600 hover:bg-green-500'
-                    : 'bg-red-700 hover:bg-red-600'
-                }`}
               >
                 {confirm.type === 'approve' ? 'Yes, Approve' : 'Yes, Reject'}
               </button>
@@ -117,88 +101,78 @@ export default function ActionQueue() {
         </div>
       )}
 
-      <div className="space-y-3">
+      <div style={styles.list}>
         {items.map((item) => {
-          const riskMeta = RISK_LABEL[item.action] || { label: 'BLOCKED', cls: 'bg-red-700' };
+          const risk     = RISK_META[item.action] || { label: 'BLOCKED', color: 'var(--color-critical)', border: 'var(--color-critical)' };
           const isFading = removing.has(item._id);
+
           return (
             <div
               key={item._id}
-              style={{ transition: 'opacity 0.35s ease, transform 0.35s ease',
-                       opacity: isFading ? 0 : 1,
-                       transform: isFading ? 'translateX(40px)' : 'translateX(0)' }}
-              className={`rounded-lg border p-4 ${
-                RISK_COLOURS[item.action] || 'bg-gray-800 border-gray-600'
-              }`}
+              style={{
+                ...styles.card,
+                borderColor: risk.border,
+                opacity:     isFading ? 0 : 1,
+                transform:   isFading ? 'translateX(40px)' : 'translateX(0)',
+                transition:  'opacity 350ms ease, transform 350ms ease',
+              }}
             >
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex-1 min-w-0">
-                  {/* Badges row */}
-                  <div className="flex flex-wrap items-center gap-2 mb-2">
-                    <span className={`text-xs font-bold uppercase tracking-wider text-white px-2 py-0.5 rounded ${
-                      riskMeta.cls
-                    }`}>
-                      {riskMeta.label}
+              <div style={styles.cardBody}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  {/* Badge row */}
+                  <div style={styles.badgeRow}>
+                    <span style={{ ...styles.riskBadge, color: risk.color, borderColor: risk.color }}>
+                      {risk.label}
                     </span>
-                    <span className="font-mono font-semibold text-white text-sm">{item.action}</span>
+                    <code style={styles.actionCode}>{item.action}</code>
                     {item.attackType && (
-                      <span className="text-xs bg-gray-700 text-gray-200 px-2 py-0.5 rounded font-mono">
-                        {item.attackType}
-                      </span>
+                      <span className="attack-tag">{item.attackType}</span>
                     )}
-                    {item.severity && (
-                      <span className={`text-xs px-2 py-0.5 rounded font-bold ${
-                        item.severity === 'critical' ? 'bg-red-700 text-red-100'
-                        : item.severity === 'high'   ? 'bg-orange-700 text-orange-100'
-                        : 'bg-yellow-700 text-yellow-100'
-                      }`}>
-                        {item.severity}
-                      </span>
-                    )}
+                    {item.severity && <SeverityBadge severity={item.severity} />}
                   </div>
 
-                  {/* Details */}
-                  <p className="text-sm text-gray-300 mb-1">
-                    <span className="text-gray-500">Target IP: </span>{item.ip}
-                  </p>
-                  <p className="text-sm text-gray-300 mb-1">
-                    <span className="text-gray-500">Agent reason: </span>{item.agentReason}
-                  </p>
-                  <p className="text-sm text-red-300 mb-2">
-                    <span className="text-gray-500">Blocked because: </span>{item.blockedReason}
-                  </p>
+                  {/* Detail rows */}
+                  <div style={styles.details}>
+                    <span style={styles.detailLabel}>Target IP</span>
+                    <code className="ip-addr">{item.ip}</code>
+                  </div>
+                  <div style={styles.details}>
+                    <span style={styles.detailLabel}>Agent Reason</span>
+                    <span style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--text-sm)' }}>{item.agentReason}</span>
+                  </div>
+                  <div style={styles.details}>
+                    <span style={styles.detailLabel}>Blocked Because</span>
+                    <span style={{ color: 'var(--color-critical)', fontSize: 'var(--text-sm)' }}>{item.blockedReason}</span>
+                  </div>
 
-                  {/* Attack link */}
                   {item.attackId && (
-                    <Link
-                      to={`/attacks/${item.attackId}`}
-                      className="text-xs text-blue-400 hover:underline"
-                    >
+                    <Link to={`/attacks/${item.attackId}`} style={styles.attackLink}>
                       View Attack →
                     </Link>
                   )}
                 </div>
 
-                {/* Buttons */}
-                <div className="flex flex-col gap-2 shrink-0">
+                {/* Action buttons */}
+                <div style={styles.btnCol}>
                   <button
+                    className="btn btn-sm"
+                    style={{ background: 'var(--color-online)', color: '#000', fontWeight: 'var(--weight-semibold)' }}
                     onClick={() => setConfirm({ id: item._id, action: item.action, type: 'approve' })}
-                    className="px-3 py-1.5 text-sm font-semibold rounded bg-green-600 hover:bg-green-500 text-white transition"
                   >
                     ✅ Approve
                   </button>
                   <button
+                    className="btn btn-danger btn-sm"
                     onClick={() => setConfirm({ id: item._id, action: item.action, type: 'reject' })}
-                    className="px-3 py-1.5 text-sm font-semibold rounded bg-red-800 hover:bg-red-700 text-white transition"
                   >
                     ❌ Reject
                   </button>
                 </div>
               </div>
 
-              <p className="text-xs text-gray-500 mt-2">
-                Queued: {new Date(item.createdAt).toLocaleString()}
-              </p>
+              <div style={styles.cardFooter}>
+                Queued: <span style={{ fontFamily: 'var(--font-mono)' }}>{new Date(item.createdAt).toLocaleString()}</span>
+              </div>
             </div>
           );
         })}
@@ -206,3 +180,100 @@ export default function ActionQueue() {
     </>
   );
 }
+
+const styles = {
+  list: { display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' },
+  card: {
+    background: 'var(--color-surface)',
+    border: '1px solid',
+    borderRadius: 'var(--radius-lg)',
+    padding: 'var(--space-4)',
+  },
+  cardBody: { display: 'flex', alignItems: 'flex-start', gap: 'var(--space-4)' },
+  badgeRow: { display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 'var(--space-2)', marginBottom: 'var(--space-3)' },
+  riskBadge: {
+    fontSize: 'var(--text-xs)',
+    fontWeight: 'var(--weight-bold)',
+    letterSpacing: 'var(--tracking-widest)',
+    border: '1px solid',
+    borderRadius: 'var(--radius-sm)',
+    padding: '2px 8px',
+    textTransform: 'uppercase',
+  },
+  actionCode: {
+    fontFamily: 'var(--font-mono)',
+    fontWeight: 'var(--weight-semibold)',
+    color: 'var(--color-text)',
+    fontSize: 'var(--text-sm)',
+  },
+  details: {
+    display: 'flex',
+    alignItems: 'baseline',
+    gap: 'var(--space-2)',
+    marginBottom: 'var(--space-2)',
+    fontSize: 'var(--text-sm)',
+  },
+  detailLabel: {
+    fontSize: 'var(--text-xs)',
+    color: 'var(--color-text-muted)',
+    textTransform: 'uppercase',
+    letterSpacing: 'var(--tracking-widest)',
+    flexShrink: 0,
+    minWidth: '110px',
+  },
+  attackLink: {
+    fontSize: 'var(--text-xs)',
+    color: 'var(--color-accent)',
+    textDecoration: 'none',
+    marginTop: 'var(--space-1)',
+    display: 'inline-block',
+  },
+  btnCol: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 'var(--space-2)',
+    flexShrink: 0,
+  },
+  cardFooter: {
+    fontSize: 'var(--text-xs)',
+    color: 'var(--color-text-muted)',
+    marginTop: 'var(--space-3)',
+    borderTop: '1px solid var(--color-border)',
+    paddingTop: 'var(--space-2)',
+  },
+  modalOverlay: {
+    position: 'fixed',
+    inset: 0,
+    zIndex: 'var(--z-modal)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    background: 'rgba(0,0,0,0.65)',
+    backdropFilter: 'blur(6px)',
+  },
+  modal: {
+    background: 'var(--color-surface-raised)',
+    border: '1px solid var(--color-border-strong)',
+    borderRadius: 'var(--radius-xl)',
+    padding: 'var(--space-6)',
+    width: '100%',
+    maxWidth: '420px',
+    boxShadow: 'var(--shadow-lg)',
+  },
+  modalTitle: {
+    fontSize: 'var(--text-lg)',
+    fontWeight: 'var(--weight-bold)',
+    color: 'var(--color-text)',
+    marginBottom: 'var(--space-3)',
+  },
+  modalBody: {
+    fontSize: 'var(--text-base)',
+    color: 'var(--color-text-secondary)',
+    marginBottom: 'var(--space-2)',
+  },
+  modalActions: {
+    display: 'flex',
+    gap: 'var(--space-3)',
+    justifyContent: 'flex-end',
+  },
+};

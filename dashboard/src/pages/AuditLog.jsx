@@ -1,28 +1,34 @@
 /**
- * AuditLog Page — ArmorIQ policy decisions with filters + live stat bar.
+ * AuditLog — redesigned with design system.
+ * Stat bar as clickable filter pills, full table, auto-refresh.
  */
 import { useEffect, useState, useCallback } from 'react';
 import { getAuditLog } from '../services/api';
 import { useInterval } from '../hooks/useInterval';
-
-const STATUS_STYLES = {
-  ALLOWED:  'bg-green-800 text-green-200',
-  BLOCKED:  'bg-red-800  text-red-200',
-  APPROVED: 'bg-blue-800 text-blue-200',
-  REJECTED: 'bg-gray-700 text-gray-300',
-};
-
-const ALL_ACTIONS = [
-  'send_alert', 'log_attack', 'rate_limit_ip', 'flag_for_review',
-  'permanent_ban_ip', 'shutdown_endpoint', 'purge_all_sessions', 'modify_firewall_rules',
-];
+import Panel       from '../components/ui/Panel';
+import EmptyState  from '../components/ui/EmptyState';
+import LoadingState from '../components/ui/LoadingState';
+import ErrorState  from '../components/ui/ErrorState';
+import PageWrapper from '../components/layout/PageWrapper';
 
 const REFRESH_MS = 10000;
 
+const ALL_ACTIONS = [
+  'send_alert','log_attack','rate_limit_ip','flag_for_review',
+  'permanent_ban_ip','shutdown_endpoint','purge_all_sessions','modify_firewall_rules',
+];
+
+const STATUS_META = {
+  ALLOWED:  { color: 'var(--color-online)',   dim: 'rgba(75,181,67,0.1)'  },
+  BLOCKED:  { color: 'var(--color-critical)', dim: 'rgba(244,71,71,0.1)'  },
+  APPROVED: { color: 'var(--color-accent)',   dim: 'rgba(0,212,170,0.1)'  },
+  REJECTED: { color: 'var(--color-text-muted)', dim: 'rgba(120,120,120,0.1)' },
+};
+
 export default function AuditLog() {
-  const [entries, setEntries] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error,   setError]   = useState(null);
+  const [entries,      setEntries]      = useState([]);
+  const [loading,      setLoading]      = useState(true);
+  const [error,        setError]        = useState(null);
   const [filterStatus, setFilterStatus] = useState('');
   const [filterAction, setFilterAction] = useState('');
 
@@ -42,129 +48,178 @@ export default function AuditLog() {
     return true;
   });
 
-  // Stat counts (always from full unfiltered entries)
   const counts = ['ALLOWED','BLOCKED','APPROVED','REJECTED'].reduce((acc, s) => {
     acc[s] = entries.filter(e => e.status === s).length;
     return acc;
   }, {});
 
   return (
-    <div className="p-6">
-      {/* Header */}
-      <div className="mb-4">
-        <h1 className="text-2xl font-bold text-white">ArmorIQ Audit Log</h1>
-        <p className="text-gray-400 text-sm mt-1">
-          Every policy decision made by ArmorIQ — ALLOWED and BLOCKED actions with full traceability.
-        </p>
-      </div>
+    <PageWrapper>
+      <div className="page-container">
 
-      {/* Stat bar */}
-      {!loading && entries.length > 0 && (
-        <div className="flex flex-wrap gap-3 mb-4">
-          {[['ALLOWED','bg-green-900 border-green-700 text-green-300'],
-            ['BLOCKED','bg-red-900 border-red-700 text-red-300'],
-            ['APPROVED','bg-blue-900 border-blue-700 text-blue-300'],
-            ['REJECTED','bg-gray-800 border-gray-600 text-gray-300']].map(([s, cls]) => (
-            <button
-              key={s}
-              onClick={() => setFilterStatus(prev => prev === s ? '' : s)}
-              className={`rounded-lg border px-4 py-2 text-sm font-semibold transition ${
-                cls} ${
-                filterStatus === s ? 'ring-2 ring-white/30' : 'opacity-80 hover:opacity-100'
-              }`}
-            >
-              {s}: {counts[s]}
-            </button>
-          ))}
-          {(filterStatus || filterAction) && (
-            <button
-              onClick={() => { setFilterStatus(''); setFilterAction(''); }}
-              className="rounded-lg border border-gray-600 px-3 py-2 text-xs text-gray-400 hover:text-white transition"
-            >
-              ✕ Clear filters
-            </button>
+        <div className="page-header">
+          <div className="page-title-group">
+            <h1 className="page-title">ArmorIQ Audit Log</h1>
+            <p className="page-subtitle">
+              Every policy decision made by ArmorIQ — full traceability. Auto-refreshes every 10s.
+            </p>
+          </div>
+        </div>
+
+        {/* Stat pills */}
+        {!loading && entries.length > 0 && (
+          <div style={styles.pillRow}>
+            {['ALLOWED','BLOCKED','APPROVED','REJECTED'].map(s => {
+              const m       = STATUS_META[s];
+              const active  = filterStatus === s;
+              return (
+                <button
+                  key={s}
+                  onClick={() => setFilterStatus(prev => prev === s ? '' : s)}
+                  style={{
+                    ...styles.pill,
+                    color: m.color,
+                    background: active ? m.dim : 'var(--color-surface)',
+                    border: `1px solid ${active ? m.color : 'var(--color-border)'}`,
+                    boxShadow: active ? `0 0 0 1px ${m.color}` : 'none',
+                  }}
+                >
+                  {s}: <strong>{counts[s]}</strong>
+                </button>
+              );
+            })}
+            {(filterStatus || filterAction) && (
+              <button
+                className="btn btn-ghost btn-sm"
+                onClick={() => { setFilterStatus(''); setFilterAction(''); }}
+              >
+                ✕ Clear
+              </button>
+            )}
+          </div>
+        )}
+
+        <Panel flush>
+          {/* Action filter bar */}
+          {!loading && entries.length > 0 && (
+            <div style={styles.filterBar}>
+              <select
+                value={filterAction}
+                onChange={e => setFilterAction(e.target.value)}
+              >
+                <option value="">All Actions</option>
+                {ALL_ACTIONS.map(a => <option key={a} value={a}>{a}</option>)}
+              </select>
+              <span style={styles.countLabel}>
+                {filtered.length} / {entries.length} entries
+              </span>
+            </div>
           )}
-        </div>
-      )}
 
-      {/* Action filter */}
-      {!loading && entries.length > 0 && (
-        <div className="mb-4">
-          <select
-            value={filterAction}
-            onChange={e => setFilterAction(e.target.value)}
-            className="bg-gray-800 border border-gray-600 text-gray-200 text-sm rounded px-2 py-1"
-          >
-            <option value="">All Actions</option>
-            {ALL_ACTIONS.map(a => <option key={a} value={a}>{a}</option>)}
-          </select>
-          <span className="ml-3 text-xs text-gray-500">
-            Showing {filtered.length} / {entries.length} entries · auto-refreshes every 10s
-          </span>
-        </div>
-      )}
+          {loading  ? <LoadingState message="Loading audit log..." /> :
+           error    ? <ErrorState message={error} onRetry={load} /> :
+           entries.length === 0 ? (
+            <EmptyState
+              message="No audit entries yet. Run simulate_attack.sh to populate."
+              icon="📋"
+            />
+          ) : filtered.length === 0 ? (
+            <EmptyState message="No entries match the current filter." icon="🔍" />
+          ) : (
+            <div style={{ overflowX: 'auto' }}>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Timestamp</th>
+                    <th>Action</th>
+                    <th>Status</th>
+                    <th>Policy Rule</th>
+                    <th>IP</th>
+                    <th>Triggered By</th>
+                    <th>Reason</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map(entry => (
+                    <tr key={entry._id}>
+                      <td style={styles.cellMono}>{new Date(entry.createdAt).toLocaleString()}</td>
+                      <td>
+                        <code style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text)' }}>
+                          {entry.action}
+                        </code>
+                      </td>
+                      <td>
+                        <span style={{
+                          fontSize: 'var(--text-xs)',
+                          fontWeight: 'var(--weight-bold)',
+                          color: STATUS_META[entry.status]?.color || 'var(--color-text-secondary)',
+                          fontFamily: 'var(--font-mono)',
+                        }}>
+                          {entry.status}
+                        </span>
+                      </td>
+                      <td style={styles.cellMono}>{entry.policy_rule_id || '—'}</td>
+                      <td><code className="ip-addr">{entry.ip || '—'}</code></td>
+                      <td>
+                        <span style={{
+                          fontSize: 'var(--text-xs)',
+                          fontWeight: entry.triggeredBy === 'human' ? 'var(--weight-semibold)' : 'var(--weight-normal)',
+                          color: entry.triggeredBy === 'human' ? 'var(--color-accent)' : 'var(--color-text-secondary)',
+                          textTransform: 'capitalize',
+                        }}>
+                          {entry.triggeredBy}
+                        </span>
+                      </td>
+                      <td style={{ maxWidth: '220px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--color-text-secondary)', fontSize: 'var(--text-xs)' }} title={entry.reason}>
+                        {entry.reason}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Panel>
 
-      {loading && <p className="text-gray-400">Loading audit log...</p>}
-      {error   && <p className="text-red-400">Error: {error}</p>}
-
-      {!loading && !error && entries.length === 0 && (
-        <p className="text-gray-500 text-sm">
-          No audit entries yet. Run <code className="text-green-400">bash scripts/simulate_attack.sh</code> to populate.
-        </p>
-      )}
-
-      {!loading && filtered.length > 0 && (
-        <div className="overflow-x-auto rounded-lg border border-gray-700">
-          <table className="w-full text-sm text-left">
-            <thead className="bg-gray-800 text-gray-400 uppercase text-xs">
-              <tr>
-                <th className="px-4 py-3">Timestamp</th>
-                <th className="px-4 py-3">Action</th>
-                <th className="px-4 py-3">Status</th>
-                <th className="px-4 py-3">Policy Rule</th>
-                <th className="px-4 py-3">IP</th>
-                <th className="px-4 py-3">Triggered By</th>
-                <th className="px-4 py-3">Reason</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-700">
-              {filtered.map(entry => (
-                <tr key={entry._id} className="bg-gray-900 hover:bg-gray-800 transition">
-                  <td className="px-4 py-3 text-gray-400 whitespace-nowrap text-xs">
-                    {new Date(entry.createdAt).toLocaleString()}
-                  </td>
-                  <td className="px-4 py-3 font-mono text-white text-xs">{entry.action}</td>
-                  <td className="px-4 py-3">
-                    <span className={`px-2 py-0.5 rounded text-xs font-bold ${
-                      STATUS_STYLES[entry.status] || 'bg-gray-700 text-gray-300'
-                    }`}>
-                      {entry.status}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 font-mono text-xs text-gray-400">
-                    {entry.policy_rule_id || '—'}
-                  </td>
-                  <td className="px-4 py-3 font-mono text-xs text-gray-300">{entry.ip || '—'}</td>
-                  <td className="px-4 py-3 text-xs capitalize">
-                    <span className={entry.triggeredBy === 'human' ? 'text-blue-400 font-semibold' : 'text-gray-400'}>
-                      {entry.triggeredBy}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-gray-400 text-xs max-w-xs truncate" title={entry.reason}>
-                    {entry.reason}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {!loading && filtered.length === 0 && entries.length > 0 && (
-        <div className="rounded-lg border border-gray-700 bg-gray-800 p-6 text-center text-gray-400 text-sm">
-          No entries match the current filter.
-        </div>
-      )}
-    </div>
+      </div>
+    </PageWrapper>
   );
 }
+
+const styles = {
+  pillRow: {
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: 'var(--space-2)',
+    marginBottom: 'var(--space-4)',
+    alignItems: 'center',
+  },
+  pill: {
+    padding: '6px 14px',
+    borderRadius: 'var(--radius-lg)',
+    fontSize: 'var(--text-sm)',
+    cursor: 'pointer',
+    transition: 'all 150ms ease',
+    fontFamily: 'var(--font-mono)',
+  },
+  filterBar: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 'var(--space-3)',
+    padding: 'var(--space-3) var(--space-4)',
+    borderBottom: '1px solid var(--color-border)',
+    flexWrap: 'wrap',
+  },
+  countLabel: {
+    marginLeft: 'auto',
+    fontFamily: 'var(--font-mono)',
+    fontSize: 'var(--text-xs)',
+    color: 'var(--color-text-muted)',
+  },
+  cellMono: {
+    fontFamily: 'var(--font-mono)',
+    fontSize: 'var(--text-xs)',
+    color: 'var(--color-text-secondary)',
+    whiteSpace: 'nowrap',
+  },
+};

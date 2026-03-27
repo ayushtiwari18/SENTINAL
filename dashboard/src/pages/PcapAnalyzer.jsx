@@ -1,46 +1,21 @@
 /**
- * PcapAnalyzer
- * Route: /pcap
- *
- * Upload a .pcap file → calls POST /api/pcap/upload → shows:
- *   - Summary bar  (packets / attacks found / saved / skipped / time)
- *   - Attack breakdown table per detection source
- *
- * Attacks also appear in LiveAttackFeed via Socket.io automatically.
+ * PcapAnalyzer — redesigned with full design system.
+ * Drag-and-drop preserved, all result parsing preserved.
  */
 import React, { useState, useRef } from 'react';
+import { Link } from 'react-router-dom';
 import { uploadPcap } from '../services/api';
-
-const SEV_COLORS = {
-  critical: '#f44747',
-  high:     '#ff8c00',
-  medium:   '#dcdcaa',
-  low:      '#4ec9b0',
-};
-
-const TYPE_LABELS = {
-  sqli:               'SQL Injection',
-  xss:                'XSS',
-  recon:              'Port Scan / Recon',
-  traversal:          'Path Traversal',
-  command_injection:  'Command Injection',
-  ssrf:               'SSRF',
-  lfi_rfi:            'LFI / RFI',
-  brute_force:        'Brute Force',
-  ddos:               'DoS / DDoS / Flood',
-  hpp:                'HTTP Param Pollution',
-  xxe:                'XXE',
-  webshell:           'Webshell',
-  unknown:            'Unknown',
-};
+import Panel      from '../components/ui/Panel';
+import StatCard   from '../components/ui/StatCard';
+import PageWrapper from '../components/layout/PageWrapper';
 
 export default function PcapAnalyzer() {
-  const [file, setFile]         = useState(null);
+  const [file,     setFile]     = useState(null);
   const [dragging, setDragging] = useState(false);
-  const [loading, setLoading]   = useState(false);
-  const [result, setResult]     = useState(null);
-  const [error, setError]       = useState(null);
-  const inputRef                = useRef();
+  const [loading,  setLoading]  = useState(false);
+  const [result,   setResult]   = useState(null);
+  const [error,    setError]    = useState(null);
+  const inputRef = useRef();
 
   const handleFile = (f) => {
     if (!f) return;
@@ -65,13 +40,6 @@ export default function PcapAnalyzer() {
     setError(null);
     setResult(null);
     try {
-      // uploadPcap → api.js → unwrap → returns res.data.data
-      // Backend v2 shape:
-      // {
-      //   total_packets, parsed_packets, total_flows, processing_time_s,
-      //   local_attacks_found, engine_attacks_found,
-      //   attacks_saved, skipped_engine
-      // }
       const data = await uploadPcap(file);
       setResult(data);
     } catch (err) {
@@ -88,203 +56,163 @@ export default function PcapAnalyzer() {
     if (inputRef.current) inputRef.current.value = '';
   };
 
-  // Derived totals from v2 response
   const totalAttacksFound = result
     ? (result.local_attacks_found ?? 0) + (result.engine_attacks_found ?? 0)
     : 0;
 
   return (
-    <div style={{ padding: '24px 32px', maxWidth: 960 }}>
-      <h2 style={{ marginBottom: 4, color: '#e0e0e0' }}>PCAP Analyzer</h2>
-      <p style={{ color: '#666', marginBottom: 24, fontSize: 13 }}>
-        Upload a <code>.pcap</code> capture file. Every HTTP request is extracted,
-        run through the Detection Engine, and saved. Confirmed attacks appear
-        in the Live Attack Feed in real time.
-      </p>
+    <PageWrapper>
+      <div className="page-container">
 
-      {/* ── Drop zone ───────────────────────────────────────────────── */}
-      <div
-        onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
-        onDragLeave={() => setDragging(false)}
-        onDrop={handleDrop}
-        onClick={() => inputRef.current?.click()}
-        style={{
-          border: `2px dashed ${dragging ? '#00d4aa' : file ? '#00d4aa55' : '#444'}`,
-          borderRadius: 8,
-          padding: '40px 24px',
-          textAlign: 'center',
-          cursor: 'pointer',
-          background: dragging ? '#00d4aa11' : '#1a1a1a',
-          transition: 'all 0.15s',
-          marginBottom: 16,
-        }}
-      >
-        <input
-          ref={inputRef}
-          type="file"
-          accept=".pcap,.pcapng"
-          style={{ display: 'none' }}
-          onChange={(e) => handleFile(e.target.files[0])}
-        />
-        {file ? (
-          <>
-            <div style={{ fontSize: 28, marginBottom: 8 }}>📦</div>
-            <div style={{ color: '#00d4aa', fontWeight: 600 }}>{file.name}</div>
-            <div style={{ color: '#666', fontSize: 12, marginTop: 4 }}>
-              {(file.size / 1024).toFixed(1)} KB — click to change
-            </div>
-          </>
-        ) : (
-          <>
-            <div style={{ fontSize: 28, marginBottom: 8 }}>🗂️</div>
-            <div style={{ color: '#888' }}>Drag & drop a <strong>.pcap</strong> file here</div>
-            <div style={{ color: '#555', fontSize: 12, marginTop: 4 }}>or click to browse — max 500 MB</div>
-          </>
-        )}
-      </div>
+        <div className="page-header">
+          <div className="page-title-group">
+            <h1 className="page-title">PCAP Analyzer</h1>
+            <p className="page-subtitle">
+              Upload a <code>.pcap</code> capture. Every HTTP request is extracted,
+              run through the Detection Engine, and saved. Confirmed attacks
+              appear in the Live Attack Feed in real time.
+            </p>
+          </div>
+        </div>
 
-      {/* ── Buttons ─────────────────────────────────────────────────── */}
-      <div style={{ display: 'flex', gap: 12, marginBottom: 24 }}>
-        <button
-          onClick={handleSubmit}
-          disabled={!file || loading}
-          style={{
-            background: file && !loading ? '#00d4aa' : '#333',
-            color: file && !loading ? '#000' : '#555',
-            border: 'none',
-            padding: '8px 24px',
-            borderRadius: 4,
-            cursor: file && !loading ? 'pointer' : 'not-allowed',
-            fontWeight: 600,
-            fontSize: 13,
-          }}
-        >
-          {loading ? 'Analyzing…' : 'Analyze'}
-        </button>
-        {(file || result) && (
-          <button
-            onClick={reset}
+        <Panel>
+          {/* Drop Zone */}
+          <div
+            onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={handleDrop}
+            onClick={() => inputRef.current?.click()}
             style={{
-              background: 'transparent',
-              color: '#888',
-              border: '1px solid #444',
-              padding: '8px 16px',
-              borderRadius: 4,
-              cursor: 'pointer',
-              fontSize: 13,
+              ...styles.dropzone,
+              borderColor: dragging ? 'var(--color-accent)' : file ? 'var(--color-accent-hover)' : 'var(--color-border-strong)',
+              background:  dragging ? 'var(--color-accent-dim)' : 'var(--color-bg)',
             }}
           >
-            Reset
-          </button>
-        )}
-      </div>
-
-      {/* ── Error ───────────────────────────────────────────────────── */}
-      {error && (
-        <div style={{
-          background: '#f4474722', border: '1px solid #f44747',
-          borderRadius: 4, padding: '10px 16px',
-          color: '#f44747', marginBottom: 20, fontSize: 13,
-        }}>
-          {error}
-        </div>
-      )}
-
-      {/* ── Loading ─────────────────────────────────────────────────── */}
-      {loading && (
-        <div style={{ color: '#00d4aa', fontSize: 13, marginBottom: 20 }}>
-          ⏳ Processing packets… this may take a moment for large files.
-        </div>
-      )}
-
-      {/* ── Summary cards ───────────────────────────────────────────── */}
-      {result && (
-        <>
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(5, 1fr)',
-            gap: 12,
-            marginBottom: 20,
-          }}>
-            {[
-              {
-                label: 'Packets Analyzed',
-                // v2 uses total_packets (old schema used analyzed)
-                value: result.total_packets ?? result.analyzed ?? '—',
-                color: '#e0e0e0',
-              },
-              {
-                label: 'Local Detections',
-                value: result.local_attacks_found ?? 0,
-                color: (result.local_attacks_found ?? 0) > 0 ? '#f44747' : '#4ec9b0',
-              },
-              {
-                label: 'Engine Detections',
-                value: result.engine_attacks_found ?? 0,
-                color: (result.engine_attacks_found ?? 0) > 0 ? '#ff8c00' : '#4ec9b0',
-              },
-              {
-                label: 'Attacks Saved',
-                value: result.attacks_saved ?? 0,
-                color: (result.attacks_saved ?? 0) > 0 ? '#ff8c00' : '#4ec9b0',
-              },
-              {
-                label: 'Skipped (no engine)',
-                value: result.skipped_engine ?? result.skipped ?? 0,
-                color: (result.skipped_engine ?? result.skipped ?? 0) > 0 ? '#dcdcaa' : '#555',
-              },
-            ].map(card => (
-              <div key={card.label} style={{
-                background: '#1a1a1a',
-                border: '1px solid #333',
-                borderRadius: 6,
-                padding: '16px 20px',
-              }}>
-                <div style={{ fontSize: 26, fontWeight: 700, color: card.color }}>
-                  {card.value}
-                </div>
-                <div style={{ fontSize: 11, color: '#666', marginTop: 4 }}>{card.label}</div>
-              </div>
-            ))}
+            <input
+              ref={inputRef}
+              type="file"
+              accept=".pcap,.pcapng"
+              style={{ display: 'none' }}
+              onChange={(e) => handleFile(e.target.files[0])}
+            />
+            {file ? (
+              <>
+                <span style={{ fontSize: '28px' }}>📦</span>
+                <span style={{ color: 'var(--color-accent)', fontWeight: 'var(--weight-semibold)' }}>{file.name}</span>
+                <span style={{ color: 'var(--color-text-muted)', fontSize: 'var(--text-xs)' }}>
+                  {(file.size / 1024).toFixed(1)} KB — click to change
+                </span>
+              </>
+            ) : (
+              <>
+                <span style={{ fontSize: '28px' }}>🗂️</span>
+                <span style={{ color: 'var(--color-text-secondary)' }}>
+                  Drag & drop a <strong>.pcap</strong> file here
+                </span>
+                <span style={{ color: 'var(--color-text-muted)', fontSize: 'var(--text-xs)' }}>
+                  or click to browse — max 500 MB
+                </span>
+              </>
+            )}
           </div>
 
-          {/* Processing time badge */}
-          {result.processing_time_s !== undefined && (
-            <div style={{ fontSize: 12, color: '#555', marginBottom: 16 }}>
-              ⚡ Processed in <strong style={{ color: '#888' }}>
-                {(result.processing_time_s * 1000).toFixed(1)} ms
-              </strong>
-              {result.total_flows !== undefined && (
-                <> · <strong style={{ color: '#888' }}>{result.total_flows}</strong> flows built</>
-              )}
-            </div>
+          {/* Buttons */}
+          <div style={{ display: 'flex', gap: 'var(--space-3)', marginTop: 'var(--space-4)' }}>
+            <button
+              className="btn btn-primary"
+              onClick={handleSubmit}
+              disabled={!file || loading}
+              style={{ opacity: (!file || loading) ? 0.5 : 1 }}
+            >
+              {loading ? '⏳ Analyzing…' : 'Analyze'}
+            </button>
+            {(file || result) && (
+              <button className="btn btn-ghost" onClick={reset}>Reset</button>
+            )}
+          </div>
+
+          {/* Error */}
+          {error && (
+            <div style={styles.errorBanner}>{error}</div>
           )}
 
-          {/* ── Result message ──────────────────────────────────────── */}
-          {totalAttacksFound > 0 ? (
-            <div style={{
-              background: '#1a1a1a', border: '1px solid #333',
-              borderRadius: 6, padding: '14px 18px',
-              fontSize: 13, color: '#888',
-            }}>
-              🚨 <strong style={{ color: '#f44747' }}>{totalAttacksFound}</strong> attack signal
-              {totalAttacksFound !== 1 ? 's' : ''} detected
-              {' '}(<strong style={{ color: '#00d4aa' }}>{result.attacks_saved ?? 0}</strong> saved
-              to MongoDB). Head to{' '}
-              <a href="/attacks" style={{ color: '#00d4aa' }}>Attacks</a> or watch the{' '}
-              <strong style={{ color: '#e0e0e0' }}>Live Attack Feed</strong> on the Dashboard.
-            </div>
-          ) : (
-            <div style={{
-              background: '#1a1a1a', border: '1px solid #333',
-              borderRadius: 6, padding: '14px 18px',
-              fontSize: 13, color: '#4ec9b0',
-            }}>
-              ✅ No threats detected in this capture file.
+          {/* Loading */}
+          {loading && (
+            <div style={{ color: 'var(--color-accent)', fontSize: 'var(--text-sm)', marginTop: 'var(--space-3)' }}>
+              Processing packets… this may take a moment for large files.
             </div>
           )}
-        </>
-      )}
-    </div>
+        </Panel>
+
+        {/* Results */}
+        {result && (
+          <>
+            <div className="stat-grid section" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', marginTop: 'var(--space-4)' }}>
+              <StatCard label="Packets Analyzed"    value={result.total_packets ?? result.analyzed ?? 0} />
+              <StatCard label="Local Detections"    value={result.local_attacks_found   ?? 0} color={(result.local_attacks_found   ?? 0) > 0 ? 'var(--color-critical)' : 'var(--color-online)'} />
+              <StatCard label="Engine Detections"   value={result.engine_attacks_found  ?? 0} color={(result.engine_attacks_found  ?? 0) > 0 ? 'var(--color-high)'     : 'var(--color-online)'} />
+              <StatCard label="Attacks Saved"        value={result.attacks_saved         ?? 0} color={(result.attacks_saved         ?? 0) > 0 ? 'var(--color-warning)'  : 'var(--color-online)'} />
+              <StatCard label="Skipped (no engine)" value={result.skipped_engine ?? result.skipped ?? 0} />
+            </div>
+
+            {result.processing_time_s !== undefined && (
+              <p style={{ color: 'var(--color-text-muted)', fontSize: 'var(--text-sm)', fontFamily: 'var(--font-mono)', marginTop: 'var(--space-2)' }}>
+                ⚡ {(result.processing_time_s * 1000).toFixed(1)}ms
+                {result.total_flows !== undefined && <> · {result.total_flows} flows</>}
+              </p>
+            )}
+
+            <div style={{
+              ...styles.resultBanner,
+              borderColor:  totalAttacksFound > 0 ? 'var(--color-critical)' : 'var(--color-online)',
+              background:   totalAttacksFound > 0 ? 'rgba(244,71,71,0.06)' : 'rgba(75,181,67,0.06)',
+            }}>
+              {totalAttacksFound > 0 ? (
+                <>
+                  🚨 <strong style={{ color: 'var(--color-critical)' }}>{totalAttacksFound}</strong> attack signal{totalAttacksFound !== 1 ? 's' : ''} detected
+                  {' '}(<strong style={{ color: 'var(--color-accent)' }}>{result.attacks_saved ?? 0}</strong> saved to MongoDB).
+                  {' '}Head to <Link to="/attacks" style={{ color: 'var(--color-accent)' }}>Attacks</Link> or watch the Live Feed on the Dashboard.
+                </>
+              ) : (
+                <span style={{ color: 'var(--color-online)' }}>✅ No threats detected in this capture file.</span>
+              )}
+            </div>
+          </>
+        )}
+
+      </div>
+    </PageWrapper>
   );
 }
+
+const styles = {
+  dropzone: {
+    border: '2px dashed',
+    borderRadius: 'var(--radius-lg)',
+    padding: 'var(--space-7) var(--space-5)',
+    textAlign: 'center',
+    cursor: 'pointer',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: 'var(--space-2)',
+    transition: 'border-color 150ms ease, background 150ms ease',
+  },
+  errorBanner: {
+    marginTop: 'var(--space-3)',
+    padding: 'var(--space-3) var(--space-4)',
+    border: '1px solid var(--color-critical)',
+    borderRadius: 'var(--radius-md)',
+    color: 'var(--color-critical)',
+    fontSize: 'var(--text-sm)',
+    background: 'rgba(244,71,71,0.08)',
+  },
+  resultBanner: {
+    marginTop: 'var(--space-3)',
+    padding: 'var(--space-3) var(--space-4)',
+    border: '1px solid',
+    borderRadius: 'var(--radius-md)',
+    fontSize: 'var(--text-sm)',
+    color: 'var(--color-text-secondary)',
+  },
+};

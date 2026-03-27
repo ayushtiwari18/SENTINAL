@@ -7,6 +7,29 @@
 [![Python](https://img.shields.io/badge/Python-FastAPI-blue)](https://fastapi.tiangolo.com)
 [![React](https://img.shields.io/badge/React-Vite-61dafb)](https://vitejs.dev)
 [![MongoDB](https://img.shields.io/badge/Database-MongoDB_Atlas-47A248)](https://www.mongodb.com/atlas)
+[![Postman Collection](https://img.shields.io/badge/Postman-Run%20Collection-FF6C37?logo=postman&logoColor=white)](https://raw.githubusercontent.com/ayushtiwari18/SENTINAL/main/SENTINAL_Postman_Collection.json)
+
+---
+
+## 🚀 Test the API with Postman
+
+**Import the full collection in one click:**
+
+1. Open Postman → **Import**
+2. Paste this URL:
+```
+https://raw.githubusercontent.com/ayushtiwari18/SENTINAL/main/SENTINAL_Postman_Collection.json
+```
+3. Set up the `SENTINAL Production` environment with your EC2 IP:
+
+| Variable | Value |
+|---|---|
+| `base` | `http://<YOUR_EC2_IP>:3000` |
+| `detection` | `http://<YOUR_EC2_IP>:8002` |
+| `pcap` | `http://<YOUR_EC2_IP>:8003` |
+| `armoriq` | `http://<YOUR_EC2_IP>:8004` |
+
+> The collection includes 40+ requests across 8 folders: health checks, attack simulations, ArmorIQ enforcement tests, full pipeline triggers, human approval workflow, and an end-to-end demo sequence.
 
 ---
 
@@ -261,6 +284,7 @@ SENTINAL/
 ├── start.sh                        ← start all services
 ├── stop.sh                         ← stop all services
 ├── status.sh                       ← check all health endpoints
+├── SENTINAL_Postman_Collection.json ← Postman collection (import this)
 │
 ├── config/
 │   └── envValidator.js             ← startup env guard (exits if vars missing)
@@ -310,16 +334,19 @@ SENTINAL/
 | GET | `/health` | Liveness probe (no DB required — for AWS ALB) |
 | GET | `/api/health` | Full health: DB status + memory + service URLs |
 | POST | `/api/logs/ingest` | Ingest HTTP request metadata |
-| GET | `/api/logs/recent` | Last 20 system logs |
 | GET | `/api/attacks/recent` | Last 20 attack events |
+| GET | `/api/attacks/search?q=` | Full-text search attacks |
 | GET | `/api/attacks/:id/forensics` | Full forensic report for an attack |
+| POST | `/api/armoriq/trigger` | Manually trigger full attack pipeline (returns 201) |
 | GET | `/api/stats` | Aggregate platform stats |
 | GET | `/api/service-status` | Health of all microservices |
 | GET | `/api/alerts` | Alert feed |
 | PATCH | `/api/alerts/:id/read` | Mark an alert as read |
 | POST | `/api/pcap/upload` | Upload `.pcap` / `.pcapng` for analysis |
 | GET | `/api/audit` | Audit log of ArmorIQ decisions |
-| GET | `/api/actions` | ArmorIQ action queue |
+| GET | `/api/actions/pending` | Pending human-approval actions |
+| POST | `/api/actions/:id/approve` | Approve a blocked action (HUMAN_OVERRIDE) |
+| POST | `/api/actions/:id/reject` | Reject a blocked action |
 
 ### Socket.io Events (port 3000)
 

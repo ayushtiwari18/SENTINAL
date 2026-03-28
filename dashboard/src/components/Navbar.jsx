@@ -8,6 +8,7 @@ import { getAlerts, getPendingActions } from '../services/api';
 
 const BASE_LINKS = [
   { to: '/dashboard',    label: 'Dashboard' },
+  { to: '/explore',      label: '🧭 Explore',   badge: null, highlight: true },
   { to: '/attacks',      label: 'Attacks' },
   { to: '/alerts',       label: 'Alerts',        badge: 'alerts' },
   { to: '/logs',         label: 'Logs' },
@@ -24,7 +25,6 @@ export default function Navbar() {
   const [unreadAlerts,  setUnreadAlerts]  = useState(0);
   const [pendingQueue,  setPendingQueue]  = useState(0);
 
-  // Initial fetch
   useEffect(() => {
     getAlerts(200)
       .then(data => setUnreadAlerts((data || []).filter(a => !a.isRead).length))
@@ -34,7 +34,6 @@ export default function Navbar() {
       .catch(() => {});
   }, []);
 
-  // Live socket updates
   useSocket('alert:new', useCallback(() => {
     setUnreadAlerts(n => n + 1);
   }, []));
@@ -62,8 +61,16 @@ export default function Navbar() {
             ...styles.link,
             color: l.to === '/simulate'
               ? (isActive ? '#ff4444' : '#ff8888')
+              : l.highlight
+              ? (isActive ? '#00d4aa' : '#00b894')
               : (isActive ? '#00d4aa' : '#aaa'),
-            fontWeight: l.to === '/simulate' ? 700 : 'normal',
+            fontWeight: (l.to === '/simulate' || l.highlight) ? 700 : 'normal',
+            background: l.highlight && !isActive
+              ? 'rgba(0,212,170,0.08)'
+              : 'transparent',
+            padding:    l.highlight ? '3px 10px' : '3px 4px',
+            borderRadius: l.highlight ? '4px' : 0,
+            border: l.highlight ? '1px solid rgba(0,212,170,0.2)' : '1px solid transparent',
           })}
         >
           {l.label}
@@ -85,7 +92,7 @@ const styles = {
     background: '#0d0d0d',
   },
   brand: { fontWeight: 'bold', marginRight: 8, color: '#00d4aa', fontSize: 15, letterSpacing: 1 },
-  link:  { textDecoration: 'none', fontSize: 13, display: 'flex', alignItems: 'center', gap: 5, position: 'relative' },
+  link:  { textDecoration: 'none', fontSize: 13, display: 'flex', alignItems: 'center', gap: 5, position: 'relative', transition: 'color 150ms ease' },
   badgeRed: {
     background: '#dc2626', color: '#fff', borderRadius: 9999,
     fontSize: 10, fontWeight: 700, padding: '1px 6px', lineHeight: 1.4,

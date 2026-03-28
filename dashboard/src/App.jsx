@@ -14,6 +14,7 @@ import PcapAnalyzer    from './pages/PcapAnalyzer';
 import ActionQueuePage from './pages/ActionQueuePage';
 import AuditLog        from './pages/AuditLog';
 import SimulateAttack  from './pages/SimulateAttack';
+import ExplorePage     from './pages/ExplorePage';
 import NotFound        from './pages/NotFound';
 
 export default function App() {
@@ -23,6 +24,7 @@ export default function App() {
         <Route path="/" element={<Landing />} />
         <Route element={<AppLayout />}>
           <Route path="/dashboard"     element={<Dashboard />} />
+          <Route path="/explore"       element={<ExplorePage />} />
           <Route path="/attacks"       element={<Attacks />} />
           <Route path="/attacks/:id"   element={<ForensicsPage />} />
           <Route path="/alerts"        element={<Alerts />} />

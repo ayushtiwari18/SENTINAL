@@ -5,7 +5,9 @@ const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 const api = axios.create({ baseURL: API_BASE });
 
 // unwrap standard { success, message, data } envelope
-const unwrap = res => res.data.data;
+// Safe unwrap — returns data field if present, otherwise full response body
+const unwrap    = res => res.data.data;
+const unwrapSafe = res => res.data.data ?? res.data;
 
 // ── Existing API calls ──────────────────────────────────────────────────────────
 export const getStats          = ()       => api.get('/api/stats').then(unwrap);
@@ -29,9 +31,11 @@ export const uploadPcap = (file, projectId = 'pcap-upload') => {
 };
 
 // ── ArmorIQ API calls ─────────────────────────────────────────────────────────
+// Use unwrapSafe here: approveAction and rejectAction return { success, message, data }
+// where data is the updated ActionQueue item — safe unwrap handles both cases
 export const getPendingActions  = ()   => api.get('/api/actions/pending').then(unwrap);
 export const approveAction = (id) =>
-  api.post(`/api/actions/${id}/approve`, { approvedBy: 'human' }).then(unwrap);
+  api.post(`/api/actions/${id}/approve`, { approvedBy: 'human' }).then(unwrapSafe);
 export const rejectAction  = (id) =>
-  api.post(`/api/actions/${id}/reject`, { rejectedBy: 'human' }).then(unwrap);
+  api.post(`/api/actions/${id}/reject`, { rejectedBy: 'human' }).then(unwrapSafe);
 export const getAuditLog  = (n = 50) => api.get(`/api/audit?limit=${n}`).then(unwrap);

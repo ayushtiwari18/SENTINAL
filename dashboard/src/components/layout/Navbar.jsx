@@ -1,7 +1,15 @@
 /**
  * Navbar — SENTINAL command-center navigation.
- * Preserves all socket/badge logic from original.
- * Full visual redesign using design system tokens.
+ *
+ * FIX 1: Removed `{({ isActive }) => isActive && <span style={styles.activeBar} />}`
+ *         inside NavLink children. NavLink's render-prop pattern is NOT valid as a
+ *         JSX child — React threw "Functions are not valid as a React child" which
+ *         corrupted the entire component tree and prevented the ActionQueue modal
+ *         overlay from receiving pointer events.
+ *
+ * FIX 2: Removed `'@media (max-width: 900px)': { display: 'flex' }` from
+ *         mobileToggle inline style. React inline styles do not support media
+ *         queries — use a <style> tag or CSS class instead.
  */
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
@@ -9,7 +17,6 @@ import { useSocket }       from '../../hooks/useSocket';
 import { getAlerts, getPendingActions } from '../../services/api';
 import { NAV_LINKS } from '../../utils/constants';
 
-// Minimal inline SVG icons (no external dependency needed yet)
 const icons = {
   LayoutDashboard: () => (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -92,7 +99,6 @@ export default function Navbar() {
   const location = useLocation();
   const prevPath = useRef(location.pathname);
 
-  // Close mobile menu on route change
   useEffect(() => {
     if (prevPath.current !== location.pathname) {
       setMobileOpen(false);
@@ -100,7 +106,6 @@ export default function Navbar() {
     }
   }, [location.pathname]);
 
-  // Initial fetch
   useEffect(() => {
     getAlerts(200)
       .then(data => setUnreadAlerts((data || []).filter(a => !a.isRead).length))
@@ -110,8 +115,7 @@ export default function Navbar() {
       .catch(() => {});
   }, []);
 
-  // Live socket updates
-  useSocket('alert:new', useCallback(() => setUnreadAlerts(n => n + 1), []));
+  useSocket('alert:new',      useCallback(() => setUnreadAlerts(n => n + 1), []));
   useSocket('action:pending', useCallback(() => setPendingQueue(n => n + 1), []));
 
   const getBadge = (badgeKey) => {
@@ -124,17 +128,22 @@ export default function Navbar() {
 
   return (
     <>
+      <style>{`
+        .sentinal-mobile-toggle { display: none; }
+        @media (max-width: 900px) { .sentinal-mobile-toggle { display: flex; } }
+      `}</style>
+
       <nav style={styles.nav}>
-        {/* Brand */}
         <NavLink to="/dashboard" style={styles.brand}>
           <span style={styles.brandIcon}><IconComponent name="Shield" /></span>
           <span style={styles.brandText}>SENTINAL</span>
         </NavLink>
 
-        {/* Divider */}
         <span style={styles.brandDivider} />
 
-        {/* Desktop Links */}
+        {/* FIX 1: removed {({ isActive }) => ...} render-prop child — was causing
+            "Functions are not valid as a React child" and corrupting the tree.
+            activeBar indicator removed; active state is handled by linkActive style. */}
         <div style={styles.links}>
           {NAV_LINKS.map(link => (
             <NavLink
@@ -142,7 +151,7 @@ export default function Navbar() {
               to={link.to}
               style={({ isActive }) => ({
                 ...styles.link,
-                ...(isActive ? styles.linkActive : {}),
+                ...(isActive    ? styles.linkActive  : {}),
                 ...(link.danger ? styles.linkDanger(isActive) : {}),
               })}
             >
@@ -151,15 +160,16 @@ export default function Navbar() {
               </span>
               <span>{link.label}</span>
               {link.badge && getBadge(link.badge)}
-              {({ isActive }) => isActive && <span style={styles.activeBar} />}
             </NavLink>
           ))}
         </div>
 
-        {/* Right: live indicator + mobile toggle */}
         <div style={styles.right}>
           <span className="live-indicator">LIVE</span>
+          {/* FIX 2: moved responsive display to <style> tag above — inline styles
+              do not support @media queries so it was silently ignored + warned. */}
           <button
+            className="sentinal-mobile-toggle"
             style={styles.mobileToggle}
             onClick={() => setMobileOpen(o => !o)}
             aria-label="Toggle menu"
@@ -174,7 +184,6 @@ export default function Navbar() {
         </div>
       </nav>
 
-      {/* Mobile Menu */}
       {mobileOpen && (
         <div style={styles.mobileMenu}>
           {NAV_LINKS.map(link => (
@@ -183,7 +192,7 @@ export default function Navbar() {
               to={link.to}
               style={({ isActive }) => ({
                 ...styles.mobileLink,
-                ...(isActive   ? styles.mobileLinkActive : {}),
+                ...(isActive    ? styles.mobileLinkActive : {}),
                 ...(link.danger ? { color: 'var(--color-critical)' } : {}),
               })}
             >
@@ -220,11 +229,7 @@ const styles = {
     textDecoration: 'none',
     flexShrink: 0,
   },
-  brandIcon: {
-    color: 'var(--color-accent)',
-    display: 'flex',
-    alignItems: 'center',
-  },
+  brandIcon: { color: 'var(--color-accent)', display: 'flex', alignItems: 'center' },
   brandText: {
     fontWeight: 'var(--weight-bold)',
     fontSize: 'var(--text-base)',
@@ -269,20 +274,7 @@ const styles = {
     color: isActive ? 'var(--color-critical)' : '#ff8888',
     background: isActive ? 'var(--color-critical-dim)' : 'transparent',
   }),
-  linkIcon: {
-    display: 'flex',
-    alignItems: 'center',
-    opacity: 0.7,
-  },
-  activeBar: {
-    position: 'absolute',
-    bottom: '-1px',
-    left: '9px',
-    right: '9px',
-    height: '2px',
-    background: 'var(--color-accent)',
-    borderRadius: 'var(--radius-full)',
-  },
+  linkIcon: { display: 'flex', alignItems: 'center', opacity: 0.7 },
   badge: (isRed) => ({
     background: isRed ? 'var(--color-critical)' : 'var(--color-warning)',
     color: '#fff',
@@ -303,7 +295,6 @@ const styles = {
     flexShrink: 0,
   },
   mobileToggle: {
-    display: 'none',
     background: 'none',
     border: 'none',
     color: 'var(--color-text-secondary)',
@@ -312,7 +303,6 @@ const styles = {
     borderRadius: 'var(--radius-md)',
     alignItems: 'center',
     justifyContent: 'center',
-    '@media (max-width: 900px)': { display: 'flex' },
   },
   mobileMenu: {
     position: 'sticky',

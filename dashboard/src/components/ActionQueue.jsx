@@ -244,7 +244,8 @@ const styles = {
   modalOverlay: {
     position: 'fixed',
     inset: 0,
-    zIndex: 'var(--z-modal)',
+    // FIX: CSS variables do NOT work in React inline styles — must use a number
+    zIndex: 9999,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',

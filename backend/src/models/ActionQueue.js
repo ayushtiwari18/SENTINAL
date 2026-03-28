@@ -27,6 +27,11 @@ const ActionQueueSchema = new mongoose.Schema(
     agentReason:   { type: String, default: '' },
     blockedReason: { type: String, default: '' },
     ip:            { type: String, default: '' },
+    // FIX: attackType and severity were missing — frontend ActionQueue.jsx renders these fields.
+    // Without them the schema strips them on save and they come back undefined,
+    // causing SeverityBadge to receive undefined and potentially throw a silent render error.
+    attackType:    { type: String, default: null },
+    severity:      { type: String, default: null },
     approvedBy:    { type: String, default: null },
     approvedAt:    { type: Date,   default: null },
     executedAt:    { type: Date,   default: null }

@@ -1,6 +1,6 @@
 # SENTINAL — Master Reference Document
 
-> **Version:** 10.0 · **Date:** 2026-03-28 · **Status:** Living document — single source of truth
+> **Version:** 11.0 · **Date:** 2026-03-28 · **Status:** Living document — single source of truth
 >
 > Only one doc file exists in this repo. This is it.
 > Do NOT create REPOSITORY_AUDIT.md, CURRENT_POLICY_FLOW.md, SYSTEM_BUG_REPORT.md,
@@ -767,33 +767,161 @@ API Health:       http://<EC2_IP>:3000/health
 
 ---
 
-### PART G — Day-to-Day Operations
+### PART G — Updating the Server with New Code (git pull + restart)
+
+> Use this whenever a teammate pushes new code to `main` and you need the live server to reflect it.
+> **The EC2 IP does NOT change** during an active session — only `.env` and `dashboard/dist/` may need updating.
+
+#### Scenario 1 — Backend-only change (Node.js or Python files changed)
 
 ```bash
-# Status
-pm2 list
-./status.sh
-
-# Logs
-pm2 logs sentinal-gateway
-pm2 logs sentinal-detection
-pm2 logs --lines 50 --nostream      # last 50 lines all services
-
-# Restart
-pm2 restart sentinal-gateway        # one service
-pm2 restart all                     # all services
-./start.sh                          # uses ecosystem.config.js
-./stop.sh                           # stop all
-
-# After code changes (git pull + rebuild)
+cd ~/SENTINAL
 git pull origin main
-cd ~/SENTINAL/dashboard && npm run build
-pm2 restart all && pm2 save
+
+pm2 restart sentinal-gateway       # if backend/ changed
+pm2 restart sentinal-detection     # if services/detection-engine/ changed
+pm2 restart sentinal-pcap          # if services/pcap-processor/ changed
+pm2 restart sentinal-armoriq       # if services/armoriq-agent/ changed
+
+pm2 save                           # persist the updated state
+```
+
+> PM2 `restart` does a graceful stop + start — zero manual intervention needed.
+> The Python services reload their `.py` files on process restart without needing a venv rebuild.
+
+---
+
+#### Scenario 2 — Dashboard (React/JSX) files changed
+
+The dashboard is a **compiled static build** (`dashboard/dist/`). A git pull alone is NOT enough — you must rebuild:
+
+```bash
+cd ~/SENTINAL
+git pull origin main
+
+cd ~/SENTINAL/dashboard
+npm run build                      # recompiles src/ → dist/
+
+pm2 restart sentinal-dashboard     # serve picks up the new dist/
+pm2 save
 ```
 
 ---
 
-### PART H — Known Issues & Fixes
+#### Scenario 3 — New npm packages added to backend (`package.json` changed)
+
+```bash
+cd ~/SENTINAL
+git pull origin main
+
+cd ~/SENTINAL/backend
+npm install --omit=dev             # install new deps
+
+pm2 restart sentinal-gateway
+pm2 save
+```
+
+---
+
+#### Scenario 4 — New Python packages added (`requirements.txt` changed)
+
+```bash
+cd ~/SENTINAL
+git pull origin main
+
+# Re-activate the relevant venv and install
+source ~/SENTINAL/services/detection-engine/.venv/bin/activate
+pip install -r ~/SENTINAL/services/detection-engine/requirements.txt -q
+deactivate
+
+# Repeat for whichever service had requirements.txt changed:
+# source ~/SENTINAL/services/pcap-processor/.venv/bin/activate && pip install -r requirements.txt -q && deactivate
+# source ~/SENTINAL/services/armoriq-agent/.venv/bin/activate && pip install -r requirements.txt -q && deactivate
+
+pm2 restart sentinal-detection     # or sentinal-pcap / sentinal-armoriq
+pm2 save
+```
+
+---
+
+#### Scenario 5 — Full update (unsure what changed — safest option)
+
+```bash
+cd ~/SENTINAL
+git pull origin main
+
+# Rebuild dashboard
+cd ~/SENTINAL/dashboard
+npm run build
+
+# Restart all 5 services at once
+cd ~/SENTINAL
+pm2 restart all
+pm2 save
+
+# Verify
+pm2 list
+curl http://localhost:3000/health
+```
+
+---
+
+#### Quick Reference — Update Cheat Sheet
+
+| What changed in the PR | Commands needed |
+|------------------------|------------------|
+| `backend/` JS files only | `git pull` → `pm2 restart sentinal-gateway` → `pm2 save` |
+| `services/detection-engine/` Python files | `git pull` → `pm2 restart sentinal-detection` → `pm2 save` |
+| `services/pcap-processor/` Python files | `git pull` → `pm2 restart sentinal-pcap` → `pm2 save` |
+| `services/armoriq-agent/` Python or `policy.yaml` | `git pull` → `pm2 restart sentinal-armoriq` → `pm2 save` |
+| `dashboard/src/` React/JSX files | `git pull` → `npm run build` (in dashboard/) → `pm2 restart sentinal-dashboard` → `pm2 save` |
+| `backend/package.json` (new npm dep) | `git pull` → `npm install --omit=dev` (in backend/) → `pm2 restart sentinal-gateway` → `pm2 save` |
+| `*/requirements.txt` (new pip dep) | `git pull` → activate venv → `pip install -r requirements.txt` → deactivate → `pm2 restart <service>` → `pm2 save` |
+| Multiple services / unsure | `git pull` → `npm run build` (dashboard) → `pm2 restart all` → `pm2 save` |
+
+---
+
+### PART H — Day-to-Day Operations
+
+```bash
+# Check status
+pm2 list
+./status.sh
+
+# View logs
+pm2 logs sentinal-gateway
+pm2 logs sentinal-detection
+pm2 logs sentinal-pcap
+pm2 logs sentinal-armoriq
+pm2 logs sentinal-dashboard
+pm2 logs --lines 50 --nostream      # last 50 lines of all services
+
+# Restart a single service
+pm2 restart sentinal-gateway
+pm2 restart sentinal-detection
+pm2 restart sentinal-pcap
+pm2 restart sentinal-armoriq
+pm2 restart sentinal-dashboard
+
+# Restart everything
+pm2 restart all
+./start.sh                          # alternative: uses ecosystem.config.js
+
+# Stop all
+./stop.sh
+pm2 stop all
+
+# If PM2 process list is empty (e.g. after reboot)
+pm2 resurrect                       # restores last pm2 save state
+# OR
+pm2 start ~/SENTINAL/ecosystem.config.js
+pm2 start "serve -s dist -l 5173" --name sentinal-dashboard --cwd ~/SENTINAL/dashboard
+pm2 save
+```
+
+---
+
+### PART I — Known Issues & Fixes
 
 | Issue | Fix Applied |
 |-------|-------------|
@@ -807,6 +935,8 @@ pm2 restart all && pm2 save
 | EC2 Instance Connect failing | Reboot instance → try again |
 | SSH connection timeout | Security Group port 22 source was `My IP` — change to `0.0.0.0/0` |
 | Old IP `98.82.8.144` hardcoded anywhere | Replaced — always use `<CURRENT_EC2_IP>` placeholder |
+| Dashboard not reflecting new code after git pull | Must run `npm run build` in `dashboard/` then `pm2 restart sentinal-dashboard` |
+| Python service not reflecting new code after git pull | Run `pm2 restart <service-name>` — venv does not need rebuild unless requirements.txt changed |
 
 ---
 
@@ -898,7 +1028,8 @@ mongodb+srv://USERNAME:PASSWORD@cluster0.xxxxx.mongodb.net/sentinal
 | 2026-03-27 | 7.0 | Full AWS EC2 deploy guide Parts A–M: .pem, EC2 launch, apt install, venvs, PM2 |
 | 2026-03-27 | 8.0 | AWS Academy strategy: `deploy.sh` one-command deploy, §15 per-session checklist, IP change workflow, MONGO_URI prompt, Atlas IP update reminder, troubleshooting table, ecosystem.config.js absolute venv paths in deploy.sh |
 | 2026-03-27 | 9.0 | SimulateAttack page `/simulate` (14th page), Postman collection `SENTINAL_Postman_Collection.json` (40+ requests, 8 folders), updated folder structure with all 14 pages + demo-target routes, §13 demo options A–D, §4 Flow D for simulate page, socket subscription notes |
-| 2026-03-28 | 10.0 | §14 rewritten: verified against deploy.sh SHA 6bab1b30, added services table with PM2 names, expanded Parts A–H with exact commands and inline explanations. §15 updated: added `pm2 logs errored/stopped` troubleshooting row, clarified instance type to t2.medium. §10 updated: removed stale hardcoded IP 98.82.8.144, replaced with `<CURRENT_EC2_IP>` placeholder + IP mapping note (new IP: 98.94.36.226). Version + date header updated. |
+| 2026-03-28 | 10.0 | §14 rewritten: verified against deploy.sh SHA 6bab1b30, added services table with PM2 names, expanded Parts A–H. §15 updated: added `pm2 list errored/stopped` troubleshooting row. §10: removed stale IP, replaced with `<CURRENT_EC2_IP>`. |
+| 2026-03-28 | 11.0 | §14 PART G fully expanded: added 5 update scenarios (backend-only, dashboard, new npm deps, new pip deps, full update), added Quick Reference cheat sheet table mapping changed files to exact commands. PART H expanded with all individual service log/restart commands + `pm2 resurrect` recovery. PART I: added 2 new known-issue rows for dashboard and Python service post-pull update. |
 
 ---
 

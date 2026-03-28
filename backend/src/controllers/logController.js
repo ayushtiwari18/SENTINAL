@@ -14,4 +14,17 @@ const ingest = async (req, res, next) => {
   }
 };
 
-module.exports = { ingest };
+const getLogs = async (req, res, next) => {
+  try {
+    const limit = parseInt(req.query.limit) || 50;
+    const logs = await logService.getRecentLogs(limit);
+    res.status(200).json({
+      success: true,
+      data: logs
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+module.exports = { ingest, getLogs };

@@ -1,16 +1,6 @@
 /**
- * ActionQueue — ArmorIQ blocked actions with confirm modal + attack link.
- *
- * ROOT CAUSE FIX:
- * PageWrapper injects `will-change: transform` via CSS animation on .page-enter.
- * `will-change: transform` (and `transform` itself) creates a new CSS stacking
- * context. Any `position:fixed` child is then clipped to that context — the modal
- * overlay rendered but pointer-events were swallowed by the stacking context boundary,
- * so Yes/Cancel button clicks never fired and no network request was ever made.
- *
- * Fix: render the confirm modal via ReactDOM.createPortal(modal, document.body).
- * The portal mounts the modal as a direct child of <body>, completely outside the
- * PageWrapper stacking context, so position:fixed and z-index work correctly.
+ * ActionQueue — ArmorIQ blocked actions with confirm modal.
+ * Modal rendered via ReactDOM.createPortal to escape PageWrapper stacking context.
  */
 import { useEffect, useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
@@ -41,7 +31,7 @@ export default function ActionQueue() {
       const data = await getPendingActions();
       setItems(data || []);
     } catch (e) {
-      console.error('[ActionQueue] getPendingActions error:', e.message);
+      console.error('[ActionQueue] load error:', e.message);
     } finally {
       setLoading(false);
     }
@@ -86,7 +76,6 @@ export default function ActionQueue() {
     setModalError(null);
   };
 
-  // Portal modal — mounted on document.body to escape PageWrapper stacking context
   const modal = confirm ? createPortal(
     <div style={styles.modalOverlay}>
       <div style={styles.modal}>

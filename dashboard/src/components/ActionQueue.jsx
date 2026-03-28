@@ -1,6 +1,11 @@
 /**
  * ActionQueue — ArmorIQ blocked actions with confirm modal + attack link.
  * Full design system redesign. All business logic preserved.
+ *
+ * FIX: setConfirm(null) was called BEFORE the API call completed, causing
+ * the modal to vanish and the screen to appear blank when the API failed.
+ * Now: modal stays open during in-flight request, closes only on success,
+ * and shows an inline error message on failure instead of alert().
  */
 import { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
@@ -18,10 +23,14 @@ const RISK_META = {
 };
 
 export default function ActionQueue() {
-  const [items,    setItems]    = useState([]);
-  const [loading,  setLoading]  = useState(true);
-  const [removing, setRemoving] = useState(new Set());
-  const [confirm,  setConfirm]  = useState(null);
+  const [items,      setItems]      = useState([]);
+  const [loading,    setLoading]    = useState(true);
+  const [removing,   setRemoving]   = useState(new Set());
+  const [confirm,    setConfirm]    = useState(null);
+  // FIX: track in-flight state so buttons can be disabled and modal stays open
+  const [processing, setProcessing] = useState(false);
+  // FIX: inline error instead of alert() which can be silently swallowed
+  const [modalError, setModalError] = useState(null);
 
   const load = async () => {
     try {
@@ -49,17 +58,33 @@ export default function ActionQueue() {
     }, 350);
   };
 
+  // FIX: corrected handleConfirm — API call completes BEFORE modal is dismissed
   const handleConfirm = async () => {
-    if (!confirm) return;
+    if (!confirm || processing) return;
     const { id, type } = confirm;
-    setConfirm(null);
+
+    setProcessing(true);
+    setModalError(null);
+
     try {
       if (type === 'approve') await approveAction(id);
       else                    await rejectAction(id);
+      // Only dismiss modal and fade card AFTER successful API response
+      setConfirm(null);
+      setProcessing(false);
       fadeOut(id);
     } catch (e) {
-      alert(`${type} failed: ` + e.message);
+      // Show error inline in the modal — never close modal on failure
+      const msg = e?.response?.data?.message || e.message || 'Request failed. Please try again.';
+      setModalError(`${type === 'approve' ? 'Approve' : 'Reject'} failed: ${msg}`);
+      setProcessing(false);
     }
+  };
+
+  const handleCancelModal = () => {
+    if (processing) return; // don't allow cancel while request is in-flight
+    setConfirm(null);
+    setModalError(null);
   };
 
   if (loading) return <LoadingState message="Loading action queue..." />;
@@ -87,14 +112,35 @@ export default function ActionQueue() {
                 ? 'This will authorise ArmorIQ to execute this action. Are you sure?'
                 : 'This will permanently reject this action. It will not be executed.'}
             </p>
+
+            {/* FIX: inline error banner — visible, never swallowed */}
+            {modalError && (
+              <div style={styles.modalError}>
+                ⚠️ {modalError}
+              </div>
+            )}
+
             <div style={styles.modalActions}>
-              <button className="btn btn-ghost" onClick={() => setConfirm(null)}>Cancel</button>
+              <button
+                className="btn btn-ghost"
+                onClick={handleCancelModal}
+                disabled={processing}
+              >
+                Cancel
+              </button>
               <button
                 className={`btn ${confirm.type === 'approve' ? '' : 'btn-danger'}`}
-                style={confirm.type === 'approve' ? { background: 'var(--color-online)', color: '#000' } : {}}
+                style={{
+                  ...(confirm.type === 'approve' ? { background: 'var(--color-online)', color: '#000' } : {}),
+                  opacity: processing ? 0.6 : 1,
+                  cursor:  processing ? 'not-allowed' : 'pointer',
+                }}
                 onClick={handleConfirm}
+                disabled={processing}
               >
-                {confirm.type === 'approve' ? 'Yes, Approve' : 'Yes, Reject'}
+                {processing
+                  ? (confirm.type === 'approve' ? 'Approving…' : 'Rejecting…')
+                  : (confirm.type === 'approve' ? 'Yes, Approve' : 'Yes, Reject')}
               </button>
             </div>
           </div>
@@ -157,13 +203,13 @@ export default function ActionQueue() {
                   <button
                     className="btn btn-sm"
                     style={{ background: 'var(--color-online)', color: '#000', fontWeight: 'var(--weight-semibold)' }}
-                    onClick={() => setConfirm({ id: item._id, action: item.action, type: 'approve' })}
+                    onClick={() => { setModalError(null); setConfirm({ id: item._id, action: item.action, type: 'approve' }); }}
                   >
                     ✅ Approve
                   </button>
                   <button
                     className="btn btn-danger btn-sm"
-                    onClick={() => setConfirm({ id: item._id, action: item.action, type: 'reject' })}
+                    onClick={() => { setModalError(null); setConfirm({ id: item._id, action: item.action, type: 'reject' }); }}
                   >
                     ❌ Reject
                   </button>
@@ -244,7 +290,6 @@ const styles = {
   modalOverlay: {
     position: 'fixed',
     inset: 0,
-    // FIX: CSS variables do NOT work in React inline styles — must use a number
     zIndex: 9999,
     display: 'flex',
     alignItems: 'center',
@@ -271,6 +316,15 @@ const styles = {
     fontSize: 'var(--text-base)',
     color: 'var(--color-text-secondary)',
     marginBottom: 'var(--space-2)',
+  },
+  modalError: {
+    fontSize: 'var(--text-sm)',
+    color: 'var(--color-critical)',
+    background: 'rgba(239,68,68,0.08)',
+    border: '1px solid var(--color-critical)',
+    borderRadius: 'var(--radius-md)',
+    padding: '8px 12px',
+    marginBottom: 'var(--space-4)',
   },
   modalActions: {
     display: 'flex',

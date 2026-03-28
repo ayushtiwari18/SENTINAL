@@ -38,7 +38,7 @@ const { globalLimiter }    = require('./src/middleware/rateLimiter');
 process.on('uncaughtException',  err    => logger.error(`[SERVER] Uncaught Exception: ${err.message}`));
 process.on('unhandledRejection', reason => logger.error(`[SERVER] Unhandled Rejection: ${reason}`));
 
-// ── MongoDB auto-reconnect ───────────────────────────────────────────────────────────
+// ── MongoDB auto-reconnect ────────────────────────────────────────────────────────
 mongoose.connection.on('disconnected', () => {
   logger.warn('[DATABASE] MongoDB disconnected. Reconnecting in 5s...');
   setTimeout(() => connectDB(), 5000);
@@ -51,15 +51,27 @@ const httpServer = http.createServer(app);
 
 app.use(helmet());
 app.use(globalLimiter);
-app.use(cors());
+
+// FIX: explicit CORS config with allowed methods and preflight handler.
+// Without this, POST requests with Content-Type: application/json (like
+// approve/reject) trigger an OPTIONS preflight that was silently dropped,
+// causing axios to throw a network error and the UI to appear blank.
+const corsOptions = {
+  origin: '*',
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+};
+app.use(cors(corsOptions));
+// Explicitly handle preflight for all routes
+app.options('*', cors(corsOptions));
+
 app.use(express.json({ limit: '10mb' }));
 
 if (process.env.NODE_ENV !== 'test') {
   app.use(morgan('combined', { stream: logger.stream }));
 }
 
-// ── Root health check — no auth, no DB required ─────────────────────────────────
-// This responds even before DB connects — used by AWS ALB target group checks
+// ── Root health check — no auth, no DB required ─────────────────────────────────────────
 app.get('/health', (req, res) => {
   res.status(200).json({
     status:  'ok',
@@ -69,7 +81,7 @@ app.get('/health', (req, res) => {
   });
 });
 
-// ── API Routes ─────────────────────────────────────────────────────────────────────────────
+// ── API Routes ──────────────────────────────────────────────────────────────────────────────
 app.use('/api/logs',           require('./src/routes/logs'));
 app.use('/api/attacks',        require('./src/routes/attacks'));
 app.use('/api/attacks',        require('./src/routes/forensics'));
@@ -93,7 +105,7 @@ app.use((err, req, res, next) => { // eslint-disable-line no-unused-vars
   res.status(500).json({ success: false, message: 'Internal server error', code: 'SERVER_ERROR' });
 });
 
-// ── Startup ─────────────────────────────────────────────────────────────────────────────
+// ── Startup ──────────────────────────────────────────────────────────────────────────────
 const PORT = parseInt(process.env.GATEWAY_PORT || process.env.PORT || '3000');
 
 if (process.env.NODE_ENV !== 'test') {

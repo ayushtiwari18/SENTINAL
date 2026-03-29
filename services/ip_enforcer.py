@@ -1,99 +1,124 @@
 """
-IP Enforcer
------------
-Abstraction layer for firewall enforcement.
-Supports: ufw, iptables, noop (testing)
+IP Enforcer — Firewall Action Execution
 
-Set FIREWALL_BACKEND in .env to choose backend.
+Responsibilities:
+- Execute IP ban/unban commands against the system firewall
+- Support multiple backends: ufw, iptables, noop (testing)
+- Abstract firewall details so the rest of SENTINAL doesn't care
+
+Configuration:
+  FIREWALL_BACKEND=noop      # default — safe for development
+  FIREWALL_BACKEND=ufw       # Ubuntu/Debian systems
+  FIREWALL_BACKEND=iptables  # manual iptables management
+
+IMPORTANT: Requires root/sudo for ufw and iptables backends.
 """
 
+import os
 import subprocess
 import logging
-import os
-from typing import Literal
+from enum import Enum
+from typing import Tuple
 
-log = logging.getLogger("sentinal.ip_enforcer")
+logger = logging.getLogger("sentinal.ip_enforcer")
 
-FirewallBackend = Literal["ufw", "iptables", "noop"]
+FIREWALL_BACKEND = os.getenv("FIREWALL_BACKEND", "noop").lower()
+
+
+class FirewallBackend(str, Enum):
+    NOOP = "noop"
+    UFW = "ufw"
+    IPTABLES = "iptables"
 
 
 class IPEnforcer:
-    def __init__(self, backend: FirewallBackend = "noop"):
+    """
+    Executes real firewall commands to ban or unban IP addresses.
+    
+    To add a cloud firewall backend (AWS Security Groups, Cloudflare, etc.),
+    add a new method here and register it in ban_ip/unban_ip.
+    """
+
+    def __init__(self, backend: str = FIREWALL_BACKEND):
         self.backend = backend
-        log.info(f"[ENFORCER] Initialized with backend: {backend}")
+        logger.info(f"[ENFORCER] Initialized with backend: {backend}")
 
-    def ban(self, ip: str) -> bool:
-        """Block all traffic from an IP address."""
-        log.warning(f"[ENFORCER] Banning IP: {ip} via {self.backend}")
+    def ban_ip(self, ip: str) -> Tuple[bool, str]:
+        """
+        Ban an IP address. Returns (success, message).
+        """
+        logger.info(f"[ENFORCER] Banning IP: {ip} via {self.backend}")
+
+        if self.backend == FirewallBackend.NOOP:
+            msg = f"[NOOP] Would ban {ip} — no action taken (set FIREWALL_BACKEND=ufw to enable)"
+            logger.info(msg)
+            return True, msg
+
+        elif self.backend == FirewallBackend.UFW:
+            return self._run_command(["sudo", "ufw", "deny", "from", ip, "to", "any"])
+
+        elif self.backend == FirewallBackend.IPTABLES:
+            return self._run_command([
+                "sudo", "iptables", "-I", "INPUT", "-s", ip, "-j", "DROP"
+            ])
+
+        else:
+            msg = f"Unknown firewall backend: {self.backend}"
+            logger.error(msg)
+            return False, msg
+
+    def unban_ip(self, ip: str) -> Tuple[bool, str]:
+        """
+        Unban an IP address. Returns (success, message).
+        """
+        logger.info(f"[ENFORCER] Unbanning IP: {ip} via {self.backend}")
+
+        if self.backend == FirewallBackend.NOOP:
+            msg = f"[NOOP] Would unban {ip} — no action taken"
+            logger.info(msg)
+            return True, msg
+
+        elif self.backend == FirewallBackend.UFW:
+            return self._run_command(["sudo", "ufw", "delete", "deny", "from", ip, "to", "any"])
+
+        elif self.backend == FirewallBackend.IPTABLES:
+            return self._run_command([
+                "sudo", "iptables", "-D", "INPUT", "-s", ip, "-j", "DROP"
+            ])
+
+        else:
+            msg = f"Unknown firewall backend: {self.backend}"
+            logger.error(msg)
+            return False, msg
+
+    def _run_command(self, cmd: list) -> Tuple[bool, str]:
+        """
+        Execute a shell command and return (success, output).
+        """
         try:
-            if self.backend == "ufw":
-                return self._ufw_deny(ip)
-            elif self.backend == "iptables":
-                return self._iptables_drop(ip)
-            elif self.backend == "noop":
-                log.info(f"[ENFORCER] NOOP: would ban {ip}")
-                return True
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=15,
+            )
+            if result.returncode == 0:
+                msg = result.stdout.strip() or "Command executed successfully"
+                logger.info(f"[ENFORCER] Command succeeded: {' '.join(cmd)}")
+                return True, msg
             else:
-                log.error(f"[ENFORCER] Unknown backend: {self.backend}")
-                return False
+                msg = result.stderr.strip() or "Command failed with no error output"
+                logger.error(f"[ENFORCER] Command failed: {msg}")
+                return False, msg
+        except subprocess.TimeoutExpired:
+            msg = "Firewall command timed out after 15 seconds"
+            logger.error(f"[ENFORCER] {msg}")
+            return False, msg
         except Exception as e:
-            log.error(f"[ENFORCER] Ban failed for {ip}: {e}")
-            return False
-
-    def unban(self, ip: str) -> bool:
-        """Remove IP ban."""
-        log.info(f"[ENFORCER] Unbanning IP: {ip} via {self.backend}")
-        try:
-            if self.backend == "ufw":
-                return self._ufw_allow(ip)
-            elif self.backend == "iptables":
-                return self._iptables_accept(ip)
-            elif self.backend == "noop":
-                log.info(f"[ENFORCER] NOOP: would unban {ip}")
-                return True
-            return False
-        except Exception as e:
-            log.error(f"[ENFORCER] Unban failed for {ip}: {e}")
-            return False
-
-    def _ufw_deny(self, ip: str) -> bool:
-        result = subprocess.run(
-            ["ufw", "deny", "from", ip, "to", "any"],
-            capture_output=True, text=True
-        )
-        if result.returncode == 0:
-            log.info(f"[UFW] Denied: {ip}")
-            return True
-        log.error(f"[UFW] Failed to deny {ip}: {result.stderr}")
-        return False
-
-    def _ufw_allow(self, ip: str) -> bool:
-        result = subprocess.run(
-            ["ufw", "delete", "deny", "from", ip, "to", "any"],
-            capture_output=True, text=True
-        )
-        return result.returncode == 0
-
-    def _iptables_drop(self, ip: str) -> bool:
-        result = subprocess.run(
-            ["iptables", "-I", "INPUT", "-s", ip, "-j", "DROP"],
-            capture_output=True, text=True
-        )
-        if result.returncode == 0:
-            log.info(f"[IPTABLES] Dropped: {ip}")
-            return True
-        log.error(f"[IPTABLES] Failed: {result.stderr}")
-        return False
-
-    def _iptables_accept(self, ip: str) -> bool:
-        result = subprocess.run(
-            ["iptables", "-D", "INPUT", "-s", ip, "-j", "DROP"],
-            capture_output=True, text=True
-        )
-        return result.returncode == 0
+            msg = f"Unexpected error executing firewall command: {e}"
+            logger.error(f"[ENFORCER] {msg}")
+            return False, msg
 
 
-def get_enforcer() -> IPEnforcer:
-    """Factory — reads FIREWALL_BACKEND from environment."""
-    backend = os.getenv("FIREWALL_BACKEND", "noop")
-    return IPEnforcer(backend=backend)
+# Singleton instance
+ip_enforcer = IPEnforcer()

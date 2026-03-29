@@ -1,35 +1,57 @@
 # OpenClaw Gateway Configuration for SENTINAL
-# Place this in your OpenClaw installation directory
-# Reference: https://docs-openclaw.armoriq.ai
+# This file configures the OpenClaw Node.js gateway to work with SENTINAL.
+# Place this in your openclaw installation directory.
+#
+# After installing OpenClaw (curl -fsSL https://armoriq.ai/install-armorclaw.sh | bash),
+# copy this file to: ~/.openclaw/config.yaml
 
-name: SENTINAL Response Engine
-description: Cybersecurity response agent with human-in-the-loop approval
+name: SENTINAL Response Agent
+description: Secure cybersecurity response operator for SENTINAL
 
 # ArmorIQ authentication
 armoriq:
-  api_key: "${ARMORIQ_API_KEY}"
-  enforcement: strict
+  api_key: ${ARMORIQ_API_KEY}
+  policy_enforcement: strict
 
-# LLM provider
+# LLM backend
 llm:
   provider: openai
   model: gpt-4o
-  api_key: "${OPENAI_API_KEY}"
+  api_key: ${OPENAI_API_KEY}
 
-# Chat integrations
-integrations:
-  telegram:
-    enabled: true
-    bot_token: "${TELEGRAM_BOT_TOKEN}"
-    allowed_user_ids:
-      - "${TELEGRAM_ADMIN_USER_ID}"
+# Telegram integration
+telegram:
+  bot_token: ${TELEGRAM_BOT_TOKEN}
+  allowed_chat_ids:
+    - ${TELEGRAM_CHAT_ID}
+  # Only these chat IDs can send commands to SENTINAL via this bot
 
-# Tool definitions
+# SENTINAL backend connection
+sentinal_backend:
+  url: http://localhost:8004
+  webhook_approve: /webhook/approve
+  webhook_reject: /webhook/reject
+  health_check: /health
+
+# Tool restrictions — SENTINAL-specific only
+# Do NOT enable general tools (web_search, write_file, etc.) for security reasons
 tools:
-  config: "./sentinal_tools.yaml"
+  enabled:
+    - sentinal_approve_action
+    - sentinal_reject_action
+    - sentinal_list_pending
+    - sentinal_get_audit_log
+    - sentinal_get_blocked_ips
+  disabled:
+    - web_search
+    - web_fetch
+    - write_file
+    - read_file
+    - run_command
+    - policy_update
 
-# Policy
-policy:
-  require_intent_token: true
+# Security settings
+security:
+  require_intent_verification: true
   log_all_actions: true
-  restrict_to_defined_tools: true
+  action_timeout_seconds: 300  # Pending actions expire after 5 minutes

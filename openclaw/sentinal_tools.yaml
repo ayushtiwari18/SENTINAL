@@ -1,68 +1,73 @@
-# SENTINAL Custom Tool Definitions for OpenClaw
-# Only expose these specific operations — nothing else
+# SENTINAL Custom Tools for OpenClaw
+# Defines the operator commands available via Telegram through OpenClaw.
+# These are the ONLY actions the admin can trigger via chat.
 
 tools:
-  - name: list_pending_threats
-    description: |
-      List all pending SENTINAL threat cases that require admin approval.
-      Returns case ID, IP, threat type, confidence, and severity.
-    method: GET
-    endpoint: "${SENTINAL_API_URL}/actions/pending"
-    auth: sentinal_internal
-
-  - name: approve_action
-    description: |
-      Approve a pending SENTINAL action by its case ID.
-      This will trigger ArmorClaw verification and then execute the action.
-    method: POST
-    endpoint: "${SENTINAL_API_URL}/webhook/approve"
-    params:
+  - name: sentinal_approve_action
+    description: Approve a pending SENTINAL action (e.g., IP ban)
+    parameters:
       action_id:
         type: string
         required: true
-        description: The case ID from list_pending_threats
-    auth: sentinal_internal
-    requires_intent_token: true
+        description: The case/action ID to approve
+    http:
+      method: POST
+      url: "${SENTINAL_BACKEND_URL}/webhook/approve"
+      params:
+        action_id: "${action_id}"
+    policy:
+      requires_intent_token: true
+      audit: true
 
-  - name: reject_action
-    description: |
-      Reject a pending SENTINAL action by its case ID.
-      The action will be cancelled and logged.
-    method: POST
-    endpoint: "${SENTINAL_API_URL}/webhook/reject"
-    params:
+  - name: sentinal_reject_action
+    description: Reject a pending SENTINAL action
+    parameters:
       action_id:
         type: string
         required: true
-    auth: sentinal_internal
-    requires_intent_token: true
+        description: The case/action ID to reject
+    http:
+      method: POST
+      url: "${SENTINAL_BACKEND_URL}/webhook/reject"
+      params:
+        action_id: "${action_id}"
+    policy:
+      requires_intent_token: true
+      audit: true
 
-  - name: get_audit_log
-    description: |
-      Retrieve recent SENTINAL audit log entries.
-      Shows detection, analysis, approval, and execution events.
-    method: GET
-    endpoint: "${SENTINAL_API_URL}/audit"
-    params:
+  - name: sentinal_list_pending
+    description: List all pending SENTINAL actions awaiting approval
+    parameters: {}
+    http:
+      method: GET
+      url: "${SENTINAL_BACKEND_URL}/actions/pending"
+    policy:
+      requires_intent_token: false
+      audit: false
+
+  - name: sentinal_get_audit_log
+    description: Retrieve recent SENTINAL audit log entries
+    parameters:
       hours:
         type: integer
+        required: false
         default: 24
-        description: Number of hours to look back
-    auth: sentinal_internal
+        description: How many hours of history to retrieve
+    http:
+      method: GET
+      url: "${SENTINAL_BACKEND_URL}/audit"
+      params:
+        hours: "${hours}"
+    policy:
+      requires_intent_token: false
+      audit: false
 
-  - name: list_blocked_ips
-    description: List all currently blocked IP addresses with block reason and timestamp.
-    method: GET
-    endpoint: "${SENTINAL_API_URL}/blocked-ips"
-    auth: sentinal_internal
-
-  - name: unblock_ip
-    description: Remove an IP ban. Use only when a block is confirmed to be a false positive.
-    method: POST
-    endpoint: "${SENTINAL_API_URL}/actions/unblock"
-    params:
-      ip:
-        type: string
-        required: true
-    auth: sentinal_internal
-    requires_intent_token: true
+  - name: sentinal_get_blocked_ips
+    description: Get list of currently blocked IP addresses
+    parameters: {}
+    http:
+      method: GET
+      url: "${SENTINAL_BACKEND_URL}/blocked-ips"
+    policy:
+      requires_intent_token: false
+      audit: false

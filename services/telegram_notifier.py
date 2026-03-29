@@ -1,128 +1,179 @@
 """
-Telegram Notifier
------------------
-Sends formatted SENTINAL alerts to admin via Telegram bot.
-Handles both informational notifications and approval prompts.
+Telegram Notifier — SENTINAL Alert Delivery
 
-Note: When OpenClaw is fully configured, this module is used
-as a fallback or standalone notifier. OpenClaw itself handles
-the inline button callbacks through ArmorClaw verification.
+Responsibilities:
+- Send formatted threat alerts to admin via Telegram
+- Send post-execution notifications
+- Send low-priority informational messages
+
+Setup:
+1. Create a bot via @BotFather on Telegram
+2. Get your bot token
+3. Get your chat ID (send a message to @userinfobot)
+4. Add TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID to .env
 """
 
+import os
 import logging
 import httpx
 from typing import Optional
 
-log = logging.getLogger("sentinal.telegram_notifier")
+logger = logging.getLogger("sentinal.telegram")
+
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
+TELEGRAM_API_BASE = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}"
 
 SEVERITY_EMOJI = {
     "CRITICAL": "🔴",
     "HIGH": "🟠",
     "MEDIUM": "🟡",
     "LOW": "🟢",
-    "INFO": "⚪",
 }
 
 
 class TelegramNotifier:
-    def __init__(self, bot_token: str, chat_id: str):
-        self.bot_token = bot_token
-        self.chat_id = chat_id
-        self.base_url = f"https://api.telegram.org/bot{bot_token}"
 
-    def _severity_emoji(self, severity: str) -> str:
-        return SEVERITY_EMOJI.get(severity.upper(), "⚪")
-
-    async def send_alert(
+    async def send_approval_request(
         self,
         action_id: str,
-        source_ip: str,
+        ip: str,
         threat_type: str,
         confidence: float,
         severity: str,
-        reasoning: str,
+        reason: str,
         recommended_action: str,
-        require_approval: bool = True,
     ) -> bool:
         """
-        Send a threat alert to the admin Telegram chat.
-        If require_approval=True, includes Approve/Reject buttons.
+        Send a threat alert with Approve/Reject inline buttons.
         """
-        emoji = self._severity_emoji(severity)
+        severity_icon = SEVERITY_EMOJI.get(severity, "⚪")
         confidence_pct = int(confidence * 100)
 
         text = (
-            f"🚨 *SENTINAL Alert* `#{action_id}`\n\n"
-            f"*IP:* `{source_ip}`\n"
+            f"🚨 *SENTINAL Threat Alert*\n"
+            f"━━━━━━━━━━━━━━━━━━\n"
+            f"*Case ID:* `{action_id[:12]}...`\n"
+            f"*IP:* `{ip}`\n"
             f"*Threat:* {threat_type.replace('_', ' ').title()}\n"
             f"*Confidence:* {confidence_pct}%\n"
-            f"*Severity:* {emoji} {severity}\n\n"
-            f"*Reason:*\n{reasoning}\n\n"
-            f"*Proposed Action:* `{recommended_action.replace('_', ' ')}`"
+            f"*Severity:* {severity_icon} {severity}\n"
+            f"*Reason:* {reason}\n\n"
+            f"*Proposed Action:* `{recommended_action.replace('_', ' ')}`\n\n"
+            f"_Approval required — action will not execute until authorized._"
         )
 
-        payload: dict = {
-            "chat_id": self.chat_id,
-            "text": text,
-            "parse_mode": "Markdown",
+        inline_keyboard = {
+            "inline_keyboard": [
+                [
+                    {"text": "✅ Approve", "callback_data": f"approve:{action_id}"},
+                    {"text": "❌ Reject", "callback_data": f"reject:{action_id}"},
+                ]
+            ]
         }
 
-        if require_approval:
-            payload["reply_markup"] = {
-                "inline_keyboard": [
-                    [
-                        {"text": "✅ Approve", "callback_data": f"approve:{action_id}"},
-                        {"text": "❌ Reject", "callback_data": f"reject:{action_id}"},
-                    ],
-                    [
-                        {"text": "👁 Details", "callback_data": f"details:{action_id}"},
-                    ],
-                ]
-            }
+        return await self._send_message(text, reply_markup=inline_keyboard)
 
-        try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                resp = await client.post(
-                    f"{self.base_url}/sendMessage",
-                    json=payload,
-                )
-                resp.raise_for_status()
-                log.info(f"[TELEGRAM] Alert sent for action {action_id}")
-                return True
-        except httpx.HTTPError as e:
-            log.error(f"[TELEGRAM] Failed to send alert: {e}")
-            return False
+    async def send_auto_execution_notice(
+        self,
+        ip: str,
+        threat_type: str,
+        confidence: float,
+        action: str,
+    ) -> None:
+        """
+        Notify that SENTINAL auto-executed a high-confidence action.
+        """
+        confidence_pct = int(confidence * 100)
+        text = (
+            f"⚡ *SENTINAL Auto-Response*\n"
+            f"━━━━━━━━━━━━━━━━━━\n"
+            f"*IP:* `{ip}`\n"
+            f"*Threat:* {threat_type.replace('_', ' ').title()}\n"
+            f"*Confidence:* {confidence_pct}% _(above auto-execute threshold)_\n"
+            f"*Action Taken:* `{action.replace('_', ' ')}`\n\n"
+            f"_No approval was required. Full audit log available on dashboard._"
+        )
+        await self._send_message(text)
 
     async def send_execution_result(
         self,
         action_id: str,
-        source_ip: str,
+        ip: str,
         action: str,
-        status: str,
-        approved_by: Optional[str] = None,
+        success: bool,
+        approved_by: str = "admin",
     ) -> None:
-        """Send post-execution result notification."""
-        status_emoji = "✅" if status == "SUCCESS" else "❌"
-        approved_line = f"\n*Approved by:* {approved_by}" if approved_by else ""
-
+        """
+        Send result after an approved action is executed.
+        """
+        status = "✅ Executed successfully" if success else "❌ Execution failed"
         text = (
-            f"{status_emoji} *Action Executed*\n\n"
-            f"*Case:* `#{action_id}`\n"
-            f"*IP:* `{source_ip}`\n"
-            f"*Action:* {action.replace('_', ' ')}"
-            f"{approved_line}\n"
-            f"*Result:* {status}"
+            f"*SENTINAL Action Result*\n"
+            f"━━━━━━━━━━━━━━━━━━\n"
+            f"*Case:* `{action_id[:12]}...`\n"
+            f"*IP:* `{ip}`\n"
+            f"*Action:* `{action.replace('_', ' ')}`\n"
+            f"*Approved by:* {approved_by}\n"
+            f"*Status:* {status}"
         )
+        await self._send_message(text)
+
+    async def send_rejection_notice(
+        self,
+        action_id: str,
+        ip: str,
+        rejected_by: str = "admin",
+    ) -> None:
+        """
+        Notify that an action was rejected by admin.
+        """
+        text = (
+            f"🚫 *SENTINAL Action Rejected*\n"
+            f"━━━━━━━━━━━━━━━━━━\n"
+            f"*Case:* `{action_id[:12]}...`\n"
+            f"*IP:* `{ip}`\n"
+            f"*Rejected by:* {rejected_by}\n"
+            f"_No action was taken. Event logged to audit trail._"
+        )
+        await self._send_message(text)
+
+    async def _send_message(
+        self,
+        text: str,
+        reply_markup: Optional[dict] = None,
+    ) -> bool:
+        """
+        Internal: POST a message to the Telegram Bot API.
+        """
+        if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+            logger.warning("[TELEGRAM] Bot token or chat ID not configured — skipping notification")
+            return False
+
+        payload = {
+            "chat_id": TELEGRAM_CHAT_ID,
+            "text": text,
+            "parse_mode": "Markdown",
+        }
+        if reply_markup:
+            payload["reply_markup"] = reply_markup
 
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
-                await client.post(
-                    f"{self.base_url}/sendMessage",
-                    json={
-                        "chat_id": self.chat_id,
-                        "text": text,
-                        "parse_mode": "Markdown",
-                    },
+                response = await client.post(
+                    f"{TELEGRAM_API_BASE}/sendMessage",
+                    json=payload,
                 )
-        except httpx.HTTPError as e:
-            log.warning(f"[TELEGRAM] Result notification failed: {e}")
+                if response.status_code == 200:
+                    logger.info("[TELEGRAM] Message sent successfully")
+                    return True
+                else:
+                    logger.error(f"[TELEGRAM] API error {response.status_code}: {response.text}")
+                    return False
+        except Exception as e:
+            logger.error(f"[TELEGRAM] Failed to send message: {e}")
+            return False
+
+
+# Singleton instance
+telegram_notifier = TelegramNotifier()

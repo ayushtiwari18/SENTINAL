@@ -1,12 +1,12 @@
 """
-Threat Analysis Model
----------------------
-Structured output from intent_builder.py LLM analysis.
+ThreatAnalysis — Structured output from intent_builder.py
+
+This model is the contract between threat detection and policy enforcement.
+All fields are required. intent_builder.py must produce this exact shape.
 """
 
-from pydantic import BaseModel, Field
-from typing import Literal, Optional
 from enum import Enum
+from pydantic import BaseModel, Field
 
 
 class ThreatType(str, Enum):
@@ -15,8 +15,8 @@ class ThreatType(str, Enum):
     DDOS = "DDOS"
     SQLI_ATTEMPT = "SQLI_ATTEMPT"
     XSS_ATTEMPT = "XSS_ATTEMPT"
-    MALWARE_BEACON = "MALWARE_BEACON"
     LATERAL_MOVEMENT = "LATERAL_MOVEMENT"
+    RANSOMWARE_INDICATOR = "RANSOMWARE_INDICATOR"
     UNKNOWN = "UNKNOWN"
 
 
@@ -25,29 +25,30 @@ class Severity(str, Enum):
     HIGH = "HIGH"
     MEDIUM = "MEDIUM"
     LOW = "LOW"
-    INFO = "INFO"
 
 
 class RecommendedAction(str, Enum):
     BAN_IP = "BAN_IP"
-    RATE_LIMIT = "RATE_LIMIT"
+    THROTTLE_IP = "THROTTLE_IP"
     MONITOR = "MONITOR"
     ALERT_ONLY = "ALERT_ONLY"
     SHUTDOWN_ENDPOINT = "SHUTDOWN_ENDPOINT"
 
 
 class ResponseMode(str, Enum):
-    AUTO_EXECUTE = "AUTO_EXECUTE"
-    REVIEW_REQUIRED = "REVIEW_REQUIRED"
-    MONITOR_ONLY = "MONITOR_ONLY"
+    AUTO_EXECUTE = "AUTO_EXECUTE"        # confidence >= 0.95, execute immediately
+    REVIEW_REQUIRED = "REVIEW_REQUIRED"  # 0.70 <= confidence < 0.95, wait for human
+    MONITOR_ONLY = "MONITOR_ONLY"        # confidence < 0.70, log only
 
 
 class ThreatAnalysis(BaseModel):
-    threat_type: ThreatType
-    confidence: float = Field(ge=0.0, le=1.0)
-    severity: Severity
-    recommended_action: RecommendedAction
-    reasoning: str
-    response_mode: ResponseMode
-    ioc: Optional[list[str]] = None  # indicators of compromise
-    raw_llm_output: Optional[str] = None
+    threat_type: ThreatType = Field(..., description="Classified threat category")
+    confidence: float = Field(..., ge=0.0, le=1.0, description="Confidence score 0.0-1.0")
+    severity: Severity = Field(..., description="Threat severity level")
+    recommended_action: RecommendedAction = Field(..., description="Suggested response action")
+    reason: str = Field(..., description="Human-readable explanation of the threat")
+    response_mode: ResponseMode = Field(..., description="How SENTINAL should handle this")
+    raw_indicators: dict = Field(default_factory=dict, description="Raw alert data used in analysis")
+
+    class Config:
+        use_enum_values = True

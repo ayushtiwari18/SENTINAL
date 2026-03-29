@@ -23,14 +23,14 @@ const SERVICE_LABELS = {
   'gateway':          'API Gateway',
   'detection-engine': 'Detection Engine',
   'pcap-processor':   'PCAP Processor',
-  'armoriq-agent':    'ArmorIQ Agent',
+  'sentinal-response-engine': 'SENTINAL Response Engine',
 };
 
 const SERVICE_ICONS = {
   'gateway':          '🔀',
   'detection-engine': '🔍',
   'pcap-processor':   '📡',
-  'armoriq-agent':    '🤖',
+  'sentinal-response-engine': '🤖',
 };
 
 export default function Services() {

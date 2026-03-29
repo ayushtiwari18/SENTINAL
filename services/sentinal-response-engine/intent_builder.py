@@ -1,6 +1,6 @@
 """
-ArmorIQ Intent Builder
-----------------------
+SENTINAL Response Engine — Intent Builder
+------------------------------------------
 Translates raw attack context into a list of proposed IntentModels.
 One attack → multiple proposed intents (one per candidate action).
 

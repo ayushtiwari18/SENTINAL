@@ -1,6 +1,6 @@
 """
-ArmorIQ Audit Logger
---------------------
+SENTINAL Response Engine — Audit Logger
+-----------------------------------------
 Writes every policy decision (ALLOW or BLOCK) to Gateway's audit_log
 via POST /api/audit/ingest.
 Non-blocking: failures are logged but never raise to caller.

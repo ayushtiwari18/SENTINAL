@@ -4,7 +4,7 @@ const ServiceStatusSchema = new mongoose.Schema({
   serviceName: {
     type: String,
     required: [true, 'Service name is required'],
-    enum: ['gateway', 'detection-engine', 'pcap-processor', 'armoriq-agent'],
+    enum: ['gateway', 'detection-engine', 'pcap-processor', 'sentinal-response-engine'],
     unique: true
   },
   status: {

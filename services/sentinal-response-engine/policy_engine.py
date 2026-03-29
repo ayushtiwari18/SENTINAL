@@ -1,6 +1,6 @@
 """
-ArmorIQ Policy Engine
----------------------
+SENTINAL Response Engine — Policy Engine
+-----------------------------------------
 Pure deterministic function — no I/O, no LLM, no side effects.
 Takes an IntentModel, returns a DecisionModel.
 Default behaviour: BLOCK (fail-safe).
@@ -9,7 +9,7 @@ Default behaviour: BLOCK (fail-safe).
 from models import IntentModel, DecisionModel
 from datetime import datetime
 
-# Actions that ArmorIQ may execute autonomously (low-risk, reversible)
+# Actions that SENTINAL Response Engine may execute autonomously (low-risk, reversible)
 ALLOWED_ACTIONS = {
     "send_alert",
     "log_attack",

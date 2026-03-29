@@ -27,7 +27,7 @@ https://raw.githubusercontent.com/ayushtiwari18/SENTINAL/main/SENTINAL_Postman_C
 | `base` | `http://<YOUR_EC2_IP>:3000` |
 | `detection` | `http://<YOUR_EC2_IP>:8002` |
 | `pcap` | `http://<YOUR_EC2_IP>:8003` |
-| `armoriq` | `http://<YOUR_EC2_IP>:8004` |
+| `armoriq` | `http://<YOUR_EC2_IP>:8004` | (sentinal-response-engine)
 
 > The collection includes 40+ requests across 8 folders: health checks, attack simulations, ArmorIQ enforcement tests, full pipeline triggers, human approval workflow, and an end-to-end demo sequence.
 
@@ -59,8 +59,8 @@ User Traffic
                │
                ▼
   ┌────────────────────┐    ┌──────────────────────┐
-  │  MongoDB Atlas     │    │  ArmorIQ Agent       │
-  │  (Data Layer)      │    │  Python + FastAPI    │  :8004
+  │  MongoDB Atlas     │    │  SENTINAL Response   │
+  │  (Data Layer)      │    │  Engine (FastAPI)    │  :8004
   └────────────────────┘    └──────────────────────┘
                │
                ▼
@@ -77,7 +77,7 @@ User Traffic
 | Gateway API | Node.js + Express + Socket.io | **3000** |
 | Detection Engine | Python + FastAPI | **8002** |
 | PCAP Processor | Python + FastAPI + Scapy | **8003** |
-| ArmorIQ Agent | Python + FastAPI | **8004** |
+| SENTINAL Response Engine | Python + FastAPI | **8004** |
 | React Dashboard | React + Vite | **5173** |
 | Database | MongoDB Atlas | — |
 
@@ -227,9 +227,9 @@ pip install -r requirements.txt
 uvicorn main:app --host 0.0.0.0 --port 8003
 ```
 
-**Terminal 4 — ArmorIQ Agent**
+**Terminal 4 — SENTINAL Response Engine**
 ```bash
-cd services/armoriq-agent
+cd services/sentinal-response-engine
 pip install -r requirements.txt
 uvicorn main:app --host 0.0.0.0 --port 8004
 ```
@@ -249,7 +249,7 @@ Every service exposes a `/health` endpoint. Check them after starting:
 curl http://localhost:3000/health    # Gateway
 curl http://localhost:8002/health    # Detection Engine
 curl http://localhost:8003/health    # PCAP Processor
-curl http://localhost:8004/health    # ArmorIQ Agent
+curl http://localhost:8004/health    # SENTINAL Response Engine
 ```
 
 All return the same standard shape:
@@ -305,7 +305,7 @@ SENTINAL/
 │
 ├── services/
 │   ├── detection-engine/           ← Python FastAPI — rule-based + adversarial detection
-│   ├── armoriq-agent/              ← Python FastAPI — OpenClaw policy enforcement
+│   ├── sentinal-response-engine/      ← Python FastAPI — OpenClaw policy enforcement
 │   ├── pcap-processor/             ← Python FastAPI + Scapy — PCAP forensics
 │   └── middleware/                 ← Express middleware package source
 │
@@ -390,13 +390,13 @@ See [`.env.example`](.env.example) for the full annotated list.
 | `GATEWAY_PORT` | ✅ | Express Gateway port (default: 3000) |
 | `DETECTION_PORT` | ✅ | Detection Engine port (default: 8002) |
 | `PCAP_PORT` | ✅ | PCAP Processor port (default: 8003) |
-| `ARMORIQ_PORT` | ✅ | ArmorIQ Agent port (default: 8004) |
+| `ARMORIQ_PORT` | ✅ | SENTINAL Response Engine port (default: 8004) |
 | `JWT_SECRET` | ✅ | JWT signing secret (min 32 chars) |
 | `DETECTION_URL` | ✅ | Internal URL of Detection Engine |
 | `PCAP_URL` | ✅ | Internal URL of PCAP Processor |
-| `ARMORIQ_URL` | ✅ | Internal URL of ArmorIQ Agent |
-| `GATEWAY_URL` | ✅ | Gateway URL (used by ArmorIQ to call back) |
-| `GEMINI_API_KEY` | ⚠️ | Google Gemini key for ArmorIQ AI decisions |
+| `ARMORIQ_URL` | ✅ | Internal URL of SENTINAL Response Engine |
+| `GATEWAY_URL` | ✅ | Gateway URL (used by SENTINAL Response Engine to call back) |
+| `GEMINI_API_KEY` | ⚠️ | Google Gemini key for SENTINAL Response Engine AI decisions |
 | `NODE_ENV` | ⚠️ | `development` \| `production` \| `test` |
 | `LOG_LEVEL` | ⚠️ | `error` \| `warn` \| `info` \| `debug` |
 

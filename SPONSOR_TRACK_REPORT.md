@@ -29,9 +29,9 @@ Build an autonomous agent that operates inside enforced intent boundaries. Not j
 
 | Requirement | File | Status |
 |-------------|------|--------|
-| Structured intent model | `services/armoriq-agent/models.py` → `IntentModel`, `ProposedAction`, `DecisionModel` | ✅ DONE |
-| Policy-based enforcement | `services/armoriq-agent/openclaw_runtime.py` → 5-rule evaluation chain | ✅ DONE |
-| Declarative policy file | `services/armoriq-agent/policy.yaml` → `allowed_actions`, `blocked_actions`, `risk_rules` | ✅ DONE |
+| Structured intent model | `services/sentinal-response-engine/models.py` → `IntentModel`, `ProposedAction`, `DecisionModel` | ✅ DONE |
+| Policy-based enforcement | `services/sentinal-response-engine/openclaw_runtime.py` → 5-rule evaluation chain | ✅ DONE |
+| Declarative policy file | `services/sentinal-response-engine/policy.yaml` → `allowed_actions`, `blocked_actions`, `risk_rules` | ✅ DONE |
 | Reasoning vs execution separation | `intent_builder.py` → `openclaw_runtime.py` → `executor.py` (3 separate files, 3 separate jobs) | ✅ DONE |
 | Allowed action demo | `send_alert`, `log_attack`, `rate_limit_ip` → RULE_004 → ALLOW → executor fires | ✅ DONE |
 | Blocked action demo | `permanent_ban_ip`, `shutdown_endpoint` → RULE_001 → BLOCK → ActionQueue | ✅ DONE |
@@ -174,7 +174,7 @@ Vultr Cloud Compute ($6/month, 1 CPU, 1GB RAM — free credits cover this)
   ├── PM2 → Node.js Gateway (port 3000)
   ├── uvicorn → Detection Engine (port 8002)
   ├── uvicorn → PCAP Processor (port 8003)
-  ├── uvicorn → ArmorIQ Agent (port 8004)
+  ├── uvicorn → SENTINAL Response Engine (port 8004)
   └── Nginx → Reverse proxy → ports 3000/5173
 
 Vultr Object Storage (optional, PCAP file uploads)
@@ -207,10 +207,10 @@ cd services/detection-engine
 pip3 install -r requirements.txt
 pm2 start "uvicorn app.main:app --port 8002" --name detection-engine
 
-# ArmorIQ Agent
-cd services/armoriq-agent
+# SENTINAL Response Engine
+cd services/sentinal-response-engine
 pip3 install -r requirements.txt
-pm2 start "uvicorn main:app --port 8004" --name armoriq-agent
+pm2 start "uvicorn main:app --port 8004" --name sentinal-response-engine
 
 # PCAP Processor
 cd services/pcap-processor
@@ -433,7 +433,7 @@ Execute in this exact order. Do not deviate.
 ### PRIORITY 3 — ArmorIQ demo polish
 
 - [ ] Make `rate_limit_ip` call real Gateway endpoint (not just a log)
-  - File: `services/armoriq-agent/executor.py`
+  - File: `services/sentinal-response-engine/executor.py`
   - Time: 30 minutes
   - Impact: Closes the one real gap judges could flag
 

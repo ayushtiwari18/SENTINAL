@@ -1,5 +1,5 @@
 """
-run.py — Uvicorn launcher for ArmorIQ Agent
+run.py — Uvicorn launcher for SENTINAL Response Engine
 
 Usage:
   python run.py

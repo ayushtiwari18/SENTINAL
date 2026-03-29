@@ -42,7 +42,7 @@ This is the page that is open all day on a monitor.
         { "service": "gateway", "status": "online", "responseTimeMs": 0 },
         { "service": "detection-engine", "status": "online" | "offline", "responseTimeMs": 142, "error": "..." },
         { "service": "pcap-processor", "status": "offline", ... },
-        { "service": "armoriq-agent", "status": "offline", ... }
+        { "service": "sentinal-response-engine", "status": "offline", ... }
       ],
       "checkedAt": "2026-03-25T13:00:00.000Z"
     }

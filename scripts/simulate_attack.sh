@@ -36,7 +36,7 @@ AQ_HEALTH=$(curl -s "${ARMORIQ}/health" 2>/dev/null)
 if echo "$AQ_HEALTH" | grep -q '"status":"ok"'; then
   echo -e "  ${GREEN}✓${NC} ArmorIQ is online"
 else
-  echo -e "  ${RED}✗${NC} ArmorIQ OFFLINE — start: cd services/armoriq-agent && uvicorn main:app --port 8004 --reload"
+  echo -e "  ${RED}✗${NC} ArmorIQ OFFLINE — start: cd services/sentinal-response-engine && uvicorn main:app --port 8004 --reload"
   exit 1
 fi
 

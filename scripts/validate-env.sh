@@ -71,11 +71,11 @@ if $CHECK_ENV; then
     "GATEWAY_PORT|Express Gateway port"
     "DETECTION_PORT|Detection Engine port"
     "PCAP_PORT|PCAP Processor port"
-    "ARMORIQ_PORT|ArmorIQ Agent port"
+    "ARMORIQ_PORT|SENTINAL Response Engine port"
     "DETECTION_URL|Detection Engine internal URL"
     "PCAP_URL|PCAP Processor internal URL"
-    "ARMORIQ_URL|ArmorIQ Agent internal URL"
-    "GATEWAY_URL|Gateway URL (used by ArmorIQ)"
+    "ARMORIQ_URL|SENTINAL Response Engine internal URL"
+    "GATEWAY_URL|Gateway URL (used by SENTINAL Response Engine)"
     "JWT_SECRET|JWT signing secret"
   )
 
@@ -173,7 +173,7 @@ if $CHECK_HEALTH; then
   check_health "Gateway          (port ${GATEWAY_PORT})  " "http://localhost:${GATEWAY_PORT}/health"
   check_health "Detection Engine (port ${DETECTION_PORT}) " "http://localhost:${DETECTION_PORT}/health"
   check_health "PCAP Processor   (port ${PCAP_PORT})  " "http://localhost:${PCAP_PORT}/health"
-  check_health "ArmorIQ Agent    (port ${ARMORIQ_PORT})  " "http://localhost:${ARMORIQ_PORT}/health"
+  check_health "Response Engine  (port ${ARMORIQ_PORT})  " "http://localhost:${ARMORIQ_PORT}/health"
 fi
 
 echo ""

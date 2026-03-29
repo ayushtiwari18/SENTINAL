@@ -17,7 +17,7 @@ Required tests:
   - test_demo_scenario            : shutdown_endpoint proposed → BLOCKED → audit recorded
 
 Run with:
-  cd services/armoriq-agent
+  cd services/sentinal-response-engine
   pytest tests/test_llm_reasoning.py -v
 """
 

@@ -1,6 +1,6 @@
 """
-Integration Tests — ArmorIQ Enforcement Pipeline
----------------------------------------------------
+Integration Tests — SENTINAL Response Engine Enforcement Pipeline
+------------------------------------------------------------------
 Tests the complete enforcement flow:
   build_intents() → openclaw_runtime.evaluate() → DecisionModel
 
@@ -13,7 +13,7 @@ All 6 required scenarios:
   6. Full /respond endpoint with mixed attack context
 
 Run with:
-  cd services/armoriq-agent
+  cd services/sentinal-response-engine
   pytest tests/test_enforcement.py -v
 """
 
@@ -23,7 +23,7 @@ import os
 from unittest.mock import patch, MagicMock
 from datetime import datetime
 
-# Ensure the armoriq-agent package root is on the path
+# Ensure the sentinal-response-engine package root is on the path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from models import (

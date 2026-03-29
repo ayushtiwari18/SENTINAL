@@ -9,7 +9,7 @@ class ThreatType(str, Enum):
     PORT_SCAN = "PORT_SCAN"
     SQLI_ATTEMPT = "SQLI_ATTEMPT"
     DDOS = "DDOS"
-    MALWARE_CALLBACK = "MALWARE_CALLBACK"
+    MALWARE_C2 = "MALWARE_C2"
     LATERAL_MOVEMENT = "LATERAL_MOVEMENT"
     CREDENTIAL_STUFFING = "CREDENTIAL_STUFFING"
     UNKNOWN = "UNKNOWN"
@@ -31,10 +31,10 @@ class ResponseMode(str, Enum):
 
 class RecommendedAction(str, Enum):
     BAN_IP = "BAN_IP"
-    RATE_LIMIT = "RATE_LIMIT"
+    THROTTLE_IP = "THROTTLE_IP"
     MONITOR = "MONITOR"
     ALERT_ONLY = "ALERT_ONLY"
-    QUARANTINE = "QUARANTINE"
+    SHUTDOWN_ENDPOINT = "SHUTDOWN_ENDPOINT"
 
 
 class ThreatAnalysis(BaseModel):
@@ -44,14 +44,7 @@ class ThreatAnalysis(BaseModel):
     confidence: float = Field(ge=0.0, le=1.0)
     severity: Severity
     recommended_action: RecommendedAction
-    reason: str
     response_mode: ResponseMode
-    raw_payload: Optional[dict] = None
+    reason: str
     analyzed_at: datetime = Field(default_factory=datetime.utcnow)
-
-    @property
-    def confidence_pct(self) -> int:
-        return int(self.confidence * 100)
-
-    class Config:
-        use_enum_values = True
+    raw_payload: Optional[dict] = None

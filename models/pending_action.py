@@ -1,48 +1,69 @@
-from pydantic import BaseModel, Field
-from enum import Enum
-from typing import Optional
-from datetime import datetime
-from models.threat_analysis import ThreatAnalysis, RecommendedAction
+from pydantic import BaseModel
+from typing import Dict, Optional
+from datetime import datetime, timedelta
+from models.action_proposal import ActionProposal, ApprovalStatus
+import logging
+
+logger = logging.getLogger("sentinal.pending_actions")
+
+# In-memory store — replace with DB for production
+_pending: Dict[str, ActionProposal] = {}
+
+APPROVAL_TIMEOUT_MINUTES = 30
 
 
-class ApprovalStatus(str, Enum):
-    PENDING = "PENDING"
-    APPROVED = "APPROVED"
-    REJECTED = "REJECTED"
-    AUTO_EXECUTED = "AUTO_EXECUTED"
-    SKIPPED = "SKIPPED"
-    EXPIRED = "EXPIRED"
+def add(proposal: ActionProposal) -> None:
+    _pending[proposal.action_id] = proposal
+    logger.info(f"[SENTINAL] Added pending action {proposal.action_id} for IP {proposal.source_ip}")
 
 
-class PendingAction(BaseModel):
-    action_id: str
-    alert_id: str
-    source_ip: str
-    proposed_action: RecommendedAction
-    threat_analysis: ThreatAnalysis
-    status: ApprovalStatus = ApprovalStatus.PENDING
-    approved_by: Optional[str] = None
-    armoriq_token: Optional[str] = None
-    execution_result: Optional[str] = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    decided_at: Optional[datetime] = None
-    executed_at: Optional[datetime] = None
-    expires_at: Optional[datetime] = None
+def get(action_id: str) -> Optional[ActionProposal]:
+    return _pending.get(action_id)
 
-    def approve(self, admin_id: str, token: Optional[str] = None):
-        self.status = ApprovalStatus.APPROVED
-        self.approved_by = admin_id
-        self.armoriq_token = token
-        self.decided_at = datetime.utcnow()
 
-    def reject(self, admin_id: str):
-        self.status = ApprovalStatus.REJECTED
-        self.approved_by = admin_id
-        self.decided_at = datetime.utcnow()
+def list_pending() -> list[ActionProposal]:
+    now = datetime.utcnow()
+    result = []
+    for p in _pending.values():
+        if p.status == ApprovalStatus.PENDING:
+            age = now - p.created_at
+            if age > timedelta(minutes=APPROVAL_TIMEOUT_MINUTES):
+                p.status = ApprovalStatus.EXPIRED
+                logger.warning(f"[SENTINAL] Action {p.action_id} expired after {APPROVAL_TIMEOUT_MINUTES}min")
+            else:
+                result.append(p)
+    return result
 
-    def mark_executed(self, result: str):
-        self.execution_result = result
-        self.executed_at = datetime.utcnow()
 
-    class Config:
-        use_enum_values = True
+def approve(action_id: str, approved_by: str = "telegram_admin", armoriq_token: str = None) -> Optional[ActionProposal]:
+    proposal = _pending.get(action_id)
+    if not proposal or proposal.status != ApprovalStatus.PENDING:
+        return None
+    proposal.status = ApprovalStatus.APPROVED
+    proposal.approved_by = approved_by
+    proposal.decided_at = datetime.utcnow()
+    proposal.armoriq_token = armoriq_token
+    logger.info(f"[SENTINAL] Action {action_id} approved by {approved_by}")
+    return proposal
+
+
+def reject(action_id: str, rejected_by: str = "telegram_admin", reason: str = "") -> Optional[ActionProposal]:
+    proposal = _pending.get(action_id)
+    if not proposal or proposal.status != ApprovalStatus.PENDING:
+        return None
+    proposal.status = ApprovalStatus.REJECTED
+    proposal.rejected_by = rejected_by
+    proposal.rejection_reason = reason
+    proposal.decided_at = datetime.utcnow()
+    logger.info(f"[SENTINAL] Action {action_id} rejected by {rejected_by}: {reason}")
+    return proposal
+
+
+def mark_executed(action_id: str, result: str) -> Optional[ActionProposal]:
+    proposal = _pending.get(action_id)
+    if not proposal:
+        return None
+    proposal.executed_at = datetime.utcnow()
+    proposal.execution_result = result
+    logger.info(f"[SENTINAL] Action {action_id} executed: {result}")
+    return proposal

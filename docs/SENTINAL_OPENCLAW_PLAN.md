@@ -2,257 +2,246 @@
 
 ## Overview
 
-This document defines the full architecture, implementation strategy, and rollout plan for integrating SENTINAL with OpenClaw and ArmorClaw from ArmorIQ.
+This document defines the target architecture, implementation strategy, required code changes, and rollout phases for integrating SENTINAL with OpenClaw and ArmorClaw from ArmorIQ.
 
 ---
 
-## What Each Component Actually Does
+## What Each Component Actually Is
 
-| Component | Role in SENTINAL |
-|---|---|
-| **Detection Layer** | Detects threats, fires structured alerts |
-| **SENTINAL Engine** | Analyzes alerts, proposes actions, enforces policy |
-| **OpenClaw** | Node.js AI agent gateway — admin command interface via Telegram/Slack |
-| **ArmorClaw** | Security plugin inside OpenClaw — verifies every action before execution |
-| **Telegram Bot** | Primary admin notification and approval channel |
-| **Dashboard** | Secondary visibility, audit log, manual review (Phase 2) |
+| Component | What it is | Role in SENTINAL |
+|---|---|---|
+| **SENTINAL** | Python threat response engine | Detects, analyzes, executes |
+| **OpenClaw** | Node.js AI agent gateway (chat-based) | Admin operator interface via Telegram |
+| **ArmorClaw** | Security plugin for OpenClaw | Verifies admin commands before execution |
+| **Telegram Bot** | Chat interface | Alert delivery + approval channel |
+| **Dashboard** | FastAPI web UI | Secondary visibility + audit interface |
+
+> **Key insight:** OpenClaw is NOT a Python SDK embedded in SENTINAL. It is a separate Node.js gateway that runs locally. SENTINAL sends alerts TO it and receives decisions FROM it via HTTP.
 
 ---
 
-## Architecture
+## Architecture Diagram
 
 ```
-┌─────────────────────────────────────────────────┐
-│              Detection Layer                    │
-│   (Snort / Suricata / custom detector.py)       │
-│   Detects threat → fires JSON alert             │
-└──────────────────────┬──────────────────────────┘
+┌──────────────────────────────────────────────┐
+│              Detection Layer                 │
+│      (Snort / Suricata / custom IDS)         │
+│  Detects threat → sends structured alert     │
+└──────────────────────┬───────────────────────┘
                        │
                        ▼
-┌─────────────────────────────────────────────────┐
-│         SENTINAL Response Engine                │
-│              (Python / FastAPI)                 │
-│                                                 │
-│  intent_builder.py  ← LLM threat analysis       │
-│  runtime.py         ← policy + routing gate     │
-│  executor.py        ← runs approved actions     │
-│  audit_logger.py    ← logs full event chain     │
-└──────────────────────┬──────────────────────────┘
-                       │ alert + proposed action
-                       ▼
-┌─────────────────────────────────────────────────┐
-│        OpenClaw Gateway (Node.js)               │
-│   Installed via: curl -fsSL                     │
-│   https://armoriq.ai/install-armorclaw.sh | bash│
-│                                                 │
-│  ┌───────────────────────────────────────────┐  │
-│  │          ArmorClaw Plugin                 │  │
-│  │  • Captures action intent                 │  │
-│  │  • Requests intent token from IAP         │  │
-│  │  • Verifies each step before execution    │  │
-│  │  • Enforces organization policies         │  │
-│  └───────────────────────────────────────────┘  │
-└──────────────────────┬──────────────────────────┘
-                       │
-                       ▼
-┌─────────────────────────────────────────────────┐
-│         Telegram / Operator Interface           │
-│                                                 │
-│  🚨 Alert: Brute force from 103.45.67.89        │
-│  Confidence: 91% | Severity: HIGH               │
-│  Proposed: BAN_IP                               │
-│                                                 │
-│  [ ✅ Approve ]  [ ❌ Reject ]  [ 👁 Details ] │
-└──────────────────────┬──────────────────────────┘
-                       │ admin decision
-                       ▼
-┌─────────────────────────────────────────────────┐
-│   ArmorClaw verifies intent token + policy      │
-│   → SENTINAL executes approved action           │
-│   → audit_logger.py records full chain          │
-└─────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────┐
+│         SENTINAL Response Engine             │
+│              (Python / FastAPI)              │
+│                                              │
+│  intent_builder.py  ← LLM threat analysis    │
+│  runtime.py         ← policy gate            │
+│  executor.py        ← action execution       │
+│  audit_logger.py    ← full audit trail       │
+└──────────┬───────────────────────────────────┘
+           │
+           │  (HTTP POST pending action)
+           ▼
+┌──────────────────────────────────────────────┐
+│         services/openclaw_bridge.py          │
+│  Sends alert to OpenClaw gateway             │
+│  Receives approve/reject decisions           │
+└──────────┬───────────────────────────────────┘
+           │
+           ▼
+┌──────────────────────────────────────────────┐
+│         OpenClaw Gateway (Node.js)           │
+│         Installed via ArmorIQ installer      │
+│                                              │
+│  ┌──────────────────────────────────────┐    │
+│  │         ArmorIQ Plugin               │    │
+│  │  • Intent token verification         │    │
+│  │  • Cryptographic proof validation    │    │
+│  │  • Policy enforcement                │    │
+│  └──────────────────────────────────────┘    │
+└──────────┬───────────────────────────────────┘
+           │
+           ▼
+┌──────────────────────────────────────────────┐
+│         Telegram Bot Interface               │
+│                                              │
+│  🚨 Alert: SSH Brute Force from 1.2.3.4     │
+│  Confidence: 91% | Action: BAN IP           │
+│  [✅ Approve]  [❌ Reject]  [👁 Details]    │
+└──────────┬───────────────────────────────────┘
+           │  Admin decision
+           ▼
+┌──────────────────────────────────────────────┐
+│  ArmorClaw verifies → SENTINAL executes      │
+│  audit_logger records full chain             │
+└──────────────────────────────────────────────┘
 ```
 
 ---
 
-## Operating Modes
+## Three Operating Modes
 
-### Mode A — Auto-Execute
-- Confidence >= `AUTO_EXECUTE_THRESHOLD` (default: 0.95)
-- Policy explicitly allows immediate action
-- SENTINAL executes, Telegram sends notification only
+### Mode A — Auto Execute
+- Trigger: `confidence >= AUTO_EXECUTE_THRESHOLD` (default 0.95)
+- Flow: Detection → Analysis → Auto ban → Telegram notification only
+- No human required
 
 ### Mode B — Human Approval Required
-- Confidence >= `REVIEW_THRESHOLD` (default: 0.70)
-- Alert sent to Telegram via OpenClaw bridge
-- Admin approves or rejects
-- ArmorClaw verifies before execution
+- Trigger: `confidence >= REVIEW_THRESHOLD` (default 0.70)
+- Flow: Detection → Analysis → Telegram alert with buttons → Admin approves → ArmorClaw verifies → SENTINAL executes
 
 ### Mode C — Monitor Only
-- Confidence < `REVIEW_THRESHOLD`
-- Event logged, no action taken
-- Optional low-priority Telegram notice
+- Trigger: `confidence < REVIEW_THRESHOLD`
+- Flow: Detection → Analysis → Audit log only → Optional low-priority Telegram notice
+
+---
+
+## Files to Create (New)
+
+```
+services/
+  openclaw_bridge.py       ← HTTP bridge to OpenClaw gateway
+  telegram_notifier.py     ← Telegram alert formatting + sending
+  ip_enforcer.py           ← Actual IP ban/unban via iptables/ufw
+
+models/
+  threat_analysis.py       ← Structured ThreatAnalysis Pydantic model
+  action_proposal.py       ← ActionProposal model with approval states
+  pending_action.py        ← PendingAction model for in-memory queue
+
+dashboard/
+  __init__.py
+  auth.py                  ← JWT authentication
+  routes.py                ← FastAPI dashboard routes
+  models.py                ← Dashboard-specific Pydantic models
+
+openclaw/
+  config.yaml              ← OpenClaw bot config pointing to SENTINAL
+  sentinal_tools.yaml      ← SENTINAL-specific tool definitions
+```
+
+## Files to Modify (Existing)
+
+| File | Change |
+|---|---|
+| `intent_builder.py` | Return structured `ThreatAnalysis` object instead of raw string |
+| `runtime.py` | Add confidence-based routing: auto / review / skip |
+| `executor.py` | Only execute approved or auto-approved actions |
+| `audit_logger.py` | Log full lifecycle: detection → approval → execution |
+| `main.py` | Add `/actions/pending`, `/actions/{id}/approve`, `/actions/{id}/reject` |
+| `policy.yaml` | Add thresholds + per-threat-type rules |
+| `.env.example` | Add ARMORIQ_API_KEY, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, DASHBOARD_JWT_SECRET |
+| `requirements.txt` | Add python-telegram-bot, python-jose, httpx, pydantic |
 
 ---
 
 ## Data Flow — Step by Step
 
-### Step 1: Alert Fires
-```json
-{
-  "id": "alert-uuid-001",
-  "ip": "103.45.67.89",
-  "type": "brute_force",
-  "attempts": 147,
-  "window_seconds": 90,
-  "timestamp": "2026-03-29T22:00:00Z"
-}
 ```
+Step 1: Detection layer fires:
+  {
+    "id": "alert-uuid",
+    "ip": "103.45.67.89",
+    "type": "brute_force",
+    "payload": {...},
+    "timestamp": "2026-03-29T22:00:00Z"
+  }
 
-### Step 2: intent_builder.py Analysis
-```json
-{
-  "threat_type": "SSH_BRUTE_FORCE",
-  "confidence": 0.91,
-  "severity": "HIGH",
-  "recommended_action": "BAN_IP",
-  "reason": "147 failed SSH attempts in 90 seconds",
-  "response_mode": "REVIEW_REQUIRED"
-}
-```
+Step 2: intent_builder.py analyzes:
+  {
+    "threat_type": "SSH_BRUTE_FORCE",
+    "confidence": 0.91,
+    "severity": "HIGH",
+    "recommended_action": "BAN_IP",
+    "reason": "147 failed SSH attempts in 90 seconds",
+    "response_mode": "REVIEW_REQUIRED"
+  }
 
-### Step 3: runtime.py Policy Gate
-```python
-if confidence >= AUTO_EXECUTE_THRESHOLD:
-    # execute immediately
-elif confidence >= REVIEW_THRESHOLD:
-    # send to Telegram for human approval
-else:
-    # log and monitor only
-```
+Step 3: runtime.py routes:
+  confidence 0.91 < 0.95  → REVIEW_REQUIRED
+  → calls openclaw_bridge.send_for_approval(alert, analysis)
 
-### Step 4: Telegram Alert (via openclaw_bridge.py)
-```
-🚨 SENTINAL Alert #alert-uuid-001
+Step 4: Telegram message sent:
+  🚨 SENTINAL Alert #alert-uuid
+  IP: 103.45.67.89
+  Threat: SSH Brute Force
+  Confidence: 91% | Severity: HIGH
+  Reason: 147 failed SSH attempts in 90s
+  Action: BAN IP
+  [✅ Approve] [❌ Reject]
 
-IP: 103.45.67.89
-Threat: SSH_BRUTE_FORCE
-Confidence: 91% | Severity: HIGH
-Reason: 147 failed SSH attempts in 90 seconds
-
-Proposed Action: BAN_IP
-
-[ ✅ Approve ]  [ ❌ Reject ]
-```
-
-### Step 5: Admin Decision → ArmorClaw Verification → Execution
-- Admin taps Approve
-- ArmorClaw verifies intent token
-- `executor.py` calls `ip_enforcer.ban(ip)`
-- `audit_logger.py` records full chain
-
----
-
-## Files Changed
-
-### New Files
-```
-services/openclaw_bridge.py     — bridge between SENTINAL and OpenClaw gateway
-services/telegram_notifier.py   — Telegram alert formatting and sending
-services/ip_enforcer.py         — IP ban/unban via iptables/ufw abstraction
-models/threat_analysis.py       — Pydantic model for structured threat output
-models/action_proposal.py       — Pydantic model for proposed action
-models/pending_action.py        — Pydantic model for approval state tracking
-docs/SENTINAL_OPENCLAW_PLAN.md  — this document
-```
-
-### Modified Files
-```
-intent_builder.py    — returns structured ThreatAnalysis
-runtime.py           — confidence-based routing (auto/review/skip)
-executor.py          — only executes approved actions
-audit_logger.py      — logs full event lifecycle
-main.py              — adds /actions/pending, /actions/{id}/approve, /actions/{id}/reject
-policy.yaml          — adds confidence thresholds and response modes
-.env.example         — adds ARMORIQ_API_KEY, TELEGRAM_BOT_TOKEN, etc.
-requirements.txt     — adds python-telegram-bot, httpx, pydantic v2
+Step 5: Admin taps Approve
+  → ArmorClaw verifies intent token
+  → POST /actions/alert-uuid/approve
+  → executor.py runs ip_enforcer.ban("103.45.67.89")
+  → audit_logger records full chain
+  → Telegram confirms: ✅ IP 103.45.67.89 banned
 ```
 
 ---
 
-## Prerequisites
+## Prerequisites Before Coding
 
-Before implementing:
+1. Install OpenClaw:
+   ```bash
+   curl -fsSL https://armoriq.ai/install-armorclaw.sh | bash
+   ```
 
-1. Install OpenClaw + ArmorClaw:
-```bash
-curl -fsSL https://armoriq.ai/install-armorclaw.sh | bash
-```
+2. Get ArmorIQ API key from https://platform.armoriq.ai → API Dashboard → API Keys
 
-2. Get ArmorIQ API key: https://platform.armoriq.ai → API Dashboard → API Keys
+3. Create Telegram bot via @BotFather → get `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID`
 
-3. Create Telegram bot via @BotFather → get `TELEGRAM_BOT_TOKEN`
-
-4. Get your Telegram `CHAT_ID` by messaging your bot and calling:
-```
-https://api.telegram.org/bot<TOKEN>/getUpdates
-```
-
-5. Fill in `.env` from `.env.example`
+4. Add all keys to `.env`
 
 ---
 
 ## Rollout Phases
 
-### Phase 1 — Core Restructuring (Week 1)
-- [ ] Add Pydantic models: ThreatAnalysis, ActionProposal, PendingAction
-- [ ] Update intent_builder.py to return structured output
-- [ ] Update runtime.py with confidence routing
-- [ ] Update executor.py to check approval state
-- [ ] Update audit_logger.py with full lifecycle logging
+### Phase 1 — Model Restructuring
+- Define `ThreatAnalysis`, `ActionProposal`, `PendingAction` models
+- Add approval states: PENDING, APPROVED, REJECTED, AUTO_EXECUTED, SKIPPED
+- Modify `intent_builder.py` to return structured output
+- Modify `runtime.py` to route by confidence
 
-### Phase 2 — Notification + Approval (Week 1-2)
-- [ ] Implement telegram_notifier.py
-- [ ] Implement openclaw_bridge.py
-- [ ] Add /actions/approve and /actions/reject endpoints in main.py
-- [ ] Test full flow: fake alert → Telegram → approve → IP ban → audit log
+### Phase 2 — Services Layer
+- Write `ip_enforcer.py`
+- Write `telegram_notifier.py`
+- Write `openclaw_bridge.py`
+- Add `/actions` endpoints to `main.py`
 
-### Phase 3 — IP Enforcement (Week 2)
-- [ ] Implement ip_enforcer.py with iptables/ufw backend
-- [ ] Add FIREWALL_BACKEND config (ufw / iptables / noop)
-- [ ] Test IP ban and rollback
+### Phase 3 — OpenClaw Config
+- Create `openclaw/config.yaml`
+- Create `openclaw/sentinal_tools.yaml`
+- Test full flow: fake alert → Telegram → approve → IP ban
 
-### Phase 4 — OpenClaw Config (Week 2-3)
-- [ ] Configure OpenClaw gateway with SENTINAL webhook URLs
-- [ ] Define SENTINAL-specific tools in openclaw/sentinal_tools.yaml
-- [ ] Restrict OpenClaw tool permissions to SENTINAL ops only
-
-### Phase 5 — Dashboard (Week 3-4)
-- [ ] Build FastAPI dashboard with JWT auth
-- [ ] Pages: Login, Pending Actions, Blocked IPs, Audit Log
-- [ ] Connect to same approve/reject webhook endpoints
+### Phase 4 — Dashboard
+- Build minimal FastAPI dashboard with JWT auth
+- Pages: Login, Pending Actions, Audit Log, Blocked IPs
 
 ---
 
 ## Security Principles
 
-- Never execute destructive actions directly from raw detection output
+- Never execute a destructive action directly from raw detection output
 - All non-trivial actions must pass through policy gate
-- Human approval required for ambiguous confidence cases
-- OpenClaw tool permissions restricted to SENTINAL ops only
-- Every state transition logged in audit_logger.py
-- Approval timeout for stale pending actions (configurable)
-- Idempotent execution — same action_id cannot execute twice
+- Human approval required for ambiguous/medium-confidence cases
+- OpenClaw tool permissions must be minimal (SENTINAL-specific only)
+- Log every state transition in audit_logger
+- JWT auth required for dashboard
+- Admin allowlist for Telegram users
+- Approval timeout for stale pending actions
+- Idempotent action execution
+- Rollback support for mistaken blocks
 
 ---
 
 ## Definition of Done
 
 Integration is complete when:
-1. Fake alert fires from detector.py
-2. SENTINAL analyzes and creates pending action
-3. Telegram alert sent via OpenClaw bridge
-4. Admin approves in Telegram
-5. ArmorClaw verifies intent
-6. SENTINAL bans the IP
-7. Audit log records: detection → analysis → pending → approved → executed
+1. A fake alert fires from `detector.py`
+2. SENTINAL analyzes it and sends Telegram alert via OpenClaw
+3. Admin taps Approve in Telegram
+4. ArmorClaw verifies the intent token
+5. SENTINAL bans the IP
+6. Audit log records: `detection → analysis → approval → execution`
+7. Dashboard shows blocked IP in history

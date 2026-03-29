@@ -21,7 +21,7 @@ import json
 import logging
 from models import IntentModel, AttackContext, ProposedAction
 
-logger = logging.getLogger("armoriq.intent_builder")
+logger = logging.getLogger("sentinal.intent_builder")
 
 LLM_ENABLED  = os.getenv("LLM_ENABLED", "true").lower() not in ("false", "0", "no")
 GEMINI_KEY   = os.getenv("GEMINI_API_KEY", "")
@@ -39,7 +39,7 @@ _VALID_ACTIONS = {
 
 _VALID_RISK_LEVELS = {"low", "medium", "high", "critical"}
 
-_SYSTEM_PROMPT = """You are ArmorIQ, an autonomous cybersecurity response agent.
+_SYSTEM_PROMPT = """You are the SENTINAL Security Response Agent.
 Given an attack context, propose a JSON array of security actions to take.
 
 Each action object MUST have exactly these fields:

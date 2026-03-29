@@ -39,16 +39,16 @@ logging.basicConfig(
     level=getattr(logging, LOG_LEVEL, logging.INFO),
     format="%(asctime)s [%(name)s] %(levelname)s — %(message)s"
 )
-logger = logging.getLogger("armoriq")
+logger = logging.getLogger("sentinal.response_engine")
 
-logger.info(f"[ARMORIQ] Loading env from: {_env_path}")
-logger.info(f"[ARMORIQ] .env found: {_env_path.exists()}")
-logger.info(f"[ARMORIQ] GATEWAY_URL:  {os.getenv('GATEWAY_URL', 'http://localhost:3000')}")
-logger.info(f"[ARMORIQ] ARMORIQ_PORT: {os.getenv('ARMORIQ_PORT', '8004')}")
+logger.info(f"[SENTINAL] Loading env from: {_env_path}")
+logger.info(f"[SENTINAL] .env found: {_env_path.exists()}")
+logger.info(f"[SENTINAL] GATEWAY_URL:  {os.getenv('GATEWAY_URL', 'http://localhost:3000')}")
+logger.info(f"[SENTINAL] ARMORIQ_PORT: {os.getenv('ARMORIQ_PORT', '8004')}")
 
 app = FastAPI(
     title="SENTINAL Response Engine",
-    description="Intent-boundary enforcement for SENTINAL. OpenClaw-powered policy runtime.",
+    description="Intent-boundary enforcement for SENTINAL. Policy-based runtime with ArmorClaw enforcement layer.",
     version="2.0.0"
 )
 
@@ -62,21 +62,21 @@ app.add_middleware(
 
 def _evaluate_with_fallback(intent):
     """
-    Evaluate intent via OpenClaw runtime.
-    Falls back to policy_engine.evaluate() if OpenClaw is unavailable.
+    Evaluate intent via the primary policy runtime.
+    Falls back to policy_engine.evaluate() if the runtime is unavailable.
     NEVER raises — always returns a DecisionModel.
     """
     try:
         return openclaw_runtime.evaluate(intent)
     except Exception as exc:
-        logger.error(f"[OPENCLAW] Runtime error: {exc} — falling back to policy_engine")
+        logger.error(f"[POLICY] Runtime error: {exc} — falling back to policy_engine")
         return _fallback_evaluate(intent)
 
 
 @app.get("/health")
 def health():
     """Standard SENTINAL health probe. Used by Gateway serviceHealthService."""
-    openclaw_ok = openclaw_runtime.is_loaded()
+    policy_ok = openclaw_runtime.is_loaded()
     return {
         "status":      "ok",
         "service":     "sentinal-response-engine",
@@ -85,8 +85,8 @@ def health():
         "port":        int(os.getenv("ARMORIQ_PORT", "8004")),
         "environment": os.getenv("NODE_ENV", os.getenv("ENVIRONMENT", "development")),
         "timestamp":   time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-        "enforcement": "ArmorClaw-v1" if openclaw_ok else "ArmorIQ-Policy-v1 (fallback)",
-        "openclaw_loaded": openclaw_ok,
+        "enforcement": "SENTINAL-Policy-v1" if policy_ok else "SENTINAL-Policy-v1 (fallback)",
+        "policy_loaded": policy_ok,
         "gateway_url": os.getenv("GATEWAY_URL", "http://localhost:3000")
     }
 
@@ -98,7 +98,7 @@ async def respond(body: RespondRequest):
     Called by Gateway after every confirmed attack.
     """
     logger.info(
-        f"[ARMORIQ] respond called — attackId={body.attackId} "
+        f"[SENTINAL] respond called — attackId={body.attackId} "
         f"ip={body.ip} type={body.attackType} severity={body.severity}"
     )
 
@@ -112,7 +112,7 @@ async def respond(body: RespondRequest):
     )
 
     intents = build_intents(ctx)
-    logger.info(f"[ARMORIQ] Built {len(intents)} intents for attackId={body.attackId}")
+    logger.info(f"[SENTINAL] Built {len(intents)} intents for attackId={body.attackId}")
 
     actions_executed = []
     actions_queued   = []
@@ -139,9 +139,9 @@ async def respond(body: RespondRequest):
             )
             if ok:
                 actions_executed.append(action)
-                logger.info(f"[ARMORIQ] EXECUTED: {action}")
+                logger.info(f"[SENTINAL] EXECUTED: {action}")
             else:
-                logger.warning(f"[ARMORIQ] Execution of '{action}' failed — see executor log")
+                logger.warning(f"[SENTINAL] Execution of '{action}' failed — see executor log")
         else:
             actions_queued.append(
                 ActionResult(
@@ -152,10 +152,10 @@ async def respond(body: RespondRequest):
                     blockedReason=decision.reason,
                 )
             )
-            logger.info(f"[ARMORIQ] BLOCKED (queued): {action} — {decision.reason}")
+            logger.info(f"[SENTINAL] BLOCKED (queued): {action} — {decision.reason}")
 
     logger.info(
-        f"[ARMORIQ] Complete — executed={actions_executed} "
+        f"[SENTINAL] Complete — executed={actions_executed} "
         f"queued={[a.action for a in actions_queued]} "
         f"audit_entries={audit_count}"
     )

@@ -13,7 +13,7 @@ import logging
 import os
 from models import DecisionModel, IntentModel
 
-logger = logging.getLogger("armoriq.audit")
+logger = logging.getLogger("sentinal.audit")
 
 GATEWAY_URL = os.getenv("GATEWAY_URL", "http://localhost:3000")
 

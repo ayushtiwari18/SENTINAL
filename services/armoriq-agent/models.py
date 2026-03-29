@@ -35,6 +35,7 @@ class IntentModel(BaseModel):
     timestamp:       str = Field(default_factory=lambda: datetime.utcnow().isoformat() + "Z")
     attack_context:  AttackContext
     proposed_action: ProposedAction   # typed — was: dict
+    llm_reasoning:   Optional[str] = None  # "llm" | "rule_engine" | reason for fallback
 
 
 class DecisionModel(BaseModel):

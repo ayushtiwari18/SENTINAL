@@ -32,6 +32,9 @@ from app.classifier import score_request
 from app.explainer import explain
 from app.decoder import decode_and_scan
 from app.features import extract_features
+# ── NEW: OpenClaw webhook router ──────────────────────────────────────────────
+from app.webhook_router import router as webhook_router, fire_alert_background
+# ─────────────────────────────────────────────────────────────────────────────
 import json
 import logging
 
@@ -51,6 +54,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"]
 )
+
+# ── NEW: Register webhook router (adds POST /webhook/alert) ───────────────────
+app.include_router(webhook_router)
+# ─────────────────────────────────────────────────────────────────────────────
 
 
 @app.middleware("http")
@@ -122,7 +129,8 @@ def analyze(request: AnalyzeRequest):
                 f"THREAT: {rule_match['threat_type']} from {request.ip} "
                 f"confidence={score['confidence']} encoded={adversarial_decoded}"
             )
-            return {
+
+            result = {
                 "logId":               request.logId,
                 "threat_detected":     True,
                 "threat_type":         rule_match["threat_type"],
@@ -135,6 +143,21 @@ def analyze(request: AnalyzeRequest):
                 "explanation":         explanation,
                 "message":             f"Rule {rule_match['rule_id']} matched: {rule_match['threat_type']}"
             }
+
+            # ── NEW: Fire confirmed threat to OpenClaw (background, non-blocking) ──
+            fire_alert_background(None, {
+                "logId":               request.logId,
+                "ip":                  request.ip,
+                "threat_type":         rule_match["threat_type"],
+                "rule_id":             rule_match["rule_id"],
+                "confidence":          score["confidence"],
+                "severity":            score["severity"],
+                "status":              attack_status,
+                "adversarial_decoded": adversarial_decoded,
+            })
+            # ─────────────────────────────────────────────────────────────────────
+
+            return result
 
         return {
             "logId":               request.logId,

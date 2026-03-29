@@ -17,7 +17,7 @@
 
 # ── Config — edit these if your IP changes ───────────────────────────────────
 TARGET="http://localhost:4000"           # demo-target on your local machine
-GATEWAY="http://54.146.6.197:3000"      # EC2 Gateway API
+GATEWAY=$SENTINAL_GATEWAY_URL      # EC2 Gateway API
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
 CYAN='\033[0;36m'; BOLD='\033[1m'; NC='\033[0m'
@@ -29,7 +29,7 @@ sep()  { echo -e "\n${BOLD}─────────────────�
 
 echo -e "\n${BOLD}╔══════════════════════════════════════════════════╗${NC}"
 echo -e "${BOLD}║    SENTINAL EC2 — Full Pipeline Attack Tests     ║${NC}"
-echo -e "${BOLD}║    Dashboard: http://54.146.6.197:5173           ║${NC}"
+echo -e "${BOLD}║    Dashboard: $SENTINAL_GATEWAY_URL/dashboard    ║${NC}"
 echo -e "${BOLD}╚══════════════════════════════════════════════════╝${NC}"
 
 # Verify demo-target is alive
@@ -214,8 +214,8 @@ echo -e "\n${BOLD}${GREEN}╔═════════════════
 echo -e "${BOLD}${GREEN}║         ALL TESTS FIRED ✓                        ║${NC}"
 echo -e "${BOLD}${GREEN}╚══════════════════════════════════════════════════╝${NC}"
 echo ""
-echo -e "  ${BOLD}Dashboard Attacks page:${NC}  http://54.146.6.197:5173/attacks"
-echo -e "  ${BOLD}Dashboard Explore page:${NC}   http://54.146.6.197:5173/explore"
+echo -e "  ${BOLD}Dashboard Attacks page:${NC}  $SENTINAL_GATEWAY_URL/attacks"
+echo -e "  ${BOLD}Dashboard Explore page:${NC}   $SENTINAL_GATEWAY_URL/explore"
 echo -e "  ${BOLD}Raw API check:${NC}            $GATEWAY/api/attacks/recent?limit=20"
 echo ""
 echo -e "  ${YELLOW}NOTE:${NC} Tests 1-7 go through demo-target → middleware → EC2 gateway → detection"

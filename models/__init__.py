@@ -1,1 +1,1 @@
-# SENTINAL models package
+# SENTINAL Models Package

@@ -1,133 +1,132 @@
 """
-ip_enforcer.py
-Executes real IP enforcement actions via iptables/ufw.
+IP Enforcer — SENTINAL Firewall Action Layer
 
-Abstraction layer — SENTINAL calls this, never calls iptables directly.
-Firewall backend is controlled by FIREWALL_BACKEND env var:
-  - ufw      : Uses ufw (Ubuntu Uncomplicated Firewall)
-  - iptables : Uses iptables directly
-  - noop     : Dry-run mode — logs but does not execute (safe for testing)
+Abstracts IP ban/unban/throttle operations.
+Supports multiple backends: ufw, iptables, noop (testing).
+
+Set FIREWALL_BACKEND in .env:
+  ufw       — Ubuntu ufw (recommended for most deployments)
+  iptables  — Direct iptables rules
+  noop      — Logs only, no real firewall changes (for testing)
 """
 
 import os
 import subprocess
 import logging
-from typing import Optional
+from typing import Literal
 
 logger = logging.getLogger("sentinal.ip_enforcer")
 
-BACKEND = os.getenv("FIREWALL_BACKEND", "noop").lower()
+FIREWALL_BACKEND = os.getenv("FIREWALL_BACKEND", "noop")
+
+FirewallBackend = Literal["ufw", "iptables", "noop"]
 
 
-def ban_ip(ip: str, reason: str = "") -> dict:
+class IPEnforcer:
     """
-    Block all traffic from the given IP address.
-    Returns dict with success bool and message string.
+    Executes firewall actions for approved SENTINAL responses.
+
+    This class is the ONLY place in SENTINAL that touches the firewall.
+    All calls must come through executor.py after ArmorClaw verification.
     """
-    logger.info(f"[ENFORCER] BAN request: {ip} | reason: {reason} | backend: {BACKEND}")
 
-    if BACKEND == "noop":
-        logger.info(f"[ENFORCER][NOOP] Would ban {ip}")
-        return {"success": True, "message": f"NOOP: would ban {ip}", "backend": "noop"}
+    def __init__(self, backend: str = FIREWALL_BACKEND):
+        self.backend = backend
+        logger.info(f"[IP_ENFORCER] Initialized with backend: {self.backend}")
 
-    elif BACKEND == "ufw":
-        return _ufw_deny(ip)
+    def ban(self, ip: str) -> dict:
+        """
+        Block all traffic from the given IP address.
+        Returns a result dict with success status and message.
+        """
+        logger.info(f"[IP_ENFORCER] BAN requested for {ip} (backend: {self.backend})")
 
-    elif BACKEND == "iptables":
-        return _iptables_drop(ip)
+        if self.backend == "ufw":
+            return self._ufw_deny(ip)
+        elif self.backend == "iptables":
+            return self._iptables_drop(ip)
+        elif self.backend == "noop":
+            return self._noop("BAN", ip)
+        else:
+            return {"success": False, "message": f"Unknown backend: {self.backend}"}
 
-    else:
-        logger.error(f"[ENFORCER] Unknown backend: {BACKEND}")
-        return {"success": False, "message": f"Unknown firewall backend: {BACKEND}"}
+    def unban(self, ip: str) -> dict:
+        """
+        Remove a ban on the given IP address (rollback).
+        """
+        logger.info(f"[IP_ENFORCER] UNBAN requested for {ip} (backend: {self.backend})")
+
+        if self.backend == "ufw":
+            return self._ufw_delete_deny(ip)
+        elif self.backend == "iptables":
+            return self._iptables_delete_drop(ip)
+        elif self.backend == "noop":
+            return self._noop("UNBAN", ip)
+        else:
+            return {"success": False, "message": f"Unknown backend: {self.backend}"}
+
+    def _ufw_deny(self, ip: str) -> dict:
+        try:
+            result = subprocess.run(
+                ["ufw", "deny", "from", ip, "to", "any"],
+                capture_output=True, text=True, timeout=10
+            )
+            if result.returncode == 0:
+                logger.info(f"[IP_ENFORCER] ufw: banned {ip}")
+                return {"success": True, "message": f"ufw: denied all traffic from {ip}"}
+            else:
+                logger.error(f"[IP_ENFORCER] ufw error: {result.stderr}")
+                return {"success": False, "message": result.stderr.strip()}
+        except Exception as e:
+            logger.error(f"[IP_ENFORCER] ufw exception: {e}")
+            return {"success": False, "message": str(e)}
+
+    def _ufw_delete_deny(self, ip: str) -> dict:
+        try:
+            result = subprocess.run(
+                ["ufw", "delete", "deny", "from", ip, "to", "any"],
+                capture_output=True, text=True, timeout=10
+            )
+            if result.returncode == 0:
+                return {"success": True, "message": f"ufw: removed ban on {ip}"}
+            else:
+                return {"success": False, "message": result.stderr.strip()}
+        except Exception as e:
+            return {"success": False, "message": str(e)}
+
+    def _iptables_drop(self, ip: str) -> dict:
+        try:
+            result = subprocess.run(
+                ["iptables", "-I", "INPUT", "-s", ip, "-j", "DROP"],
+                capture_output=True, text=True, timeout=10
+            )
+            if result.returncode == 0:
+                logger.info(f"[IP_ENFORCER] iptables: dropped {ip}")
+                return {"success": True, "message": f"iptables: DROP rule added for {ip}"}
+            else:
+                logger.error(f"[IP_ENFORCER] iptables error: {result.stderr}")
+                return {"success": False, "message": result.stderr.strip()}
+        except Exception as e:
+            return {"success": False, "message": str(e)}
+
+    def _iptables_delete_drop(self, ip: str) -> dict:
+        try:
+            result = subprocess.run(
+                ["iptables", "-D", "INPUT", "-s", ip, "-j", "DROP"],
+                capture_output=True, text=True, timeout=10
+            )
+            if result.returncode == 0:
+                return {"success": True, "message": f"iptables: DROP rule removed for {ip}"}
+            else:
+                return {"success": False, "message": result.stderr.strip()}
+        except Exception as e:
+            return {"success": False, "message": str(e)}
+
+    def _noop(self, action: str, ip: str) -> dict:
+        message = f"[NOOP] Would have executed {action} for {ip} — no real firewall change (FIREWALL_BACKEND=noop)"
+        logger.info(f"[IP_ENFORCER] {message}")
+        return {"success": True, "message": message}
 
 
-def unban_ip(ip: str) -> dict:
-    """
-    Remove block on the given IP address.
-    Returns dict with success bool and message string.
-    """
-    logger.info(f"[ENFORCER] UNBAN request: {ip} | backend: {BACKEND}")
-
-    if BACKEND == "noop":
-        logger.info(f"[ENFORCER][NOOP] Would unban {ip}")
-        return {"success": True, "message": f"NOOP: would unban {ip}", "backend": "noop"}
-
-    elif BACKEND == "ufw":
-        return _ufw_allow(ip)
-
-    elif BACKEND == "iptables":
-        return _iptables_remove_drop(ip)
-
-    else:
-        return {"success": False, "message": f"Unknown firewall backend: {BACKEND}"}
-
-
-def is_banned(ip: str) -> bool:
-    """Check if an IP is currently blocked."""
-    if BACKEND == "noop":
-        return False
-    elif BACKEND == "ufw":
-        result = _run(["ufw", "status", "verbose"])
-        return ip in result.get("stdout", "")
-    elif BACKEND == "iptables":
-        result = _run(["iptables", "-L", "INPUT", "-n"])
-        return ip in result.get("stdout", "")
-    return False
-
-
-# ─── Private helpers ───────────────────────────────────────────────────────────
-
-def _ufw_deny(ip: str) -> dict:
-    result = _run(["ufw", "deny", "from", ip, "to", "any"])
-    if result["returncode"] == 0:
-        logger.info(f"[ENFORCER][UFW] Banned {ip}")
-        return {"success": True, "message": f"UFW: banned {ip}"}
-    else:
-        logger.error(f"[ENFORCER][UFW] Failed to ban {ip}: {result['stderr']}")
-        return {"success": False, "message": result["stderr"]}
-
-
-def _ufw_allow(ip: str) -> dict:
-    result = _run(["ufw", "delete", "deny", "from", ip, "to", "any"])
-    if result["returncode"] == 0:
-        logger.info(f"[ENFORCER][UFW] Unbanned {ip}")
-        return {"success": True, "message": f"UFW: unbanned {ip}"}
-    else:
-        logger.error(f"[ENFORCER][UFW] Failed to unban {ip}: {result['stderr']}")
-        return {"success": False, "message": result["stderr"]}
-
-
-def _iptables_drop(ip: str) -> dict:
-    result = _run(["iptables", "-I", "INPUT", "-s", ip, "-j", "DROP"])
-    if result["returncode"] == 0:
-        logger.info(f"[ENFORCER][IPTABLES] Banned {ip}")
-        return {"success": True, "message": f"iptables: banned {ip}"}
-    else:
-        logger.error(f"[ENFORCER][IPTABLES] Failed to ban {ip}: {result['stderr']}")
-        return {"success": False, "message": result["stderr"]}
-
-
-def _iptables_remove_drop(ip: str) -> dict:
-    result = _run(["iptables", "-D", "INPUT", "-s", ip, "-j", "DROP"])
-    if result["returncode"] == 0:
-        logger.info(f"[ENFORCER][IPTABLES] Unbanned {ip}")
-        return {"success": True, "message": f"iptables: unbanned {ip}"}
-    else:
-        logger.error(f"[ENFORCER][IPTABLES] Failed to unban {ip}: {result['stderr']}")
-        return {"success": False, "message": result["stderr"]}
-
-
-def _run(cmd: list) -> dict:
-    try:
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
-        return {
-            "returncode": proc.returncode,
-            "stdout": proc.stdout,
-            "stderr": proc.stderr,
-        }
-    except subprocess.TimeoutExpired:
-        return {"returncode": -1, "stdout": "", "stderr": "Command timed out"}
-    except FileNotFoundError:
-        return {"returncode": -1, "stdout": "", "stderr": f"Command not found: {cmd[0]}"}
-    except Exception as e:
-        return {"returncode": -1, "stdout": "", "stderr": str(e)}
+# Singleton instance
+ip_enforcer = IPEnforcer()

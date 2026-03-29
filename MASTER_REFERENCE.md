@@ -237,7 +237,7 @@ SENTINAL/
 │   └── simulate_attack.sh
 │
 └── services/
-    ├── armoriq-agent/               SERVICE 4: Python/FastAPI :8004
+    ├── sentinal-response-engine/        SERVICE 4: Python/FastAPI :8004
     │   ├── main.py                  FastAPI app — POST /respond  GET /health
     │   ├── intent_builder.py        builds 5–6 IntentModel objects per attack
     │   ├── openclaw_runtime.py      PRIMARY — loads policy.yaml, RULE_001→DEFAULT
@@ -282,7 +282,7 @@ SENTINAL/
 | Gateway API | Node.js + Express | 3000 | ✅ LIVE (prod) | `backend/server.js` |
 | PCAP Processor | Python + FastAPI | 8003 | ✅ LIVE (prod) | `services/pcap-processor/main.py` |
 | Detection Engine | Python + FastAPI | 8002 | ✅ LIVE (prod) | `services/detection-engine/app/main.py` |
-| ArmorIQ Agent | Python + FastAPI | 8004 | ✅ LIVE (prod) | `services/armoriq-agent/main.py` |
+| SENTINAL Response Engine | Python + FastAPI | 8004 | ✅ LIVE (prod) | `services/sentinal-response-engine/main.py` |
 | React Dashboard | Vite + React | 5173 | ✅ LIVE (prod) | `dashboard/src/main.jsx` |
 | sentinel-middleware | Node.js npm pkg | — | ✅ WORKING | `services/middleware/src/index.js` |
 | Demo Target | Node.js + Express | 4000 | ✅ WORKING | `demo-target/server.js` |
@@ -373,7 +373,7 @@ POST /analyze   Body: { logId, projectId, method, url, ip, queryParams, body, he
 GET  /health
 ```
 
-### ArmorIQ Agent (`:8004`)
+### SENTINAL Response Engine (`:8004`)
 ```
 POST /respond   Body: { attackId, ip, attackType, severity, status, confidence }
 GET  /health    → { openclaw_loaded:bool, enforcement:'ArmorClaw-v1' }
@@ -487,7 +487,7 @@ servicestatuses:{ serviceName(unique), status, lastChecked, responseTimeMs, erro
 | Gateway | 3000 | `cd backend && npm run dev` |
 | Detection Engine | 8002 | `cd services/detection-engine && source .venv/bin/activate && uvicorn app.main:app --port 8002` |
 | PCAP Processor | 8003 | `cd services/pcap-processor && source .venv/bin/activate && uvicorn main:app --port 8003` |
-| ArmorIQ Agent | 8004 | `cd services/armoriq-agent && source .venv/bin/activate && uvicorn main:app --port 8004` |
+| SENTINAL Response Engine | 8004 | `cd services/sentinal-response-engine && source .venv/bin/activate && uvicorn main:app --port 8004` |
 | Dashboard | 5173 | `cd dashboard && npm run dev` |
 | Demo Target | 4000 | `cd demo-target && node server.js` |
 
@@ -497,7 +497,7 @@ servicestatuses:{ serviceName(unique), status, lastChecked, responseTimeMs, erro
 | Gateway | 3000 | `http://<CURRENT_EC2_IP>:3000` |
 | Detection Engine | 8002 | `http://<CURRENT_EC2_IP>:8002` |
 | PCAP Processor | 8003 | `http://<CURRENT_EC2_IP>:8003` |
-| ArmorIQ Agent | 8004 | `http://<CURRENT_EC2_IP>:8004` |
+| SENTINAL Response Engine | 8004 | `http://<CURRENT_EC2_IP>:8004` |
 | Dashboard | 5173 | `http://<CURRENT_EC2_IP>:5173` |
 
 > ⚠️ IP changes every AWS Academy session. `deploy.sh` auto-detects and sets it.
@@ -614,7 +614,7 @@ All steps are derived from `deploy.sh` (SHA: `6bab1b30b2cb7369d404a27693c605dea9
 | Gateway (Backend) | 3000 | Node.js / Express | `sentinal-gateway` |
 | Detection Engine | 8002 | Python / FastAPI + uvicorn | `sentinal-detection` |
 | PCAP Processor | 8003 | Python / FastAPI + uvicorn | `sentinal-pcap` |
-| ArmorIQ Agent | 8004 | Python / FastAPI + uvicorn | `sentinal-armoriq` |
+| SENTINAL Response Engine | 8004 | Python / FastAPI + uvicorn | `sentinal-armoriq` |
 | React Dashboard | 5173 | Vite build, served via `serve` | `sentinal-dashboard` |
 
 ---
@@ -635,7 +635,7 @@ All steps are derived from `deploy.sh` (SHA: `6bab1b30b2cb7369d404a27693c605dea9
 | 5173 | TCP | 0.0.0.0/0 | React Dashboard |
 | 8002 | TCP | 0.0.0.0/0 | Detection Engine |
 | 8003 | TCP | 0.0.0.0/0 | PCAP Processor |
-| 8004 | TCP | 0.0.0.0/0 | ArmorIQ Agent |
+| 8004 | TCP | 0.0.0.0/0 | SENTINAL Response Engine |
 
 7. **Storage:** 20 GB gp3
 8. Click **Launch Instance** → wait 2 min → copy **Public IPv4**
@@ -686,7 +686,7 @@ chmod +x deploy.sh && ./deploy.sh
 4. Creates Python `.venv` + `pip install -r requirements.txt` for all 3 Python services:
    - `services/detection-engine`
    - `services/pcap-processor`
-   - `services/armoriq-agent`
+   - `services/sentinal-response-engine`
 5. `npm install` for `backend/` + `dashboard/`
 6. Creates `.env` from `.env.example` — auto-sets `PUBLIC_URL`, `JWT_SECRET` (random 32-byte hex), `API_SECRET` (random 32-byte hex), `NODE_ENV=production`
 7. **Prompts once for `MONGO_URI`** (only if not already set)
@@ -781,7 +781,7 @@ git pull origin main
 pm2 restart sentinal-gateway       # if backend/ changed
 pm2 restart sentinal-detection     # if services/detection-engine/ changed
 pm2 restart sentinal-pcap          # if services/pcap-processor/ changed
-pm2 restart sentinal-armoriq       # if services/armoriq-agent/ changed
+pm2 restart sentinal-armoriq       # if services/sentinal-response-engine/ changed
 
 pm2 save                           # persist the updated state
 ```
@@ -836,7 +836,7 @@ deactivate
 
 # Repeat for whichever service had requirements.txt changed:
 # source ~/SENTINAL/services/pcap-processor/.venv/bin/activate && pip install -r requirements.txt -q && deactivate
-# source ~/SENTINAL/services/armoriq-agent/.venv/bin/activate && pip install -r requirements.txt -q && deactivate
+# source ~/SENTINAL/services/sentinal-response-engine/.venv/bin/activate && pip install -r requirements.txt -q && deactivate
 
 pm2 restart sentinal-detection     # or sentinal-pcap / sentinal-armoriq
 pm2 save
@@ -873,7 +873,7 @@ curl http://localhost:3000/health
 | `backend/` JS files only | `git pull` → `pm2 restart sentinal-gateway` → `pm2 save` |
 | `services/detection-engine/` Python files | `git pull` → `pm2 restart sentinal-detection` → `pm2 save` |
 | `services/pcap-processor/` Python files | `git pull` → `pm2 restart sentinal-pcap` → `pm2 save` |
-| `services/armoriq-agent/` Python or `policy.yaml` | `git pull` → `pm2 restart sentinal-armoriq` → `pm2 save` |
+| `services/sentinal-response-engine/` Python or `policy.yaml` | `git pull` → `pm2 restart sentinal-armoriq` → `pm2 save` |
 | `dashboard/src/` React/JSX files | `git pull` → `npm run build` (in dashboard/) → `pm2 restart sentinal-dashboard` → `pm2 save` |
 | `backend/package.json` (new npm dep) | `git pull` → `npm install --omit=dev` (in backend/) → `pm2 restart sentinal-gateway` → `pm2 save` |
 | `*/requirements.txt` (new pip dep) | `git pull` → activate venv → `pip install -r requirements.txt` → deactivate → `pm2 restart <service>` → `pm2 save` |
@@ -1020,7 +1020,7 @@ mongodb+srv://USERNAME:PASSWORD@cluster0.xxxxx.mongodb.net/sentinal
 | Date | Version | Change |
 |------|---------|--------|
 | 2026-03-26 | 1.0 | Initial doc + PCAP Processor built |
-| 2026-03-26 | 2.0 | ArmorIQ Agent + ActionQueue + AuditLog + sentinel-middleware |
+| 2026-03-26 | 2.0 | SENTINAL Response Engine + ActionQueue + AuditLog + sentinel-middleware |
 | 2026-03-26 | 3.0 | Pydantic models fix, executor safe HTTP, audit:new socket, Demo Target E2E |
 | 2026-03-26 | 4.0 | openclaw_runtime.py + policy.yaml. 4 redundant docs deleted |
 | 2026-03-27 | 5.0 | MongoDB Atlas Track: Atlas Search, $facet, all 6 collections verified |

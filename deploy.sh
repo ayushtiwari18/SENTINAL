@@ -126,7 +126,7 @@ setup_venv() {
 
 setup_venv "services/detection-engine" "Detection Engine"
 setup_venv "services/pcap-processor"   "PCAP Processor"
-setup_venv "services/armoriq-agent"    "ArmorIQ Agent"
+setup_venv "services/sentinal-response-engine" "SENTINAL Response Engine"
 
 # ── STEP 4: Node.js dependencies ─────────────────────────────────────────────
 echo -e "\n${BOLD}── STEP 4: Installing Node.js dependencies ──${NC}"
@@ -265,9 +265,9 @@ module.exports = {
     },
     {
       name:         'sentinal-armoriq',
-      script:       path.join(root, 'services', 'armoriq-agent', '.venv', 'bin', 'python3'),
+      script:       path.join(root, 'services', 'sentinal-response-engine', '.venv', 'bin', 'python3'),
       args:         '-m uvicorn main:app --host 0.0.0.0 --port 8004 --no-access-log',
-      cwd:          path.join(root, 'services', 'armoriq-agent'),
+      cwd:          path.join(root, 'services', 'sentinal-response-engine'),
       interpreter:  'none',
       instances:    1,
       exec_mode:    'fork',
@@ -342,7 +342,7 @@ echo -e "  ${BOLD}Dashboard:${NC}        http://$PUBLIC_IP:5173"
 echo -e "  ${BOLD}Gateway API:${NC}      http://$PUBLIC_IP:3000"
 echo -e "  ${BOLD}Detection Engine:${NC} http://$PUBLIC_IP:8002"
 echo -e "  ${BOLD}PCAP Processor:${NC}   http://$PUBLIC_IP:8003"
-echo -e "  ${BOLD}ArmorIQ Agent:${NC}    http://$PUBLIC_IP:8004"
+echo -e "  ${BOLD}Response Engine:${NC}  http://$PUBLIC_IP:8004"
 echo ""
 echo -e "  ${BOLD}PM2 status:${NC}  pm2 list"
 echo -e "  ${BOLD}View logs:${NC}   pm2 logs sentinal-gateway"

@@ -99,7 +99,7 @@ export const NAV_LINKS = [
 export const SERVICE_NAMES = {
   gateway:   'Gateway API',
   detection: 'Detection Engine',
-  armoriq:   'ArmorIQ Agent',
+  armoriq:   'SENTINAL Response Engine',
   pcap:      'PCAP Processor',
   mongodb:   'MongoDB Atlas',
 };

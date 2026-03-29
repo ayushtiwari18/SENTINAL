@@ -16,7 +16,7 @@ const SERVICES = [
     healthPath: '/health',
   },
   {
-    name: 'armoriq-agent',
+    name: 'sentinal-response-engine',
     url:  process.env.ARMORIQ_URL || 'http://localhost:8004',
     healthPath: '/health',
   },

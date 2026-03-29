@@ -1,14 +1,14 @@
 """
-ArmorIQ Agent — FastAPI Microservice
+SENTINAL Response Engine — FastAPI Microservice
 
 dotenv is loaded from the ROOT .env file at startup.
-Path resolution: this file is at services/armoriq-agent/main.py
+Path resolution: this file is at services/sentinal-response-engine/main.py
 Root .env is 2 directories up: Path(__file__).parents[2] / ".env"
 
 Directory structure:
   SENTINAL/                        ← root (parents[2] from main.py)
     services/
-      armoriq-agent/
+      sentinal-response-engine/
         main.py                    ← this file
 """
 from pathlib import Path
@@ -47,7 +47,7 @@ logger.info(f"[ARMORIQ] GATEWAY_URL:  {os.getenv('GATEWAY_URL', 'http://localhos
 logger.info(f"[ARMORIQ] ARMORIQ_PORT: {os.getenv('ARMORIQ_PORT', '8004')}")
 
 app = FastAPI(
-    title="ArmorIQ Agent",
+    title="SENTINAL Response Engine",
     description="Intent-boundary enforcement for SENTINAL. OpenClaw-powered policy runtime.",
     version="2.0.0"
 )
@@ -79,7 +79,7 @@ def health():
     openclaw_ok = openclaw_runtime.is_loaded()
     return {
         "status":      "ok",
-        "service":     "armoriq-agent",
+        "service":     "sentinal-response-engine",
         "version":     "2.0.0",
         "uptime":      int(time.time() - _start_time),   # seconds since process start
         "port":        int(os.getenv("ARMORIQ_PORT", "8004")),

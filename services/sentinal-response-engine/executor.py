@@ -1,6 +1,6 @@
 """
-ArmorIQ Executor
-----------------
+SENTINAL Response Engine — Executor
+-------------------------------------
 Only called AFTER policy_engine returns ALLOW.
 Executes the allowed action by calling Gateway API endpoints.
 All calls are fire-safe: exceptions are caught and logged, never re-raised.
@@ -65,7 +65,7 @@ def _write_blocklist(intent_data: dict, attack_context: dict) -> bool:
     Format: <ip>\t<timestamp>\t<attack_type>\t<attackId>
     This is a REAL side effect: the file is written to disk and can be
     read by any process (nginx, iptables script, etc.).
-    Observable with: cat services/armoriq-agent/blocklist.txt
+    Observable with: cat services/sentinal-response-engine/blocklist.txt
     Reversible: delete the line or rm the file.
     """
     ip          = intent_data.get("target", attack_context.get("ip", "unknown"))
@@ -99,7 +99,7 @@ async def _send_alert(intent_data: dict, attack_context: dict) -> bool:
         "ip":         attack_context.get("ip"),
         "attackType": attack_context.get("attackType"),
         "severity":   attack_context.get("severity"),
-        "source":     "armoriq-agent",
+        "source":     "sentinal-response-engine",
         "message":    intent_data.get("reason", "ArmorIQ triggered alert"),
     }
     async with httpx.AsyncClient(timeout=5.0) as client:

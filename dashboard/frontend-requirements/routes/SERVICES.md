@@ -124,7 +124,7 @@ const SERVICE_LABELS = {
   'gateway':          'API Gateway',
   'detection-engine': 'Detection Engine',
   'pcap-processor':   'PCAP Processor',
-  'armoriq-agent':    'ArmorIQ Agent',
+  'sentinal-response-engine': 'SENTINAL Response Engine',
 };
 ```
 

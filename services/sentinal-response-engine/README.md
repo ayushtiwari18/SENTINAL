@@ -1,4 +1,4 @@
-# ArmorIQ Agent — SENTINEL Intent Enforcement Service
+# SENTINAL Response Engine — Intent Enforcement Service
 
 **Port:** `8004`  
 **Language:** Python 3.11+ / FastAPI  
@@ -6,7 +6,7 @@
 
 ---
 
-## What ArmorIQ Does
+## What SENTINAL Response Engine Does
 
 - Receives confirmed attack context from Gateway after every `AttackEvent` is saved
 - Builds structured `Intent` objects for each proposed response action
@@ -15,7 +15,7 @@
 - **Blocks** high/critical-risk actions and queues them for human review
 - Logs every decision to `audit_log` via Gateway for full traceability
 
-## What ArmorIQ Does NOT Do
+## What SENTINAL Response Engine Does NOT Do
 
 - Parse packets or analyze traffic
 - Run ML/rule detection
@@ -28,7 +28,7 @@
 ## Start
 
 ```bash
-cd services/armoriq-agent
+cd services/sentinal-response-engine
 pip install -r requirements.txt
 cp .env.example .env
 uvicorn main:app --port 8004 --reload
@@ -74,8 +74,8 @@ uvicorn main:app --port 8004 --reload
 
 1. Send a critical SQLi attack via `POST /api/logs/ingest`
 2. Detection Engine detects it → Gateway saves AttackEvent
-3. Gateway calls ArmorIQ `POST /respond` (non-blocking)
-4. ArmorIQ proposes: `send_alert` (ALLOW) + `shutdown_endpoint` (BLOCK)
+3. Gateway calls SENTINAL Response Engine `POST /respond` (non-blocking)
+4. SENTINAL Response Engine proposes: `send_alert` (ALLOW) + `shutdown_endpoint` (BLOCK)
 5. `send_alert` executes → alert appears on Dashboard
 6. `shutdown_endpoint` queued → `PendingActionCard` appears on `/action-queue`
 7. Audit log at `/audit` shows both decisions with policy rule IDs

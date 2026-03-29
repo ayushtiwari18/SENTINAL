@@ -75,7 +75,7 @@ These actions are pre-approved in `policy.yaml` (risk_level: low). ArmorClaw wil
 
 ### `rate_limit_ip`
 - **Purpose**: Write the attacker IP to the blocklist
-- **File**: `services/armoriq-agent/blocklist.txt`
+- **File**: `services/sentinal-response-engine/blocklist.txt`
 - **Format**: `<ip>\t<timestamp>\t<attack_type>\t<attackId>`
 - **When**: Severity is `medium`, `high`, or `critical`
 - **Risk**: Low — reversible (delete line from file)
@@ -155,7 +155,7 @@ All proposed actions in this skill use `risk_level: low` — they are pre-approv
 
 1. **Never propose `permanent_ban_ip`** — it is blocked by policy and irreversible.
 2. **Never propose `shutdown_endpoint`** — it will take down production services.
-3. **Never modify `services/armoriq-agent/policy.yaml`** — it is the enforcement source of truth.
+3. **Never modify `services/sentinal-response-engine/policy.yaml`** — it is the enforcement source of truth.
 4. **Never disable or bypass ArmorClaw** — all actions must go through `openclaw_runtime.evaluate()`.
 5. **Never block an IP without logging the action** — `log_attack` must always accompany `rate_limit_ip`.
 6. **Never act on threat_detected=false alerts** — only respond to confirmed detections.

@@ -57,7 +57,7 @@ const ingestArmorIQAlert = async (req, res, next) => {
       message:  message  || `ArmorIQ triggered alert for ${ip}`,
       severity: severity || 'high',
       type:     'armoriq_action',
-      meta:     { ip, attackType, source: source || 'armoriq-agent' }
+      meta:     { ip, attackType, source: source || 'sentinal-response-engine' }
     });
 
     emitter.emit(EVENTS.ALERT_NEW, {

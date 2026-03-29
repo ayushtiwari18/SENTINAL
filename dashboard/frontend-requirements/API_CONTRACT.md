@@ -242,7 +242,7 @@
       { "service": "gateway",          "status": "online",  "responseTimeMs": 0 },
       { "service": "detection-engine", "status": "online",  "responseTimeMs": 142 },
       { "service": "pcap-processor",   "status": "offline", "responseTimeMs": 3001, "error": "ECONNREFUSED" },
-      { "service": "armoriq-agent",    "status": "offline", "responseTimeMs": 3001, "error": "ECONNREFUSED" }
+      { "service": "sentinal-response-engine", "status": "offline", "responseTimeMs": 3001, "error": "ECONNREFUSED" }
     ],
     "checkedAt": "2026-03-25T13:00:00.000Z"
   }

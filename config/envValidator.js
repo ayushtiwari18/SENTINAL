@@ -47,7 +47,7 @@ const REQUIRED_VARS = [
   },
   {
     name: 'ARMORIQ_PORT',
-    description: 'Port for the ArmorIQ Agent (Python FastAPI)',
+    description: 'Port for the SENTINAL Response Engine (Python FastAPI)',
     example: '8004'
   },
   {

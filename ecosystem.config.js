@@ -111,12 +111,12 @@ module.exports = {
       log_date_format: 'YYYY-MM-DD HH:mm:ss',
     },
 
-    // ── 4. ArmorIQ Agent (Python / FastAPI / Uvicorn) ─────────────────────
+    // ── 4. SENTINAL Response Engine (Python / FastAPI / Uvicorn) ─────────────────
     {
       name:         'sentinal-armoriq',
       script:       'python3',
       args:         '-m uvicorn main:app --host 0.0.0.0 --port ${ARMORIQ_PORT:-8004} --no-access-log',
-      cwd:          path.join(root, 'services', 'armoriq-agent'),
+      cwd:          path.join(root, 'services', 'sentinal-response-engine'),
       interpreter:  'none',
       instances:    1,
       exec_mode:    'fork',

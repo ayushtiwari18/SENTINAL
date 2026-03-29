@@ -301,12 +301,12 @@ def main():
     # ── Service health check ─────────────────────────────────────────────────
     header("Service Health Check")
     gateway_ok = check_service(GATEWAY, "Gateway API")
-    armoriq_ok = check_service(ARMORIQ, "ArmorIQ Agent")
+    armoriq_ok = check_service(ARMORIQ, "SENTINAL Response Engine")
 
     if not armoriq_ok:
         print()
         print(c("red", "  ArmorIQ is not running. Start it first:"))
-        print(c("yellow", "  cd services/armoriq-agent && uvicorn main:app --port 8004 --reload"))
+        print(c("yellow", "  cd services/sentinal-response-engine && uvicorn main:app --port 8004 --reload"))
         print()
         sys.exit(1)
 

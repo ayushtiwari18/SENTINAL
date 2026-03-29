@@ -1,14 +1,12 @@
 """
-OpenClaw Bridge — SENTINAL → OpenClaw Gateway
+openclaw_bridge.py
+HTTP bridge between SENTINAL Response Engine and the OpenClaw Gateway.
 
-Responsibilities:
-- Send pending action approval requests to the OpenClaw gateway
-- Receive approve/reject decisions from OpenClaw callback
-- Normalize operator decisions into SENTINAL action updates
+This module is the adapter layer. When ArmorIQ publishes SDK updates,
+only this file needs to change — the rest of SENTINAL stays untouched.
 
-The OpenClaw gateway runs locally (Node.js) after installing ArmorClaw.
-Installation: curl -fsSL https://armoriq.ai/install-armorclaw.sh | bash
-Docs: https://docs-openclaw.armoriq.ai
+OpenClaw Gateway runs locally at OPENCLAW_GATEWAY_URL (default: http://localhost:3000)
+Install it first: curl -fsSL https://armoriq.ai/install-armorclaw.sh | bash
 """
 
 import os
@@ -18,105 +16,117 @@ from typing import Optional
 
 logger = logging.getLogger("sentinal.openclaw_bridge")
 
-OPENCLAW_GATEWAY_URL = os.getenv("OPENCLAW_GATEWAY_URL", "http://localhost:3000")
+GATEWAY_URL = os.getenv("OPENCLAW_GATEWAY_URL", "http://localhost:3000")
 ARMORIQ_API_KEY = os.getenv("ARMORIQ_API_KEY", "")
 
 
-class OpenClawBridge:
+def _headers() -> dict:
+    return {
+        "Authorization": f"Bearer {ARMORIQ_API_KEY}",
+        "Content-Type": "application/json",
+        "X-Source": "sentinal-response-engine",
+    }
+
+
+def send_approval_request(action_id: str, alert: dict, analysis: dict) -> bool:
     """
-    Adapter between SENTINAL's Python backend and the OpenClaw Node.js gateway.
-    
-    When ArmorIQ releases official Python SDK, replace the HTTP calls
-    in this file only — no changes needed elsewhere.
+    Send a pending action to the OpenClaw gateway for admin review.
+    OpenClaw will route this to the configured chat platform (Telegram/Slack).
+
+    Returns True if successfully queued, False on failure.
     """
+    payload = {
+        "action_id": action_id,
+        "source": "sentinal",
+        "alert": alert,
+        "analysis": analysis,
+        "webhook_approve": f"{os.getenv('SENTINAL_BASE_URL', 'http://localhost:8004')}/webhook/approve",
+        "webhook_reject": f"{os.getenv('SENTINAL_BASE_URL', 'http://localhost:8004')}/webhook/reject",
+    }
 
-    def __init__(self):
-        self.gateway_url = OPENCLAW_GATEWAY_URL
-        self.headers = {
-            "Authorization": f"Bearer {ARMORIQ_API_KEY}",
-            "Content-Type": "application/json",
-        }
-
-    async def send_for_approval(
-        self,
-        action_id: str,
-        ip: str,
-        threat_type: str,
-        confidence: float,
-        severity: str,
-        reason: str,
-        recommended_action: str,
-    ) -> bool:
-        """
-        Send a pending action to OpenClaw gateway for admin approval via Telegram.
-        Returns True if successfully queued, False on failure.
-        """
-        payload = {
-            "action_id": action_id,
-            "ip": ip,
-            "threat_type": threat_type,
-            "confidence": confidence,
-            "severity": severity,
-            "reason": reason,
-            "recommended_action": recommended_action,
-            "callback_approve": f"/webhook/approve?action_id={action_id}",
-            "callback_reject": f"/webhook/reject?action_id={action_id}",
-        }
-
-        try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                response = await client.post(
-                    f"{self.gateway_url}/sentinal/approval-request",
-                    json=payload,
-                    headers=self.headers,
-                )
-                if response.status_code == 200:
-                    logger.info(f"[OPENCLAW] Approval request sent for action {action_id}")
-                    return True
-                else:
-                    logger.error(f"[OPENCLAW] Gateway returned {response.status_code}: {response.text}")
-                    return False
-        except httpx.ConnectError:
-            logger.error(
-                "[OPENCLAW] Cannot connect to OpenClaw gateway. "
-                "Is it running? Start with: cd openclaw && npm start"
-            )
+    try:
+        resp = httpx.post(
+            f"{GATEWAY_URL}/sentinal/approval-request",
+            json=payload,
+            headers=_headers(),
+            timeout=10.0,
+        )
+        if resp.status_code == 200:
+            logger.info(f"[OPENCLAW] Approval request queued: {action_id}")
+            return True
+        else:
+            logger.error(f"[OPENCLAW] Failed to queue approval: {resp.status_code} {resp.text}")
             return False
-        except Exception as e:
-            logger.error(f"[OPENCLAW] Unexpected error: {e}")
+    except httpx.ConnectError:
+        logger.warning(
+            "[OPENCLAW] Gateway unreachable — falling back to direct Telegram notification. "
+            "Is OpenClaw running? Run: curl -fsSL https://armoriq.ai/install-armorclaw.sh | bash"
+        )
+        return False
+    except Exception as e:
+        logger.error(f"[OPENCLAW] Unexpected error: {e}")
+        return False
+
+
+def notify_auto_execution(action_id: str, alert: dict, analysis: dict, result: dict) -> None:
+    """
+    Notify OpenClaw that SENTINAL auto-executed an action (no approval needed).
+    This creates an audit record in ArmorIQ and sends a Telegram notification.
+    """
+    payload = {
+        "action_id": action_id,
+        "source": "sentinal",
+        "execution_type": "AUTO_EXECUTED",
+        "alert": alert,
+        "analysis": analysis,
+        "result": result,
+    }
+
+    try:
+        httpx.post(
+            f"{GATEWAY_URL}/sentinal/auto-execution",
+            json=payload,
+            headers=_headers(),
+            timeout=5.0,
+        )
+        logger.info(f"[OPENCLAW] Auto-execution notified: {action_id}")
+    except Exception as e:
+        logger.warning(f"[OPENCLAW] Could not notify auto-execution (non-critical): {e}")
+
+
+def verify_armoriq_token(token: str, action_id: str) -> bool:
+    """
+    Verify an ArmorClaw intent token before executing an approved action.
+    This calls the ArmorIQ Intent Access Proxy (IAP) to validate the token.
+
+    CRITICAL: Always call this before executing a human-approved action.
+    """
+    if not token:
+        logger.error(f"[OPENCLAW] No intent token provided for action {action_id}")
+        return False
+
+    try:
+        resp = httpx.post(
+            f"{GATEWAY_URL}/armoriq/verify-token",
+            json={"token": token, "action_id": action_id},
+            headers=_headers(),
+            timeout=5.0,
+        )
+        if resp.status_code == 200 and resp.json().get("valid"):
+            logger.info(f"[OPENCLAW] Intent token verified for action {action_id}")
+            return True
+        else:
+            logger.warning(f"[OPENCLAW] Token verification failed for {action_id}: {resp.text}")
             return False
-
-    async def notify_execution(
-        self,
-        action_id: str,
-        ip: str,
-        action: str,
-        success: bool,
-        message: str,
-    ) -> None:
-        """
-        Notify OpenClaw gateway that an action has been executed.
-        This updates the Telegram message with the result.
-        """
-        payload = {
-            "action_id": action_id,
-            "ip": ip,
-            "action": action,
-            "success": success,
-            "message": message,
-        }
-
-        try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                await client.post(
-                    f"{self.gateway_url}/sentinal/execution-result",
-                    json=payload,
-                    headers=self.headers,
-                )
-                logger.info(f"[OPENCLAW] Execution result sent for action {action_id}")
-        except Exception as e:
-            logger.warning(f"[OPENCLAW] Could not send execution result: {e}")
+    except Exception as e:
+        logger.error(f"[OPENCLAW] Token verification error: {e}")
+        return False
 
 
-# Singleton instance
-openclaw_bridge = OpenClawBridge()
+def is_gateway_healthy() -> bool:
+    """Check if the OpenClaw gateway is running."""
+    try:
+        resp = httpx.get(f"{GATEWAY_URL}/health", timeout=3.0)
+        return resp.status_code == 200
+    except Exception:
+        return False

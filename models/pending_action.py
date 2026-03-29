@@ -1,67 +1,47 @@
 """
-PendingAction — Tracks actions awaiting human approval
+pending_action.py
+Pydantic model for actions awaiting human approval.
 
-Status lifecycle:
+The lifecycle of a pending action:
   PENDING → APPROVED → EXECUTED
   PENDING → REJECTED
-  PENDING → EXPIRED (if admin doesn't respond in time)
-  AUTO_EXECUTED (bypasses PENDING for high-confidence auto-actions)
+  PENDING → TIMEOUT (if admin doesn't respond within timeout window)
+  HIGH_CONFIDENCE → AUTO_EXECUTED (bypasses PENDING entirely)
 """
 
-import uuid
+from pydantic import BaseModel, Field
+from typing import Optional
 from datetime import datetime
 from enum import Enum
-from typing import Optional
-from pydantic import BaseModel, Field
 
 
 class ActionStatus(str, Enum):
-    PENDING = "PENDING"
-    APPROVED = "APPROVED"
-    REJECTED = "REJECTED"
-    EXECUTED = "EXECUTED"
-    EXECUTION_FAILED = "EXECUTION_FAILED"
-    AUTO_EXECUTED = "AUTO_EXECUTED"
-    EXPIRED = "EXPIRED"
+    PENDING = "PENDING"               # Waiting for human decision
+    APPROVED = "APPROVED"             # Admin approved, ready to execute
+    REJECTED = "REJECTED"             # Admin rejected
+    AUTO_EXECUTED = "AUTO_EXECUTED"   # High confidence auto-execution
+    EXECUTED = "EXECUTED"             # Successfully executed
+    FAILED = "FAILED"                 # Execution failed
+    TIMEOUT = "TIMEOUT"               # Approval window expired
+    SKIPPED = "SKIPPED"               # Low confidence, no action taken
 
 
 class PendingAction(BaseModel):
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    alert_id: str
-    ip: str
-    threat_type: str
-    confidence: float
-    severity: str
-    reason: str
-    recommended_action: str
-    status: ActionStatus = ActionStatus.PENDING
+    action_id: str = Field(..., description="Unique action identifier")
+    alert_id: str = Field(..., description="Source alert ID")
+    ip: str = Field(..., description="Target IP address")
+    action_type: str = Field(..., description="e.g. BAN_IP, RATE_LIMIT")
+    threat_type: str = Field(..., description="Classified threat type")
+    confidence: float = Field(..., ge=0.0, le=1.0)
+    severity: str = Field(...)
+    reason: str = Field(...)
+    status: ActionStatus = Field(default=ActionStatus.PENDING)
+    armoriq_token: Optional[str] = Field(None, description="ArmorClaw intent token")
+    approved_by: Optional[str] = Field(None, description="Admin who approved/rejected")
+    execution_result: Optional[dict] = Field(None)
     created_at: datetime = Field(default_factory=datetime.utcnow)
-    decided_at: Optional[datetime] = None
-    executed_at: Optional[datetime] = None
-    decided_by: Optional[str] = None
-    execution_result: Optional[str] = None
-    armoriq_token: Optional[str] = None  # ArmorClaw intent token for audit
-
-    def approve(self, decided_by: str = "admin", token: Optional[str] = None) -> None:
-        self.status = ActionStatus.APPROVED
-        self.decided_at = datetime.utcnow()
-        self.decided_by = decided_by
-        self.armoriq_token = token
-
-    def reject(self, decided_by: str = "admin") -> None:
-        self.status = ActionStatus.REJECTED
-        self.decided_at = datetime.utcnow()
-        self.decided_by = decided_by
-
-    def mark_executed(self, result: str) -> None:
-        self.status = ActionStatus.EXECUTED
-        self.executed_at = datetime.utcnow()
-        self.execution_result = result
-
-    def mark_failed(self, result: str) -> None:
-        self.status = ActionStatus.EXECUTION_FAILED
-        self.executed_at = datetime.utcnow()
-        self.execution_result = result
+    decided_at: Optional[datetime] = Field(None)
+    executed_at: Optional[datetime] = Field(None)
 
     class Config:
         use_enum_values = True

@@ -1,179 +1,124 @@
 """
-Telegram Notifier — SENTINAL Alert Delivery
+telegram_notifier.py
+Direct Telegram Bot integration for SENTINAL alerts.
 
-Responsibilities:
-- Send formatted threat alerts to admin via Telegram
-- Send post-execution notifications
-- Send low-priority informational messages
+Used as:
+1. Primary notification channel when OpenClaw gateway is unavailable
+2. Fallback for simple informational alerts
+3. Auto-execution confirmation messages
 
-Setup:
-1. Create a bot via @BotFather on Telegram
-2. Get your bot token
-3. Get your chat ID (send a message to @userinfobot)
-4. Add TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID to .env
+For approval workflows (approve/reject), use openclaw_bridge.py instead —
+OpenClaw handles the button callbacks and ArmorClaw token verification.
 """
 
 import os
 import logging
 import httpx
-from typing import Optional
 
-logger = logging.getLogger("sentinal.telegram")
+logger = logging.getLogger("sentinal.telegram_notifier")
 
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
-TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
-TELEGRAM_API_BASE = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}"
+BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
+CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
+TELEGRAM_API = f"https://api.telegram.org/bot{BOT_TOKEN}"
 
 SEVERITY_EMOJI = {
-    "CRITICAL": "🔴",
-    "HIGH": "🟠",
+    "CRITICAL": "🚨",
+    "HIGH": "🔴",
     "MEDIUM": "🟡",
     "LOW": "🟢",
+    "INFO": "ℹ️",
 }
 
 
-class TelegramNotifier:
+def _send(text: str, parse_mode: str = "Markdown") -> bool:
+    if not BOT_TOKEN or not CHAT_ID:
+        logger.warning("[TELEGRAM] BOT_TOKEN or CHAT_ID not set — skipping notification")
+        return False
 
-    async def send_approval_request(
-        self,
-        action_id: str,
-        ip: str,
-        threat_type: str,
-        confidence: float,
-        severity: str,
-        reason: str,
-        recommended_action: str,
-    ) -> bool:
-        """
-        Send a threat alert with Approve/Reject inline buttons.
-        """
-        severity_icon = SEVERITY_EMOJI.get(severity, "⚪")
-        confidence_pct = int(confidence * 100)
-
-        text = (
-            f"🚨 *SENTINAL Threat Alert*\n"
-            f"━━━━━━━━━━━━━━━━━━\n"
-            f"*Case ID:* `{action_id[:12]}...`\n"
-            f"*IP:* `{ip}`\n"
-            f"*Threat:* {threat_type.replace('_', ' ').title()}\n"
-            f"*Confidence:* {confidence_pct}%\n"
-            f"*Severity:* {severity_icon} {severity}\n"
-            f"*Reason:* {reason}\n\n"
-            f"*Proposed Action:* `{recommended_action.replace('_', ' ')}`\n\n"
-            f"_Approval required — action will not execute until authorized._"
+    try:
+        resp = httpx.post(
+            f"{TELEGRAM_API}/sendMessage",
+            json={"chat_id": CHAT_ID, "text": text, "parse_mode": parse_mode},
+            timeout=10.0,
         )
-
-        inline_keyboard = {
-            "inline_keyboard": [
-                [
-                    {"text": "✅ Approve", "callback_data": f"approve:{action_id}"},
-                    {"text": "❌ Reject", "callback_data": f"reject:{action_id}"},
-                ]
-            ]
-        }
-
-        return await self._send_message(text, reply_markup=inline_keyboard)
-
-    async def send_auto_execution_notice(
-        self,
-        ip: str,
-        threat_type: str,
-        confidence: float,
-        action: str,
-    ) -> None:
-        """
-        Notify that SENTINAL auto-executed a high-confidence action.
-        """
-        confidence_pct = int(confidence * 100)
-        text = (
-            f"⚡ *SENTINAL Auto-Response*\n"
-            f"━━━━━━━━━━━━━━━━━━\n"
-            f"*IP:* `{ip}`\n"
-            f"*Threat:* {threat_type.replace('_', ' ').title()}\n"
-            f"*Confidence:* {confidence_pct}% _(above auto-execute threshold)_\n"
-            f"*Action Taken:* `{action.replace('_', ' ')}`\n\n"
-            f"_No approval was required. Full audit log available on dashboard._"
-        )
-        await self._send_message(text)
-
-    async def send_execution_result(
-        self,
-        action_id: str,
-        ip: str,
-        action: str,
-        success: bool,
-        approved_by: str = "admin",
-    ) -> None:
-        """
-        Send result after an approved action is executed.
-        """
-        status = "✅ Executed successfully" if success else "❌ Execution failed"
-        text = (
-            f"*SENTINAL Action Result*\n"
-            f"━━━━━━━━━━━━━━━━━━\n"
-            f"*Case:* `{action_id[:12]}...`\n"
-            f"*IP:* `{ip}`\n"
-            f"*Action:* `{action.replace('_', ' ')}`\n"
-            f"*Approved by:* {approved_by}\n"
-            f"*Status:* {status}"
-        )
-        await self._send_message(text)
-
-    async def send_rejection_notice(
-        self,
-        action_id: str,
-        ip: str,
-        rejected_by: str = "admin",
-    ) -> None:
-        """
-        Notify that an action was rejected by admin.
-        """
-        text = (
-            f"🚫 *SENTINAL Action Rejected*\n"
-            f"━━━━━━━━━━━━━━━━━━\n"
-            f"*Case:* `{action_id[:12]}...`\n"
-            f"*IP:* `{ip}`\n"
-            f"*Rejected by:* {rejected_by}\n"
-            f"_No action was taken. Event logged to audit trail._"
-        )
-        await self._send_message(text)
-
-    async def _send_message(
-        self,
-        text: str,
-        reply_markup: Optional[dict] = None,
-    ) -> bool:
-        """
-        Internal: POST a message to the Telegram Bot API.
-        """
-        if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
-            logger.warning("[TELEGRAM] Bot token or chat ID not configured — skipping notification")
+        if resp.status_code == 200:
+            return True
+        else:
+            logger.error(f"[TELEGRAM] Send failed: {resp.status_code} {resp.text}")
             return False
-
-        payload = {
-            "chat_id": TELEGRAM_CHAT_ID,
-            "text": text,
-            "parse_mode": "Markdown",
-        }
-        if reply_markup:
-            payload["reply_markup"] = reply_markup
-
-        try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                response = await client.post(
-                    f"{TELEGRAM_API_BASE}/sendMessage",
-                    json=payload,
-                )
-                if response.status_code == 200:
-                    logger.info("[TELEGRAM] Message sent successfully")
-                    return True
-                else:
-                    logger.error(f"[TELEGRAM] API error {response.status_code}: {response.text}")
-                    return False
-        except Exception as e:
-            logger.error(f"[TELEGRAM] Failed to send message: {e}")
-            return False
+    except Exception as e:
+        logger.error(f"[TELEGRAM] Error sending message: {e}")
+        return False
 
 
-# Singleton instance
-telegram_notifier = TelegramNotifier()
+def send_threat_alert(action_id: str, alert: dict, analysis: dict) -> bool:
+    """
+    Send a threat alert requiring human approval.
+    Note: For full approve/reject button flow, use openclaw_bridge.send_approval_request().
+    This is the fallback direct notification.
+    """
+    severity = analysis.get("severity", "MEDIUM")
+    emoji = SEVERITY_EMOJI.get(severity, "⚠️")
+    confidence_pct = int(analysis.get("confidence", 0) * 100)
+
+    message = (
+        f"{emoji} *SENTINAL Alert*\n"
+        f"Case ID: `{action_id}`\n\n"
+        f"IP: `{alert.get('ip', 'unknown')}`\n"
+        f"Threat: `{analysis.get('threat_type', 'unknown')}`\n"
+        f"Confidence: `{confidence_pct}%`\n"
+        f"Severity: *{severity}*\n\n"
+        f"Reason:\n_{analysis.get('reason', 'No details')}_\n\n"
+        f"Proposed Action: *{analysis.get('recommended_action', 'REVIEW')}*\n\n"
+        f"⚠️ Login to SENTINAL dashboard to approve or reject."
+    )
+    return _send(message)
+
+
+def send_auto_execution_notice(action_id: str, alert: dict, analysis: dict, result: dict) -> bool:
+    """
+    Notify admin that SENTINAL auto-executed an action (no approval required).
+    """
+    severity = analysis.get("severity", "HIGH")
+    emoji = SEVERITY_EMOJI.get(severity, "🔴")
+    confidence_pct = int(analysis.get("confidence", 0) * 100)
+    success = result.get("success", False)
+    status_emoji = "✅" if success else "❌"
+
+    message = (
+        f"{emoji} *SENTINAL Auto-Response*\n"
+        f"Case ID: `{action_id}`\n\n"
+        f"IP: `{alert.get('ip', 'unknown')}`\n"
+        f"Threat: `{analysis.get('threat_type', 'unknown')}`\n"
+        f"Confidence: `{confidence_pct}%` _(auto-execute threshold met)_\n\n"
+        f"Action: *{analysis.get('recommended_action', 'BAN_IP')}*\n"
+        f"Result: {status_emoji} `{result.get('message', 'Executed')}`\n\n"
+        f"_Full details in audit log._"
+    )
+    return _send(message)
+
+
+def send_approval_result(action_id: str, approved: bool, admin_note: str = "") -> bool:
+    """
+    Notify that a pending action was approved or rejected.
+    """
+    if approved:
+        message = (
+            f"✅ *Action Approved*\n"
+            f"Case ID: `{action_id}`\n"
+            f"Status: Executing now...\n"
+            + (f"Note: _{admin_note}_" if admin_note else "")
+        )
+    else:
+        message = (
+            f"❌ *Action Rejected*\n"
+            f"Case ID: `{action_id}`\n"
+            f"Status: Action cancelled, threat monitored.\n"
+            + (f"Note: _{admin_note}_" if admin_note else "")
+        )
+    return _send(message)
+
+
+def send_system_alert(message: str) -> bool:
+    """Send a generic SENTINAL system alert."""
+    return _send(f"🛡️ *SENTINAL System*\n{message}")

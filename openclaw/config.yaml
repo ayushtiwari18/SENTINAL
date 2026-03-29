@@ -1,57 +1,49 @@
 # OpenClaw Gateway Configuration for SENTINAL
-# This file configures the OpenClaw Node.js gateway to work with SENTINAL.
-# Place this in your openclaw installation directory.
-#
-# After installing OpenClaw (curl -fsSL https://armoriq.ai/install-armorclaw.sh | bash),
-# copy this file to: ~/.openclaw/config.yaml
+# Place this in the OpenClaw config directory after installation
+# Install OpenClaw: curl -fsSL https://armoriq.ai/install-armorclaw.sh | bash
 
-name: SENTINAL Response Agent
-description: Secure cybersecurity response operator for SENTINAL
+name: SENTINAL Security Operator
+description: Secure admin interface for SENTINAL Response Engine
 
-# ArmorIQ authentication
+# ArmorIQ credentials
 armoriq:
-  api_key: ${ARMORIQ_API_KEY}
-  policy_enforcement: strict
+  api_key: "${ARMORIQ_API_KEY}"
 
-# LLM backend
+# LLM backend for OpenClaw reasoning
 llm:
   provider: openai
-  model: gpt-4o
-  api_key: ${OPENAI_API_KEY}
+  model: gpt-4o-mini
+  api_key: "${OPENAI_API_KEY}"
 
-# Telegram integration
-telegram:
-  bot_token: ${TELEGRAM_BOT_TOKEN}
-  allowed_chat_ids:
-    - ${TELEGRAM_CHAT_ID}
-  # Only these chat IDs can send commands to SENTINAL via this bot
+# Chat platform integrations
+platforms:
+  telegram:
+    enabled: true
+    bot_token: "${TELEGRAM_BOT_TOKEN}"
+    # Restrict to authorized admin chat IDs only
+    allowed_chat_ids:
+      - "${TELEGRAM_CHAT_ID}"
 
-# SENTINAL backend connection
-sentinal_backend:
-  url: http://localhost:8004
-  webhook_approve: /webhook/approve
-  webhook_reject: /webhook/reject
-  health_check: /health
+# SENTINAL webhook endpoints
+sentinal:
+  base_url: "${SENTINAL_BASE_URL}"
+  webhook_approve: "/webhook/approve"
+  webhook_reject: "/webhook/reject"
+  pending_actions: "/actions/pending"
+  audit_log: "/audit"
 
-# Tool restrictions — SENTINAL-specific only
-# Do NOT enable general tools (web_search, write_file, etc.) for security reasons
-tools:
-  enabled:
+# ArmorClaw security policy
+policy:
+  require_intent_token: true
+  allowed_tools:
+    - sentinal_list_pending
     - sentinal_approve_action
     - sentinal_reject_action
-    - sentinal_list_pending
+    - sentinal_list_blocked_ips
     - sentinal_get_audit_log
-    - sentinal_get_blocked_ips
-  disabled:
-    - web_search
+  # Explicitly disallow dangerous tools
+  disallowed_tools:
+    - shell_exec
+    - file_write
     - web_fetch
-    - write_file
-    - read_file
-    - run_command
     - policy_update
-
-# Security settings
-security:
-  require_intent_verification: true
-  log_all_actions: true
-  action_timeout_seconds: 300  # Pending actions expire after 5 minutes

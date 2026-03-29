@@ -1,0 +1,35 @@
+# OpenClaw Gateway Configuration for SENTINAL
+# Place this in your OpenClaw installation directory
+# Reference: https://docs-openclaw.armoriq.ai
+
+name: SENTINAL Response Engine
+description: Cybersecurity response agent with human-in-the-loop approval
+
+# ArmorIQ authentication
+armoriq:
+  api_key: "${ARMORIQ_API_KEY}"
+  enforcement: strict
+
+# LLM provider
+llm:
+  provider: openai
+  model: gpt-4o
+  api_key: "${OPENAI_API_KEY}"
+
+# Chat integrations
+integrations:
+  telegram:
+    enabled: true
+    bot_token: "${TELEGRAM_BOT_TOKEN}"
+    allowed_user_ids:
+      - "${TELEGRAM_ADMIN_USER_ID}"
+
+# Tool definitions
+tools:
+  config: "./sentinal_tools.yaml"
+
+# Policy
+policy:
+  require_intent_token: true
+  log_all_actions: true
+  restrict_to_defined_tools: true

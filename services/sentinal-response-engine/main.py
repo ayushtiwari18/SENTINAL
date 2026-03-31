@@ -39,16 +39,16 @@ logging.basicConfig(
     level=getattr(logging, LOG_LEVEL, logging.INFO),
     format="%(asctime)s [%(name)s] %(levelname)s — %(message)s"
 )
-logger = logging.getLogger("Nexus")
+logger = logging.getLogger("nexus")
 
-logger.info(f"[Nexus] Loading env from: {_env_path}")
-logger.info(f"[Nexus] .env found: {_env_path.exists()}")
-logger.info(f"[Nexus] GATEWAY_URL:  {os.getenv('GATEWAY_URL', 'http://localhost:3000')}")
-logger.info(f"[Nexus] Nexus_PORT: {os.getenv('Nexus_PORT', '8004')}")
+logger.info(f"[NEXUS] Loading env from: {_env_path}")
+logger.info(f"[NEXUS] .env found: {_env_path.exists()}")
+logger.info(f"[NEXUS] GATEWAY_URL: {os.getenv('GATEWAY_URL', 'http://localhost:3000')}")
+logger.info(f"[NEXUS] NEXUS_PORT:  {os.getenv('NEXUS_PORT', '8004')}")
 
 app = FastAPI(
     title="SENTINAL Response Engine",
-    description="Intent-boundary enforcement for SENTINAL. OpenClaw-powered policy runtime.",
+    description="Intent-boundary enforcement for SENTINAL. PolicyGuard-powered policy runtime.",
     version="2.0.0"
 )
 
@@ -62,32 +62,32 @@ app.add_middleware(
 
 def _evaluate_with_fallback(intent):
     """
-    Evaluate intent via OpenClaw runtime.
-    Falls back to policy_engine.evaluate() if OpenClaw is unavailable.
+    Evaluate intent via PolicyGuard runtime.
+    Falls back to policy_engine.evaluate() if PolicyGuard is unavailable.
     NEVER raises — always returns a DecisionModel.
     """
     try:
         return openclaw_runtime.evaluate(intent)
     except Exception as exc:
-        logger.error(f"[OPENCLAW] Runtime error: {exc} — falling back to policy_engine")
+        logger.error(f"[POLICY_GUARD] Runtime error: {exc} — falling back to policy_engine")
         return _fallback_evaluate(intent)
 
 
 @app.get("/health")
 def health():
     """Standard SENTINAL health probe. Used by Gateway serviceHealthService."""
-    openclaw_ok = openclaw_runtime.is_loaded()
+    policy_guard_ok = openclaw_runtime.is_loaded()
     return {
-        "status":      "ok",
-        "service":     "sentinal-response-engine",
-        "version":     "2.0.0",
-        "uptime":      int(time.time() - _start_time),   # seconds since process start
-        "port":        int(os.getenv("Nexus_PORT", "8004")),
-        "environment": os.getenv("NODE_ENV", os.getenv("ENVIRONMENT", "development")),
-        "timestamp":   time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-        "enforcement": "PolicyGuard-v1" if openclaw_ok else "Nexus-Policy-v1 (fallback)",
-        "openclaw_loaded": openclaw_ok,
-        "gateway_url": os.getenv("GATEWAY_URL", "http://localhost:3000")
+        "status":             "ok",
+        "service":            "sentinal-response-engine",
+        "version":            "2.0.0",
+        "uptime":             int(time.time() - _start_time),
+        "port":               int(os.getenv("NEXUS_PORT", "8004")),
+        "environment":        os.getenv("NODE_ENV", os.getenv("ENVIRONMENT", "development")),
+        "timestamp":          time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "enforcement":        "PolicyGuard-v1" if policy_guard_ok else "policy_engine (fallback)",
+        "policy_guard_loaded": policy_guard_ok,
+        "gateway_url":        os.getenv("GATEWAY_URL", "http://localhost:3000")
     }
 
 
@@ -98,7 +98,7 @@ async def respond(body: RespondRequest):
     Called by Gateway after every confirmed attack.
     """
     logger.info(
-        f"[Nexus] respond called — attackId={body.attackId} "
+        f"[NEXUS] respond called — attackId={body.attackId} "
         f"ip={body.ip} type={body.attackType} severity={body.severity}"
     )
 
@@ -112,7 +112,7 @@ async def respond(body: RespondRequest):
     )
 
     intents = build_intents(ctx)
-    logger.info(f"[Nexus] Built {len(intents)} intents for attackId={body.attackId}")
+    logger.info(f"[NEXUS] Built {len(intents)} intents for attackId={body.attackId}")
 
     actions_executed = []
     actions_queued   = []
@@ -139,9 +139,9 @@ async def respond(body: RespondRequest):
             )
             if ok:
                 actions_executed.append(action)
-                logger.info(f"[Nexus] EXECUTED: {action}")
+                logger.info(f"[NEXUS] EXECUTED: {action}")
             else:
-                logger.warning(f"[Nexus] Execution of '{action}' failed — see executor log")
+                logger.warning(f"[NEXUS] Execution of '{action}' failed — see executor log")
         else:
             actions_queued.append(
                 ActionResult(
@@ -152,10 +152,10 @@ async def respond(body: RespondRequest):
                     blockedReason=decision.reason,
                 )
             )
-            logger.info(f"[Nexus] BLOCKED (queued): {action} — {decision.reason}")
+            logger.info(f"[NEXUS] BLOCKED (queued): {action} — {decision.reason}")
 
     logger.info(
-        f"[Nexus] Complete — executed={actions_executed} "
+        f"[NEXUS] Complete — executed={actions_executed} "
         f"queued={[a.action for a in actions_queued]} "
         f"audit_entries={audit_count}"
     )

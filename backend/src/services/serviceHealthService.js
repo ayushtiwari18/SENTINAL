@@ -3,7 +3,6 @@ const ServiceStatus = require('../models/ServiceStatus');
 const logger = require('../utils/logger');
 
 // Service registry — reads from central .env
-// Each URL supports both the new centralized name and the old name for backward compatibility
 const SERVICES = [
   {
     name: 'detection-engine',
@@ -17,7 +16,7 @@ const SERVICES = [
   },
   {
     name: 'sentinal-response-engine',
-    url:  process.env.Nexus_URL || 'http://localhost:8004',
+    url:  process.env.NEXUS_URL || 'http://localhost:8004',
     healthPath: '/health',
   },
 ];

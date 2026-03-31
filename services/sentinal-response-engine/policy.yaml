@@ -1,5 +1,5 @@
-# SENTINEL — PolicyGuard Policy Definition
-# Loaded by openclaw_runtime.py at startup
+# SENTINAL — PolicyGuard Policy Definition
+# Loaded by openclaw_runtime.py (PolicyGuard runtime) at startup
 # This file is the single source of truth for enforcement rules.
 
 version: "1.0"

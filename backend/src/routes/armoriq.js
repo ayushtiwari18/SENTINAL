@@ -1,6 +1,6 @@
 /**
  * Nexus Trigger Route
- * POST /api/Nexus/trigger
+ * POST /api/nexus/trigger
  *
  * Creates a real SystemLog + AttackEvent in MongoDB, then triggers
  * the Nexus enforcement pipeline. Does NOT require the Detection
@@ -70,7 +70,7 @@ const buildSimulatedExplanation = (attackType, severity) =>
     source:             'static',
   });
 
-// POST /api/Nexus/trigger
+// POST /api/nexus/trigger
 router.post('/trigger', async (req, res) => {
   try {
     const {
@@ -96,17 +96,17 @@ router.post('/trigger', async (req, res) => {
       });
     }
 
-    logger.info(`[Nexus-TRIGGER] Simulating ${attackType} from ${ip} (${severity})`);
+    logger.info(`[NEXUS-TRIGGER] Simulating ${attackType} from ${ip} (${severity})`);
 
     // Step 1 — Create a real SystemLog so requestId has a valid ObjectId ref
     const demoLog = await SystemLog.create({
-      projectId:    'Nexus-demo',
+      projectId:    'nexus-demo',
       method:       'GET',
       url:          `/demo/${attackType}-attack`,
       ip,
       queryParams:  {},
       body:         {},
-      headers:      { userAgent: 'Nexus-demo', contentType: '', referer: '' },
+      headers:      { userAgent: 'nexus-demo', contentType: '', referer: '' },
       responseCode: 200
     });
 
@@ -125,7 +125,7 @@ router.post('/trigger', async (req, res) => {
       responseCode:         200
     });
 
-    logger.info(`[Nexus-TRIGGER] AttackEvent created: ${attack._id}`);
+    logger.info(`[NEXUS-TRIGGER] AttackEvent created: ${attack._id}`);
 
     res.status(201).json({
       success: true,
@@ -141,7 +141,7 @@ router.post('/trigger', async (req, res) => {
       }
     });
   } catch (err) {
-    logger.error(`[Nexus-TRIGGER] Error: ${err.message}`);
+    logger.error(`[NEXUS-TRIGGER] Error: ${err.message}`);
     res.status(500).json({
       success: false,
       message: 'Trigger failed',

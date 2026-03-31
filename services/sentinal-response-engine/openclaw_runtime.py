@@ -1,11 +1,10 @@
 """
-OpenClaw Runtime — PolicyGuard Policy Enforcement
-------------------------------------------------
-Implements the OpenClaw intent-boundary enforcement pattern required by
-the Claw & Shield sponsor track.
+PolicyGuard Runtime — Policy Enforcement
+-----------------------------------------
+Implements the PolicyGuard intent-boundary enforcement pattern.
 
-Architecture (as required by sponsor):
-  Intent Model → OpenClaw Runtime → Decision → Executor → Audit Logger
+Architecture:
+  Intent Model → PolicyGuard Runtime → Decision → Executor → Audit Logger
 
 This module:
   1. Loads policy rules from policy.yaml (external, declarative)
@@ -14,11 +13,6 @@ This module:
   4. Logs every enforcement decision with rule traceability
   5. Never executes actions (that is executor.py's job)
   6. Never fails silently — raises RuntimeError so main.py can fallback
-
-This IS the OpenClaw enforcement layer. OpenClaw is a pattern/runtime
-architecture — not a pip package. This module implements that pattern
-correctly: structured intents, policy-based decisions, clean separation
-between reasoning and execution, full audit trail.
 """
 
 import os
@@ -30,7 +24,7 @@ from pathlib import Path
 
 from models import IntentModel, DecisionModel
 
-logger = logging.getLogger("Nexus.openclaw")
+logger = logging.getLogger("nexus.policy_guard")
 
 POLICY_FILE = Path(__file__).parent / "policy.yaml"
 
@@ -42,13 +36,13 @@ def _load_policies() -> dict:
     Raises RuntimeError if missing or malformed.
     """
     if not POLICY_FILE.exists():
-        raise RuntimeError(f"[OPENCLAW] policy.yaml not found at {POLICY_FILE}")
+        raise RuntimeError(f"[POLICY_GUARD] policy.yaml not found at {POLICY_FILE}")
     with open(POLICY_FILE, "r") as fh:
         data = yaml.safe_load(fh)
     if not data:
-        raise RuntimeError("[OPENCLAW] policy.yaml is empty or invalid YAML")
+        raise RuntimeError("[POLICY_GUARD] policy.yaml is empty or invalid YAML")
     logger.info(
-        f"[OPENCLAW] Policies loaded — version={data.get('version')} "
+        f"[POLICY_GUARD] Policies loaded — version={data.get('version')} "
         f"enforcement={data.get('enforcement_level')}"
     )
     return data
@@ -75,10 +69,10 @@ def _make_decision(
 
 def evaluate(intent: IntentModel) -> DecisionModel:
     """
-    OpenClaw enforcement entry point.
+    PolicyGuard enforcement entry point.
 
-    Evaluation order (mirrors OpenClaw priority model):
-      1. OPENCLAW_DISABLED env var — short-circuit to RuntimeError
+    Evaluation order:
+      1. POLICY_GUARD_DISABLED env var — short-circuit to RuntimeError
       2. Load policy.yaml
       3. Blocked action list check (RULE_001)
       4. Risk-level rules from policy.yaml (RULE_002, RULE_003)
@@ -89,8 +83,8 @@ def evaluate(intent: IntentModel) -> DecisionModel:
     Raises RuntimeError on policy load failure — main.py catches this
     and falls back to policy_engine.evaluate().
     """
-    if os.getenv("OPENCLAW_DISABLED", "").lower() in ("1", "true", "yes"):
-        raise RuntimeError("[OPENCLAW] Disabled via OPENCLAW_DISABLED env var")
+    if os.getenv("POLICY_GUARD_DISABLED", "").lower() in ("1", "true", "yes"):
+        raise RuntimeError("[POLICY_GUARD] Disabled via POLICY_GUARD_DISABLED env var")
 
     policies = _load_policies()   # raises RuntimeError if policy.yaml broken
 
@@ -112,7 +106,7 @@ def evaluate(intent: IntentModel) -> DecisionModel:
         reason = blocked_entry.get(
             "reason", "Action requires human authorization — it is on the blocked list"
         )
-        logger.info(f"[OPENCLAW] {proposed.action} → BLOCK (RULE_001)")
+        logger.info(f"[POLICY_GUARD] {proposed.action} → BLOCK (RULE_001)")
         return _make_decision(intent, "RULE_001", "BLOCK", reason, enforcement)
 
     # ----------------------------------------------------------------
@@ -121,7 +115,7 @@ def evaluate(intent: IntentModel) -> DecisionModel:
     for rule in risk_rules:
         if proposed.risk_level == rule["risk_level"]:
             logger.info(
-                f"[OPENCLAW] {proposed.action} → {rule['decision']} "
+                f"[POLICY_GUARD] {proposed.action} → {rule['decision']} "
                 f"({rule['rule_id']}) risk={proposed.risk_level}"
             )
             return _make_decision(
@@ -136,19 +130,19 @@ def evaluate(intent: IntentModel) -> DecisionModel:
     # RULE_004: Action is on the allowed list — ALLOW
     # ----------------------------------------------------------------
     if proposed.action in allowed_names:
-        logger.info(f"[OPENCLAW] {proposed.action} → ALLOW (RULE_004)")
+        logger.info(f"[POLICY_GUARD] {proposed.action} → ALLOW (RULE_004)")
         return _make_decision(
             intent,
             "RULE_004",
             "ALLOW",
-            "Action is in the pre-approved safe list (OpenClaw policy.yaml)",
+            "Action is in the pre-approved safe list (PolicyGuard policy.yaml)",
             enforcement,
         )
 
     # ----------------------------------------------------------------
     # RULE_DEFAULT: Nothing matched — fail-safe BLOCK
     # ----------------------------------------------------------------
-    logger.warning(f"[OPENCLAW] {proposed.action} → BLOCK (RULE_DEFAULT) — no rule matched")
+    logger.warning(f"[POLICY_GUARD] {proposed.action} → BLOCK (RULE_DEFAULT) — no rule matched")
     return _make_decision(
         intent,
         policies.get("default_rule_id", "RULE_DEFAULT"),

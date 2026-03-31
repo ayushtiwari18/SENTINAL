@@ -12,8 +12,8 @@ Fallback chain:
   1. LLM proposes actions via Gemini Flash     (LLM_ENABLED=true, API key set)
   2. _rule_derive_actions()                    (fallback if LLM fails or disabled)
 
-The output of BOTH paths feeds into openclaw_runtime.evaluate() unchanged —
-the policy enforcement layer is never bypassed.
+The output of BOTH paths feeds into openclaw_runtime.evaluate() (PolicyGuard)
+unchanged — the policy enforcement layer is never bypassed.
 """
 
 import os
@@ -21,7 +21,7 @@ import json
 import logging
 from models import IntentModel, AttackContext, ProposedAction
 
-logger = logging.getLogger("Nexus.intent_builder")
+logger = logging.getLogger("nexus.intent_builder")
 
 LLM_ENABLED  = os.getenv("LLM_ENABLED", "true").lower() not in ("false", "0", "no")
 GEMINI_KEY   = os.getenv("GEMINI_API_KEY", "")
@@ -39,7 +39,7 @@ _VALID_ACTIONS = {
 
 _VALID_RISK_LEVELS = {"low", "medium", "high", "critical"}
 
-_SYSTEM_PROMPT = """You are Nexus, an autonomous cybersecurity response agent.
+_SYSTEM_PROMPT = """You are a cybersecurity response agent for the SENTINAL platform.
 Given an attack context, propose a JSON array of security actions to take.
 
 Each action object MUST have exactly these fields:
@@ -96,7 +96,6 @@ Propose the appropriate security response actions as a JSON array."""
 
         actions = []
         for item in items:
-            # Validate each item has required fields and valid values
             if not isinstance(item, dict):
                 continue
             action_name = item.get("action", "")
@@ -149,7 +148,6 @@ def _rule_derive_actions(ctx: AttackContext) -> list[ProposedAction]:
         risk_level="low",
     ))
 
-    # Rate limit on medium and above
     if ctx.severity in ("medium", "high", "critical"):
         actions.append(ProposedAction(
             action="rate_limit_ip",
@@ -158,7 +156,6 @@ def _rule_derive_actions(ctx: AttackContext) -> list[ProposedAction]:
             risk_level="low",
         ))
 
-    # Flag for review on high/critical
     if ctx.severity in ("high", "critical"):
         actions.append(ProposedAction(
             action="flag_for_review",
@@ -167,7 +164,6 @@ def _rule_derive_actions(ctx: AttackContext) -> list[ProposedAction]:
             risk_level="low",
         ))
 
-    # Permanent ban proposed (will be BLOCKED by policy) on critical
     if ctx.severity == "critical" and ctx.confidence >= 0.9:
         actions.append(ProposedAction(
             action="permanent_ban_ip",
@@ -176,7 +172,6 @@ def _rule_derive_actions(ctx: AttackContext) -> list[ProposedAction]:
             risk_level="high",
         ))
 
-    # Shutdown endpoint proposed (will be BLOCKED) on critical successful attack
     if ctx.severity == "critical" and ctx.status == "successful":
         actions.append(ProposedAction(
             action="shutdown_endpoint",
@@ -192,7 +187,7 @@ def build_intents(ctx: AttackContext) -> list[IntentModel]:
     """
     Build a list of IntentModels from an attack context.
     Uses LLM reasoning when enabled, rule engine as fallback.
-    Either way, all proposed actions pass through openclaw_runtime.evaluate().
+    Either way, all proposed actions pass through PolicyGuard (openclaw_runtime.evaluate()).
     """
     if LLM_ENABLED:
         proposed_actions = _llm_derive_actions(ctx)

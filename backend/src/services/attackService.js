@@ -6,8 +6,7 @@ const { EVENTS }  = require('../sockets/broadcastService');
 const axios       = require('axios');
 const logger      = require('../utils/logger');
 
-// Supports both new centralized Nexus_URL and old name (same key, kept for clarity)
-const Nexus_URL = process.env.Nexus_URL || 'http://localhost:8004';
+const NEXUS_URL = process.env.NEXUS_URL || 'http://localhost:8004';
 
 /**
  * Non-blocking Nexus call.
@@ -17,7 +16,7 @@ const Nexus_URL = process.env.Nexus_URL || 'http://localhost:8004';
 const callNexus = async (attack) => {
   try {
     const response = await axios.post(
-      `${Nexus_URL}/respond`,
+      `${NEXUS_URL}/respond`,
       {
         attackId:   attack._id.toString(),
         ip:         attack.ip,
@@ -32,7 +31,7 @@ const callNexus = async (attack) => {
     const { actionsExecuted, actionsQueued } = response.data;
 
     logger.info(
-      `[Nexus] executed=${JSON.stringify(actionsExecuted)} ` +
+      `[NEXUS] executed=${JSON.stringify(actionsExecuted)} ` +
       `queued=${JSON.stringify(actionsQueued.map(a => a.action))}`
     );
 
@@ -47,19 +46,19 @@ const callNexus = async (attack) => {
       });
 
       emitter.emit(EVENTS.ACTION_PENDING, {
-        id:           queued._id,
-        action:       queued.action,
-        agentReason:  queued.agentReason,
+        id:            queued._id,
+        action:        queued.action,
+        agentReason:   queued.agentReason,
         blockedReason: queued.blockedReason,
-        ip:           queued.ip,
-        attackId:     queued.attackId
+        ip:            queued.ip,
+        attackId:      queued.attackId
       });
 
-      logger.info(`[Nexus] Queued for human review: ${queued.action}`);
+      logger.info(`[NEXUS] Queued for human review: ${queued.action}`);
     }
 
   } catch (err) {
-    logger.warn(`[Nexus] Unreachable or error: ${err.message}`);
+    logger.warn(`[NEXUS] Unreachable or error: ${err.message}`);
   }
 };
 

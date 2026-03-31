@@ -3,19 +3,17 @@
  *
  * POST /api/gemini/chat
  *   Body: { question: string }
- *   Fetches last 50 AttackEvents, grounds Gemini answer in real data.
- *   Returns: { success, data: { answer, grounded } }
+ *   Returns: { success, data: { answer, grounded, context_attacks, errorCode? } }
  *
  * POST /api/gemini/report/:attackId
- *   Fetches single AttackEvent by ID, generates structured incident report.
  *   Returns: { success, data: { report } }
  */
 
-const express      = require('express');
-const router       = express.Router();
-const AttackEvent  = require('../models/AttackEvent');
+const express       = require('express');
+const router        = express.Router();
+const AttackEvent   = require('../models/AttackEvent');
 const geminiService = require('../services/geminiService');
-const logger       = require('../utils/logger');
+const logger        = require('../utils/logger');
 
 // ── POST /api/gemini/chat ────────────────────────────────────────────────────
 router.post('/chat', async (req, res) => {
@@ -38,7 +36,6 @@ router.post('/chat', async (req, res) => {
   }
 
   try {
-    // Fetch recent attacks to ground the answer in real data
     const recentAttacks = await AttackEvent
       .find({})
       .sort({ timestamp: -1 })
@@ -47,14 +44,20 @@ router.post('/chat', async (req, res) => {
 
     const result = await geminiService.chat(question.trim(), recentAttacks);
 
-    logger.info(`[GeminiRoute] /chat — question answered (grounded=${result.grounded})`);
+    logger.info(`[GeminiRoute] /chat — answered (grounded=${result.grounded}, errorCode=${result.errorCode || 'none'})`);
 
-    return res.status(200).json({
-      success: true,
+    // Return 429 to frontend when quota is exhausted so UI can show correct state
+    const httpStatus = result.errorCode === 'QUOTA_EXHAUSTED' ? 429
+                     : result.errorCode === 'NO_API_KEY'      ? 503
+                     : 200;
+
+    return res.status(httpStatus).json({
+      success: httpStatus === 200,
       data: {
-        answer:   result.answer,
-        grounded: result.grounded,
+        answer:          result.answer,
+        grounded:        result.grounded,
         context_attacks: recentAttacks.length,
+        errorCode:       result.errorCode || null,
       },
     });
   } catch (err) {
@@ -82,7 +85,7 @@ router.post('/report/:attackId', async (req, res) => {
   let attack;
   try {
     attack = await AttackEvent.findById(attackId).lean();
-  } catch (err) {
+  } catch {
     return res.status(400).json({
       success: false,
       message: 'Invalid attack ID format',
@@ -100,13 +103,8 @@ router.post('/report/:attackId', async (req, res) => {
 
   try {
     const report = await geminiService.generateReport(attack);
-
-    logger.info(`[GeminiRoute] /report — report generated for ${attackId} (gemini=${report.generated})`);
-
-    return res.status(200).json({
-      success: true,
-      data: { report },
-    });
+    logger.info(`[GeminiRoute] /report — done for ${attackId} (gemini=${report.generated})`);
+    return res.status(200).json({ success: true, data: { report } });
   } catch (err) {
     logger.error(`[GeminiRoute] /report error: ${err.message}`);
     return res.status(500).json({

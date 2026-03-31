@@ -1,12 +1,17 @@
 /**
  * CorrelationPage.jsx — Attack Correlation Engine
- * Calls POST /api/gemini/correlate, renders campaign cards,
- * shared infrastructure table, attack chains, and risk score.
+ *
+ * Improvements over previous version:
+ *   1. “Ask Co-Pilot” now navigates directly to /copilot with the campaign
+ *      question pre-filled via React Router location.state — no clipboard copy.
+ *   2. Risk score history sparkline loaded from /api/gemini/correlate/history
+ *      and rendered as a pure SVG line chart in the header.
  */
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import PageWrapper  from '../components/layout/PageWrapper';
 import Panel        from '../components/ui/Panel';
-import { geminiCorrelate } from '../services/api';
+import { geminiCorrelate, geminiCorrelateHistory } from '../services/api';
 
 const SEV_COLOR = {
   critical: 'var(--color-critical)',
@@ -22,11 +27,90 @@ const RISK_LABEL = (score) => {
   return               { label: 'LOW',      color: 'var(--color-low)' };
 };
 
+// ── Pure-SVG risk score sparkline ───────────────────────────────────────────
+function RiskSparkline({ history }) {
+  if (!history || history.length < 2) {
+    return (
+      <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-faint)', alignSelf: 'center' }}>
+        No history yet
+      </div>
+    );
+  }
+
+  const W = 200, H = 48, PAD = 4;
+  const scores = history.map(h => h.riskScore ?? 0);
+  const minS = Math.max(0,  Math.min(...scores) - 5);
+  const maxS = Math.min(100, Math.max(...scores) + 5);
+  const range = maxS - minS || 1;
+
+  const pts = scores.map((s, i) => {
+    const x = PAD + (i / (scores.length - 1)) * (W - PAD * 2);
+    const y = H - PAD - ((s - minS) / range) * (H - PAD * 2);
+    return `${x},${y}`;
+  });
+
+  const latest = scores[scores.length - 1];
+  const { color } = RISK_LABEL(latest);
+  // resolve CSS var to a safe fallback for SVG stroke
+  const strokeColor = color.startsWith('var(') ? '#e85d4a' : color;
+
+  const lastX = PAD + (W - PAD * 2);
+  const lastY = H - PAD - ((latest - minS) / range) * (H - PAD * 2);
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 2, alignItems: 'flex-end' }}>
+      <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>
+        Risk history ({history.length} runs)
+      </div>
+      <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} style={{ overflow: 'visible' }}>
+        {/* Area fill */}
+        <defs>
+          <linearGradient id="sparkGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%"  stopColor={strokeColor} stopOpacity="0.18" />
+            <stop offset="100%" stopColor={strokeColor} stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        <polyline
+          points={`${PAD},${H} ${pts.join(' ')} ${lastX},${H}`}
+          fill="url(#sparkGrad)" stroke="none"
+        />
+        {/* Line */}
+        <polyline
+          points={pts.join(' ')}
+          fill="none"
+          stroke={strokeColor}
+          strokeWidth="1.5"
+          strokeLinejoin="round"
+          strokeLinecap="round"
+        />
+        {/* Latest point dot */}
+        <circle cx={lastX} cy={lastY} r={3} fill={strokeColor} />
+        {/* Latest score label */}
+        <text
+          x={lastX + 5} y={lastY + 4}
+          fontSize="9" fill={strokeColor}
+          fontWeight="bold" fontFamily="monospace"
+        >{latest}</text>
+      </svg>
+    </div>
+  );
+}
+
+// ── Main page ─────────────────────────────────────────────────────────────────
 export default function CorrelationPage() {
-  const [loading,  setLoading]  = useState(false);
-  const [result,   setResult]   = useState(null);
-  const [error,    setError]    = useState(null);
-  const [copilotQ, setCopilotQ] = useState(null); // deep-link to copilot
+  const navigate = useNavigate();
+
+  const [loading,     setLoading]     = useState(false);
+  const [result,      setResult]      = useState(null);
+  const [error,       setError]       = useState(null);
+  const [riskHistory, setRiskHistory] = useState([]);
+
+  // Load risk score history on mount
+  useEffect(() => {
+    geminiCorrelateHistory()
+      .then(data => setRiskHistory(Array.isArray(data) ? data : []))
+      .catch(() => {}); // silent — sparkline is enhancement only
+  }, []);
 
   const runAnalysis = useCallback(async () => {
     setLoading(true);
@@ -35,6 +119,10 @@ export default function CorrelationPage() {
     try {
       const data = await geminiCorrelate();
       setResult(data);
+      // Refresh history after a new run so sparkline includes latest score
+      geminiCorrelateHistory()
+        .then(h => setRiskHistory(Array.isArray(h) ? h : []))
+        .catch(() => {});
     } catch (err) {
       setError(err?.response?.data?.message || 'Correlation analysis failed. Please try again.');
     } finally {
@@ -42,11 +130,10 @@ export default function CorrelationPage() {
     }
   }, []);
 
+  // Navigate to /copilot with the campaign question pre-filled via router state
   const askCopilot = (campaign) => {
-    const q = `Tell me more about the campaign "${campaign.name}" involving IPs ${campaign.sourceIps.join(', ')} using ${campaign.attackTypes.join(', ')} attacks.`;
-    setCopilotQ(q);
-    // Copy to clipboard so analyst can paste into Co-Pilot tab
-    try { navigator.clipboard.writeText(q); } catch {}
+    const q = `Tell me more about the campaign "${campaign.name}" involving IPs ${campaign.sourceIps?.join(', ')} using ${campaign.attackTypes?.join(', ')} attacks.`;
+    navigate('/copilot', { state: { prefillQuestion: q } });
   };
 
   const risk = result ? RISK_LABEL(result.riskScore || 0) : null;
@@ -58,13 +145,15 @@ export default function CorrelationPage() {
         {/* Header */}
         <div className="page-header">
           <div className="page-title-group">
-            <h1 className="page-title">🕰 Attack Correlation Engine</h1>
+            <h1 className="page-title">⏰ Attack Correlation Engine</h1>
             <p className="page-subtitle">
               Gemini analyses up to 200 recent attacks to identify coordinated campaigns,
               shared attacker infrastructure, and multi-stage attack chains.
             </p>
           </div>
-          <div className="page-actions">
+          <div className="page-actions" style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-5)' }}>
+            {/* Risk history sparkline */}
+            <RiskSparkline history={riskHistory} />
             <button
               className="btn btn-primary"
               onClick={runAnalysis}
@@ -76,14 +165,6 @@ export default function CorrelationPage() {
           </div>
         </div>
 
-        {/* Clipboard hint */}
-        {copilotQ && (
-          <div style={styles.hint}>
-            ✅ Question copied to clipboard — paste it in the <strong>AI Copilot</strong> tab for deeper analysis.
-            <button style={styles.hintClose} onClick={() => setCopilotQ(null)}>dismiss</button>
-          </div>
-        )}
-
         {/* Error */}
         {error && (
           <div style={styles.errorBox}>{error}</div>
@@ -93,7 +174,7 @@ export default function CorrelationPage() {
         {!loading && !result && !error && (
           <Panel>
             <div style={styles.emptyState}>
-              <span style={{ fontSize: 48 }}>🕰</span>
+              <span style={{ fontSize: 48 }}>⏰</span>
               <h3 style={{ color: 'var(--color-text)', margin: 'var(--space-3) 0 var(--space-2)' }}>
                 No analysis yet
               </h3>
@@ -164,12 +245,13 @@ export default function CorrelationPage() {
                       <p style={{ fontSize: 'var(--text-sm)', color: 'var(--color-text-muted)', lineHeight: 1.5, margin: '0 0 var(--space-3)' }}>
                         {c.assessment}
                       </p>
+                      {/* Deep-link to Co-Pilot — navigates directly, no clipboard paste needed */}
                       <button
                         className="btn btn-ghost"
                         style={{ fontSize: 'var(--text-xs)', padding: 'var(--space-1) var(--space-3)' }}
                         onClick={() => askCopilot(c)}
                       >
-                        💬 Ask Co-Pilot about this campaign
+                        💬 Ask Co-Pilot about this campaign →
                       </button>
                     </div>
                   ))}
@@ -223,26 +305,6 @@ export default function CorrelationPage() {
 }
 
 const styles = {
-  hint: {
-    padding: 'var(--space-3) var(--space-4)',
-    background: 'var(--color-surface)',
-    border: '1px solid var(--color-online)',
-    borderRadius: 'var(--radius-md)',
-    fontSize: 'var(--text-sm)',
-    color: 'var(--color-text)',
-    marginBottom: 'var(--space-4)',
-    display: 'flex',
-    alignItems: 'center',
-    gap: 'var(--space-3)',
-  },
-  hintClose: {
-    marginLeft: 'auto',
-    background: 'none',
-    border: 'none',
-    color: 'var(--color-text-muted)',
-    cursor: 'pointer',
-    fontSize: 'var(--text-xs)',
-  },
   errorBox: {
     padding: 'var(--space-4)',
     background: 'var(--color-critical-dim)',

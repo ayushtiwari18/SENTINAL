@@ -11,7 +11,15 @@ const ActionQueueSchema = new mongoose.Schema(
     action: {
       type: String,
       required: true,
+      // Full set of actions that intent_builder.py can propose
+      // High-risk actions go through policy BLOCK -> ActionQueue for human review
+      // Low-risk actions are ALLOW -> executed directly, but included here for completeness
       enum: [
+        'send_alert',
+        'log_attack',
+        'rate_limit_ip',
+        'flag_for_review',
+        'generate_report',
         'permanent_ban_ip',
         'shutdown_endpoint',
         'purge_all_sessions',
@@ -27,9 +35,6 @@ const ActionQueueSchema = new mongoose.Schema(
     agentReason:   { type: String, default: '' },
     blockedReason: { type: String, default: '' },
     ip:            { type: String, default: '' },
-    // FIX: attackType and severity were missing — frontend ActionQueue.jsx renders these fields.
-    // Without them the schema strips them on save and they come back undefined,
-    // causing SeverityBadge to receive undefined and potentially throw a silent render error.
     attackType:    { type: String, default: null },
     severity:      { type: String, default: null },
     approvedBy:    { type: String, default: null },

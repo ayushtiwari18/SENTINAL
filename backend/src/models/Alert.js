@@ -4,7 +4,7 @@ const AlertSchema = new mongoose.Schema({
   attackId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'AttackEvent',
-    required: [true, 'attackId reference is required'],
+    default: null,
     index: true
   },
   title: {
@@ -25,7 +25,7 @@ const AlertSchema = new mongoose.Schema({
   type: {
     type: String,
     required: [true, 'Alert type is required'],
-    enum: ['attack_detected', 'service_down', 'rate_limit', 'anomaly', 'Nexus_action']
+    enum: ['attack_detected', 'service_down', 'rate_limit', 'anomaly', 'nexus_action']
   },
   isRead: {
     type: Boolean,

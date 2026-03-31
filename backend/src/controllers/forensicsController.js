@@ -36,6 +36,7 @@ const getForensics = async (req, res) => {
     const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
     // Query 2 — All requests from this IP in last 24h
+    // SystemLog uses custom 'timestamp' field (not createdAt)
     const ipHistory = await SystemLog.find({
       ip,
       timestamp: { $gte: since24h }
@@ -46,9 +47,10 @@ const getForensics = async (req, res) => {
       .lean();
 
     // Query 3 — All attacks from this IP ever
+    // AttackEvent uses Mongoose timestamps:true so sort by createdAt
     const allAttacks = await AttackEvent.find({ ip })
-      .sort({ timestamp: -1 })
-      .select('attackType severity status timestamp confidence')
+      .sort({ createdAt: -1 })
+      .select('attackType severity status createdAt confidence')
       .limit(50)
       .lean();
 
@@ -75,23 +77,26 @@ const getForensics = async (req, res) => {
           detectedBy:  attack.detectedBy,
           payload:     attack.payload,
           explanation: attack.explanation,
-          timestamp:   attack.timestamp
+          // Use createdAt (from timestamps:true) — AttackEvent has no top-level 'timestamp'
+          // The schema does define a custom 'timestamp' field too, but createdAt is the
+          // authoritative Mongoose-managed field used everywhere else in the system.
+          timestamp:   attack.createdAt
         },
         raw_request: attack.requestId ? {
-          method:      attack.requestId.method,
-          url:         attack.requestId.url,
-          ip:          attack.requestId.ip,
-          headers:     attack.requestId.headers,
-          body:        attack.requestId.body,
-          queryParams: attack.requestId.queryParams,
+          method:       attack.requestId.method,
+          url:          attack.requestId.url,
+          ip:           attack.requestId.ip,
+          headers:      attack.requestId.headers,
+          body:         attack.requestId.body,
+          queryParams:  attack.requestId.queryParams,
           responseCode: attack.requestId.responseCode
         } : null,
         ip_intel: {
           ip,
           total_requests_24h:  ipHistory.length,
           total_attacks_ever:  allAttacks.length,
-          first_attack:        allAttacks.length ? allAttacks[allAttacks.length - 1].timestamp : null,
-          last_attack:         allAttacks.length ? allAttacks[0].timestamp : null,
+          first_attack:        allAttacks.length ? allAttacks[allAttacks.length - 1].createdAt : null,
+          last_attack:         allAttacks.length ? allAttacks[0].createdAt : null,
           attack_types_seen:   [...new Set(allAttacks.map(a => a.attackType))]
         },
         attack_chain: {

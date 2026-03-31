@@ -17,6 +17,7 @@ export const ROUTES = {
   SETTINGS:     '/settings',
   SIMULATE:     '/simulate',
   DOCS:         '/docs',
+  COPILOT:      '/copilot',
 };
 
 export const SEVERITY_COLORS = {
@@ -92,6 +93,7 @@ export const NAV_LINKS = [
   { to: ROUTES.ACTION_QUEUE, label: 'Actions',      icon: 'ListChecks',     badge: 'queue' },
   { to: ROUTES.AUDIT,        label: 'Audit',        icon: 'ClipboardList' },
   { to: ROUTES.SERVICES,     label: 'Services',     icon: 'Activity' },
+  { to: ROUTES.COPILOT,      label: 'AI Copilot',   icon: 'Bot',            ai: true },
   { to: ROUTES.SIMULATE,     label: 'Simulate',     icon: 'Sword',          danger: true },
   { to: ROUTES.SETTINGS,     label: 'Settings',     icon: 'Settings' },
 ];

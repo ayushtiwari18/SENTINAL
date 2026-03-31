@@ -9,7 +9,7 @@ const api = axios.create({ baseURL: API_BASE });
 const unwrap    = res => res.data.data;
 const unwrapSafe = res => res.data.data ?? res.data;
 
-// ── Existing API calls ──────────────────────────────────────────────────────────
+// ── Core API calls ──────────────────────────────────────────────────────────
 export const getStats          = ()       => api.get('/api/stats').then(unwrap);
 export const getRecentAttacks  = (n = 50) => api.get(`/api/attacks/recent?limit=${n}`).then(unwrap);
 export const getForensics      = (id)     => api.get(`/api/attacks/${id}/forensics`).then(unwrap);
@@ -31,11 +31,18 @@ export const uploadPcap = (file, projectId = 'pcap-upload') => {
 };
 
 // ── ArmorIQ API calls ─────────────────────────────────────────────────────────
-// Use unwrapSafe here: approveAction and rejectAction return { success, message, data }
-// where data is the updated ActionQueue item — safe unwrap handles both cases
 export const getPendingActions  = ()   => api.get('/api/actions/pending').then(unwrap);
 export const approveAction = (id) =>
   api.post(`/api/actions/${id}/approve`, { approvedBy: 'human' }).then(unwrapSafe);
 export const rejectAction  = (id) =>
   api.post(`/api/actions/${id}/reject`, { rejectedBy: 'human' }).then(unwrapSafe);
 export const getAuditLog  = (n = 50) => api.get(`/api/audit?limit=${n}`).then(unwrap);
+
+// ── Gemini AI API calls ───────────────────────────────────────────────────────
+// geminiChat — Security Co-Pilot: ask a question grounded in real attack data
+export const geminiChat   = (question) =>
+  api.post('/api/gemini/chat', { question }).then(unwrap);
+
+// geminiReport — generate a structured incident report for a single attack
+export const geminiReport = (attackId) =>
+  api.post(`/api/gemini/report/${attackId}`).then(unwrap);

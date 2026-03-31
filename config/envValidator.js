@@ -9,26 +9,16 @@
  * Behaviour:
  *   ✓ All required vars present  → logs summary and continues
  *   ✗ Any required var missing   → logs EVERY missing var, then exits
- *
- * This prevents confusing runtime errors deep in the stack
- * (e.g. "MongooseError: option uri is not supported") and instead
- * gives a clear, actionable message at startup.
- *
- * HOW TO USE:
- *   const { validateEnv } = require('../config/envValidator');
- *   validateEnv(); // call this before everything else
  */
 
 'use strict';
 
-// ── Required variables ───────────────────────────────────────────────────────
-// These MUST be set or the system cannot function.
-// Each entry: { name, description, example }
+// ── Required variables ─────────────────────────────────────────────────────────────
 const REQUIRED_VARS = [
   {
     name: 'MONGO_URI',
     description: 'MongoDB connection string',
-    example: 'mongodb+srv://user:pass@cluster.mongodb.net/sentinel'
+    example: 'mongodb+srv://user:pass@cluster.mongodb.net/sentinal'
   },
   {
     name: 'GATEWAY_PORT',
@@ -46,7 +36,7 @@ const REQUIRED_VARS = [
     example: '8003'
   },
   {
-    name: 'Nexus_PORT',
+    name: 'NEXUS_PORT',
     description: 'Port for the SENTINAL Response Engine (Python FastAPI)',
     example: '8004'
   },
@@ -57,15 +47,13 @@ const REQUIRED_VARS = [
   }
 ];
 
-// ── Insecure default detection ──────────────────────────────────────────────
-// These vars are required in production but allowed in development.
-// System will WARN (not exit) if they are set to placeholder values.
+// ── Insecure default detection ────────────────────────────────────────────────
 const INSECURE_DEFAULTS = [
   { name: 'JWT_SECRET',  insecureValues: ['change_me', 'secret', 'changeme', 'change_me_to_a_long_random_secret_string'] },
   { name: 'API_SECRET',  insecureValues: ['change_me', 'secret', 'changeme', 'change_me_to_another_long_random_secret_string'] }
 ];
 
-// ── Optional but recommended ──────────────────────────────────────────────
+// ── Optional but recommended ────────────────────────────────────────────────
 const RECOMMENDED_VARS = [
   { name: 'GEMINI_API_KEY',  description: 'Google Gemini key for Nexus AI decisions' },
   { name: 'NODE_ENV',        description: 'Runtime mode (development|production|test)' },
@@ -73,19 +61,12 @@ const RECOMMENDED_VARS = [
 ];
 
 
-/**
- * Validate all environment variables.
- *
- * @param {object} opts
- * @param {boolean} opts.exitOnFailure  - Default true. Set false in tests.
- * @returns {{ valid: boolean, missing: string[], warnings: string[] }}
- */
 function validateEnv({ exitOnFailure = true } = {}) {
   const missing  = [];
   const warnings = [];
   const env      = process.env;
 
-  // ── 1. Check required variables ───────────────────────────────────────────────
+  // 1. Check required variables
   for (const v of REQUIRED_VARS) {
     const value = env[v.name];
     if (!value || value.trim() === '') {
@@ -93,7 +74,7 @@ function validateEnv({ exitOnFailure = true } = {}) {
     }
   }
 
-  // ── 2. Check for insecure placeholder values (production only) ──────────────
+  // 2. Insecure placeholder check (production only)
   if (env.NODE_ENV === 'production') {
     for (const v of INSECURE_DEFAULTS) {
       const value = (env[v.name] || '').toLowerCase().trim();
@@ -106,19 +87,19 @@ function validateEnv({ exitOnFailure = true } = {}) {
     }
   }
 
-  // ── 3. Check recommended variables (warn only, never exit) ───────────────
+  // 3. Recommended variables (warn only, never exit)
   for (const v of RECOMMENDED_VARS) {
     if (!env[v.name] || env[v.name].trim() === '') {
       warnings.push(`${v.name} is not set (${v.description}) — using default`);
     }
   }
 
-  // ── 4. Report ────────────────────────────────────────────────────────────────
+  // 4. Report missing — exit
   if (missing.length > 0) {
     console.error('\n');
-    console.error('  ╭────────────────────────────────────────────────────────────────────────────────╮');
+    console.error('  ╭─────────────────────────────────────────────────────────────────────────────────╮');
     console.error('  │  SENTINAL — STARTUP FAILED: Missing Environment Variables          │');
-    console.error('  ╰────────────────────────────────────────────────────────────────────────────────╯');
+    console.error('  ╰─────────────────────────────────────────────────────────────────────────────────╯');
     console.error('');
     console.error('  The following required environment variables are NOT set:\n');
 
@@ -144,17 +125,17 @@ function validateEnv({ exitOnFailure = true } = {}) {
     return { valid: false, missing, warnings };
   }
 
-  // ── 5. All required vars present — print summary + warnings ─────────────────
+  // 5. All good — print summary
   console.log('\n  [ENV] ✓ Environment validation passed');
   console.log(`  [ENV]   NODE_ENV       : ${env.NODE_ENV       || 'development (default)'}`);
   console.log(`  [ENV]   LOG_LEVEL      : ${env.LOG_LEVEL      || 'info (default)'}`);
   console.log(`  [ENV]   GATEWAY_PORT   : ${env.GATEWAY_PORT}`);
   console.log(`  [ENV]   DETECTION_PORT : ${env.DETECTION_PORT}`);
   console.log(`  [ENV]   PCAP_PORT      : ${env.PCAP_PORT}`);
-  console.log(`  [ENV]   Nexus_PORT   : ${env.Nexus_PORT}`);
+  console.log(`  [ENV]   NEXUS_PORT     : ${env.NEXUS_PORT}`);
   console.log(`  [ENV]   MONGO_URI      : ${env.MONGO_URI ? env.MONGO_URI.replace(/:([^:@]+)@/, ':****@') : 'NOT SET'}`);
   console.log(`  [ENV]   DETECTION_URL  : ${env.DETECTION_URL  || env.DETECTION_ENGINE_URL || 'http://localhost:8002 (default)'}`);
-  console.log(`  [ENV]   Nexus_URL    : ${env.Nexus_URL    || 'http://localhost:8004 (default)'}`);
+  console.log(`  [ENV]   NEXUS_URL      : ${env.NEXUS_URL      || 'http://localhost:8004 (default)'}`);
   console.log(`  [ENV]   GEMINI_API_KEY : ${env.GEMINI_API_KEY ? '✓ set (hidden)' : '⚠ not set — Nexus AI features may be limited'}`);
   console.log('');
 
@@ -170,15 +151,6 @@ function validateEnv({ exitOnFailure = true } = {}) {
 }
 
 
-/**
- * Quick check: is a single variable set and non-empty?
- * Useful for feature flags inside routes.
- *
- * @example
- *   if (!isEnvSet('GEMINI_API_KEY')) {
- *     return res.status(503).json({ message: 'AI features not configured' });
- *   }
- */
 function isEnvSet(name) {
   const value = process.env[name];
   return value !== undefined && value.trim() !== '';

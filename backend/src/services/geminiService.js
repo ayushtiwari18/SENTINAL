@@ -1,27 +1,35 @@
 /**
  * geminiService.js — SENTINAL Gemini AI integration
  *
- * Model fallback chain (free-tier friendly):
- *   1. gemini-2.0-flash-lite  — lightest quota bucket, tried first
- *   2. gemini-1.5-flash-8b    — fallback if lite is also rate-limited
+ * Verified free-tier model chain (March 2026):
+ *   1. gemini-2.5-flash-lite  — 15 RPM, 1000 RPD — lightest quota, try first
+ *   2. gemini-2.5-flash        — 10 RPM,  250 RPD — fallback if lite exhausted
+ *
+ * Both models are confirmed active on v1beta generateContent as of 2026.
+ * Deprecated/removed models that must NOT be used:
+ *   ✗ gemini-1.5-flash        (404 on v1beta)
+ *   ✗ gemini-1.5-flash-8b     (404 on v1beta)
+ *   ✗ gemini-2.0-flash-lite   (404 on v1beta)
+ *   ✗ gemini-2.0-flash        (quota limit=0 on free tier)
  *
  * Features:
- *   - Exponential backoff retry on 429 (up to 3 attempts)
- *   - Clean user-facing error messages (no raw API blobs)
- *   - Graceful static fallback if all models fail or key is missing
+ *   - Single retry per model on 429 (waits retryDelay from API response or 20s)
+ *   - Falls to next model in chain on 429, throws QUOTA_EXHAUSTED when all fail
+ *   - 404 on a model surfaces immediately as UNKNOWN_ERROR (not swallowed)
+ *   - Clean user-facing messages — no raw API error blobs in the UI
  */
 
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const logger = require('../utils/logger');
 
-// ── Model fallback chain ──────────────────────────────────────────────────────
+// ── Verified model chain (do not change without testing on v1beta) ───────────
 const MODEL_CHAIN = [
-  'gemini-2.0-flash-lite',  // lightest free-tier quota — try first
-  'gemini-1.5-flash-8b',    // older 8B model — separate quota bucket
+  'gemini-2.5-flash-lite', // 15 RPM, 1000 RPD — highest free-tier allowance
+  'gemini-2.5-flash',      // 10 RPM,  250 RPD — fallback
 ];
 
 let _genAI  = null;
-let _models = null; // array of model instances, one per MODEL_CHAIN entry
+let _models = null;
 
 function getModels() {
   if (_models) return _models;
@@ -32,52 +40,72 @@ function getModels() {
   return _models;
 }
 
-// ── Retry helper ──────────────────────────────────────────────────────────────
-/**
- * Calls fn() with exponential backoff on 429 errors.
- * Tries MODEL_CHAIN[0] → MODEL_CHAIN[1] → throws with clean message.
- */
+// Reset cached model instances (e.g. if key changes at runtime)
+function resetModels() {
+  _genAI  = null;
+  _models = null;
+}
+
+// ── Extract retry-after delay from 429 error message ────────────────────────
+function getRetryDelay(errMessage, defaultMs = 20_000) {
+  // API embeds "retryDelay":"29s" or "Please retry in 29.3s" in the message
+  const match = errMessage && errMessage.match(/retry(?:Delay)?[":\s]+([0-9.]+)s/i);
+  if (match) {
+    const seconds = parseFloat(match[1]);
+    if (!isNaN(seconds) && seconds > 0) return Math.ceil(seconds) * 1000;
+  }
+  return defaultMs;
+}
+
+// ── Core: generate with model fallback + one retry per model on 429 ─────────
 async function generateWithFallback(prompt) {
   const models = getModels();
-  if (!models) return null; // no API key
+  if (!models) return null; // caller handles null as NO_API_KEY
 
   for (let m = 0; m < models.length; m++) {
     const modelName = MODEL_CHAIN[m];
-    const MAX_RETRIES = 2;
 
-    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    for (let attempt = 1; attempt <= 2; attempt++) {
       try {
         const result = await models[m].generateContent(prompt);
-        logger.info(`[GeminiService] response from ${modelName} (attempt ${attempt})`);
+        logger.info(`[GeminiService] ✓ ${modelName} responded (attempt ${attempt})`);
         return result.response.text().trim();
       } catch (err) {
-        const is429 = err.message && err.message.includes('429');
+        const msg   = err.message || '';
+        const is429 = msg.includes('429');
+        const is404 = msg.includes('404');
 
-        if (is429 && attempt < MAX_RETRIES) {
-          const delay = attempt * 15_000; // 15s, 30s
-          logger.warn(`[GeminiService] ${modelName} rate-limited (attempt ${attempt}), retrying in ${delay / 1000}s...`);
+        if (is404) {
+          // Model doesn't exist on v1beta — no point retrying or falling back
+          logger.error(`[GeminiService] 404: model ${modelName} not found on v1beta. Check MODEL_CHAIN.`);
+          throw err; // surfaces as UNKNOWN_ERROR — operator must fix config
+        }
+
+        if (is429 && attempt === 1) {
+          const delay = getRetryDelay(msg);
+          logger.warn(`[GeminiService] ${modelName} rate-limited, retrying in ${delay / 1000}s...`);
           await new Promise(r => setTimeout(r, delay));
           continue;
         }
 
-        if (is429) {
-          logger.warn(`[GeminiService] ${modelName} quota exhausted — trying next model in chain`);
-          break; // move to next model
+        if (is429 && attempt === 2) {
+          logger.warn(`[GeminiService] ${modelName} still rate-limited after retry — moving to next model`);
+          break; // try next model
         }
 
-        // Non-429 error — surface it immediately
+        // Any other error (auth, network, etc.) — surface immediately
         throw err;
       }
     }
   }
 
-  // All models exhausted
-  const err = new Error('QUOTA_EXHAUSTED');
-  err.isQuotaError = true;
-  throw err;
+  // All models in chain exhausted
+  const quotaErr = new Error('QUOTA_EXHAUSTED');
+  quotaErr.isQuotaError = true;
+  throw quotaErr;
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// ── Helpers ──────────────────────────────────────────────────────────────
 function stripFences(text) {
   return text.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
 }
@@ -105,42 +133,42 @@ async function chat(question, recentAttacks) {
   if (!getModels()) {
     logger.warn('[GeminiService] GEMINI_API_KEY not set');
     return {
-      answer: 'Gemini API key is not configured. Add GEMINI_API_KEY to your .env file.',
+      answer: 'Gemini API key is not configured. Add GEMINI_API_KEY to your .env file to enable the Security Co-Pilot.',
       grounded: false,
       errorCode: 'NO_API_KEY',
     };
   }
 
   const context = buildAttackContext(recentAttacks);
-
   const prompt =
     `You are SENTINEL AI, a senior cybersecurity analyst embedded in the SENTINAL threat detection platform.\n\n` +
     `You have access to the following REAL, LIVE attack telemetry from the last 24 hours:\n\n${context}\n\n` +
     `Answer the analyst's question below. Be direct, specific, and actionable.\n` +
-    `If the data is insufficient, say so and give your best analysis.\n` +
     `Do NOT fabricate attack events not present in the data above.\n` +
     `Keep your answer under 300 words. Use plain text — no markdown headers.\n\n` +
     `Analyst Question: ${question}`;
 
   try {
     const answer = await generateWithFallback(prompt);
+    if (answer === null) {
+      return { answer: 'Gemini API key is not configured.', grounded: false, errorCode: 'NO_API_KEY' };
+    }
     return { answer, grounded: true };
   } catch (err) {
     if (err.isQuotaError) {
-      logger.warn('[GeminiService] all models quota-exhausted for chat()');
+      logger.warn('[GeminiService] quota exhausted across all models for chat()');
       return {
         answer:
-          'The AI Co-Pilot has reached its API quota for today. ' +
-          'This is a free-tier limit on Google AI Studio. ' +
-          'You can either wait until the quota resets (usually midnight Pacific time) ' +
-          'or upgrade to a paid Gemini API plan at https://ai.google.dev.',
+          'The AI Co-Pilot has reached its free-tier API quota for today (Google AI Studio). ' +
+          'Quota resets daily at midnight Pacific time. ' +
+          'To remove this limit, enable billing at https://ai.google.dev.',
         grounded: false,
         errorCode: 'QUOTA_EXHAUSTED',
       };
     }
     logger.error(`[GeminiService] chat() failed: ${err.message}`);
     return {
-      answer: 'An unexpected error occurred while contacting the AI service. Please try again.',
+      answer: 'An unexpected error occurred while contacting the AI service. Please try again in a moment.',
       grounded: false,
       errorCode: 'UNKNOWN_ERROR',
     };
@@ -165,8 +193,7 @@ async function generateReport(attack) {
       `Update WAF rules to filter ${attack.attackType || 'this'} attack patterns`,
       'Apply latest security patches to affected services',
     ],
-    next_steps:
-      'Escalate to security team if severity is critical or high. Monitor for repeat attempts.',
+    next_steps: 'Escalate to security team if severity is critical or high. Monitor for repeat attempts.',
     risk_level: attack.severity || 'unknown',
     generated_at: new Date().toISOString(),
   };
@@ -200,17 +227,18 @@ async function generateReport(attack) {
     `}\n\nReturn ONLY valid JSON. No markdown. No extra text.`;
 
   try {
-    const text   = await generateWithFallback(prompt);
+    const text = await generateWithFallback(prompt);
+    if (text === null) return staticReport;
     const parsed = safeParseJSON(text);
     if (!parsed) {
-      logger.warn('[GeminiService] generateReport() — JSON parse failed, returning static report');
+      logger.warn('[GeminiService] generateReport() — JSON parse failed, using static report');
       return staticReport;
     }
-    logger.info(`[GeminiService] generateReport() — report generated for ${attack._id}`);
+    logger.info(`[GeminiService] generateReport() — done for ${attack._id}`);
     return { ...parsed, generated: true, generated_at: new Date().toISOString() };
   } catch (err) {
     if (err.isQuotaError) {
-      logger.warn('[GeminiService] all models quota-exhausted for generateReport()');
+      logger.warn('[GeminiService] quota exhausted for generateReport() — returning static report');
       return staticReport;
     }
     logger.error(`[GeminiService] generateReport() failed: ${err.message}`);
@@ -218,4 +246,4 @@ async function generateReport(attack) {
   }
 }
 
-module.exports = { chat, generateReport };
+module.exports = { chat, generateReport, resetModels };

@@ -7,6 +7,15 @@
  *
  * POST /api/gemini/report/:attackId
  *   Returns: { success, data: { report } }
+ *
+ * POST /api/gemini/correlate
+ *   Analyses last 200 attacks for coordinated campaigns, shared infra, attack chains.
+ *   Returns: { success, data: { campaigns, sharedInfrastructure, attackChains, riskScore, summary } }
+ *
+ * POST /api/gemini/mutate
+ *   Body: { payload: string, attackType: string }
+ *   Generates 5 evasion variants with WAF-bypass explanations.
+ *   Returns: { success, data: { original, mutations: [{ variant, technique, evades, risk }] } }
  */
 
 const express       = require('express');
@@ -46,7 +55,6 @@ router.post('/chat', async (req, res) => {
 
     logger.info(`[GeminiRoute] /chat — answered (grounded=${result.grounded}, errorCode=${result.errorCode || 'none'})`);
 
-    // Return 429 to frontend when quota is exhausted so UI can show correct state
     const httpStatus = result.errorCode === 'QUOTA_EXHAUSTED' ? 429
                      : result.errorCode === 'NO_API_KEY'      ? 503
                      : 200;
@@ -111,6 +119,94 @@ router.post('/report/:attackId', async (req, res) => {
       success: false,
       message: 'Failed to generate incident report',
       code: 'GEMINI_REPORT_ERROR',
+    });
+  }
+});
+
+// ── POST /api/gemini/correlate ───────────────────────────────────────────────
+router.post('/correlate', async (req, res) => {
+  try {
+    const attacks = await AttackEvent
+      .find({})
+      .sort({ timestamp: -1 })
+      .limit(200)
+      .lean();
+
+    if (attacks.length === 0) {
+      return res.status(200).json({
+        success: true,
+        data: {
+          campaigns: [],
+          sharedInfrastructure: [],
+          attackChains: [],
+          riskScore: 0,
+          summary: 'No attack data available for correlation.',
+          attackCount: 0,
+        },
+      });
+    }
+
+    const result = await geminiService.correlate(attacks);
+
+    logger.info(`[GeminiRoute] /correlate — done (attacks=${attacks.length}, campaigns=${result.campaigns?.length || 0})`);
+
+    const httpStatus = result.errorCode === 'QUOTA_EXHAUSTED' ? 429
+                     : result.errorCode === 'NO_API_KEY'      ? 503
+                     : 200;
+
+    return res.status(httpStatus).json({
+      success: httpStatus === 200,
+      data: { ...result, attackCount: attacks.length },
+    });
+  } catch (err) {
+    logger.error(`[GeminiRoute] /correlate error: ${err.message}`);
+    return res.status(500).json({
+      success: false,
+      message: 'Correlation analysis failed',
+      code: 'GEMINI_CORRELATE_ERROR',
+    });
+  }
+});
+
+// ── POST /api/gemini/mutate ────────────────────────────────────────────────────
+router.post('/mutate', async (req, res) => {
+  const { payload, attackType } = req.body;
+
+  if (!payload || typeof payload !== 'string' || !payload.trim()) {
+    return res.status(400).json({
+      success: false,
+      message: 'payload is required and must be a non-empty string',
+      code: 'MISSING_PAYLOAD',
+    });
+  }
+
+  if (payload.trim().length > 1000) {
+    return res.status(400).json({
+      success: false,
+      message: 'payload must be 1000 characters or fewer',
+      code: 'PAYLOAD_TOO_LONG',
+    });
+  }
+
+  try {
+    const result = await geminiService.mutate(payload.trim(), attackType || 'unknown');
+
+    logger.info(`[GeminiRoute] /mutate — done (type=${attackType}, mutations=${result.mutations?.length || 0})`);
+
+    const httpStatus = result.errorCode === 'QUOTA_EXHAUSTED' ? 429
+                     : result.errorCode === 'NO_API_KEY'      ? 503
+                     : 200;
+
+    return res.status(httpStatus).json({
+      success: httpStatus === 200,
+      data: result,
+    });
+  } catch (err) {
+    logger.error(`[GeminiRoute] /mutate error: ${err.message}`);
+    return res.status(500).json({
+      success: false,
+      message: 'Payload mutation failed',
+      code: 'GEMINI_MUTATE_ERROR',
     });
   }
 });

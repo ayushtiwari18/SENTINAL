@@ -1,6 +1,5 @@
 // ============================================================
 // SENTINAL — Application Constants
-// Single source of truth for routes, colors, types, and config.
 // ============================================================
 
 export const ROUTES = {
@@ -18,6 +17,7 @@ export const ROUTES = {
   SIMULATE:     '/simulate',
   DOCS:         '/docs',
   COPILOT:      '/copilot',
+  CORRELATION:  '/correlation',
 };
 
 export const SEVERITY_COLORS = {
@@ -61,41 +61,33 @@ export const SEVERITY_BADGE_CLASS = {
 };
 
 export const ATTACK_TYPES = [
-  'sqli',
-  'xss',
-  'traversal',
-  'command_injection',
-  'ssrf',
-  'lfi_rfi',
-  'brute_force',
-  'hpp',
-  'xxe',
-  'webshell',
-  'unknown',
+  'sqli', 'xss', 'traversal', 'command_injection',
+  'ssrf', 'lfi_rfi', 'brute_force', 'hpp', 'xxe', 'webshell', 'unknown',
 ];
 
-export const SEVERITY_LEVELS  = ['low', 'medium', 'high', 'critical'];
-export const ATTACK_STATUSES  = ['attempt', 'successful', 'blocked'];
-export const DETECTED_BY_OPTIONS = ['rule', 'ml', 'both'];
+export const SEVERITY_LEVELS       = ['low', 'medium', 'high', 'critical'];
+export const ATTACK_STATUSES       = ['attempt', 'successful', 'blocked'];
+export const DETECTED_BY_OPTIONS   = ['rule', 'ml', 'both'];
 
-export const POLL_INTERVAL    = 30_000; // 30s
-export const FEED_LIMIT       = 50;
-export const LOG_LIMIT        = 100;
-export const ALERT_LIMIT      = 100;
-export const AUDIT_LIMIT      = 100;
+export const POLL_INTERVAL = 30_000;
+export const FEED_LIMIT    = 50;
+export const LOG_LIMIT     = 100;
+export const ALERT_LIMIT   = 100;
+export const AUDIT_LIMIT   = 100;
 
 export const NAV_LINKS = [
-  { to: ROUTES.DASHBOARD,    label: 'Dashboard',    icon: 'LayoutDashboard' },
-  { to: ROUTES.ATTACKS,      label: 'Attacks',      icon: 'Zap',            badge: null },
-  { to: ROUTES.ALERTS,       label: 'Alerts',       icon: 'Bell',           badge: 'alerts' },
-  { to: ROUTES.LOGS,         label: 'Logs',         icon: 'ScrollText' },
-  { to: ROUTES.PCAP,         label: 'PCAP',         icon: 'FileSearch' },
-  { to: ROUTES.ACTION_QUEUE, label: 'Actions',      icon: 'ListChecks',     badge: 'queue' },
-  { to: ROUTES.AUDIT,        label: 'Audit',        icon: 'ClipboardList' },
-  { to: ROUTES.SERVICES,     label: 'Services',     icon: 'Activity' },
-  { to: ROUTES.COPILOT,      label: 'AI Copilot',   icon: 'Bot',            ai: true },
-  { to: ROUTES.SIMULATE,     label: 'Simulate',     icon: 'Sword',          danger: true },
-  { to: ROUTES.SETTINGS,     label: 'Settings',     icon: 'Settings' },
+  { to: ROUTES.DASHBOARD,   label: 'Dashboard',   icon: 'LayoutDashboard' },
+  { to: ROUTES.ATTACKS,     label: 'Attacks',     icon: 'Zap',          badge: null },
+  { to: ROUTES.ALERTS,      label: 'Alerts',      icon: 'Bell',         badge: 'alerts' },
+  { to: ROUTES.LOGS,        label: 'Logs',        icon: 'ScrollText' },
+  { to: ROUTES.PCAP,        label: 'PCAP',        icon: 'FileSearch' },
+  { to: ROUTES.ACTION_QUEUE,label: 'Actions',     icon: 'ListChecks',   badge: 'queue' },
+  { to: ROUTES.AUDIT,       label: 'Audit',       icon: 'ClipboardList' },
+  { to: ROUTES.SERVICES,    label: 'Services',    icon: 'Activity' },
+  { to: ROUTES.COPILOT,     label: 'AI Copilot',  icon: 'Bot',          ai: true },
+  { to: ROUTES.CORRELATION, label: 'Correlation', icon: 'Network',      ai: true },
+  { to: ROUTES.SIMULATE,    label: 'Simulate',    icon: 'Sword',        danger: true },
+  { to: ROUTES.SETTINGS,    label: 'Settings',    icon: 'Settings' },
 ];
 
 export const SERVICE_NAMES = {

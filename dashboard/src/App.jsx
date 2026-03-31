@@ -16,6 +16,7 @@ import AuditLog        from './pages/AuditLog';
 import SimulateAttack  from './pages/SimulateAttack';
 import ExplorePage     from './pages/ExplorePage';
 import CopilotPage     from './pages/CopilotPage';
+import CorrelationPage from './pages/CorrelationPage';
 import NotFound        from './pages/NotFound';
 
 export default function App() {
@@ -34,13 +35,12 @@ export default function App() {
           <Route path="/services"      element={<Services />} />
           <Route path="/settings"      element={<Settings />} />
           <Route path="/docs"          element={<Docs />} />
-          {/* ArmorIQ enforcement pages */}
           <Route path="/action-queue"  element={<ActionQueuePage />} />
           <Route path="/audit"         element={<AuditLog />} />
-          {/* Demo simulator */}
           <Route path="/simulate"      element={<SimulateAttack />} />
-          {/* Gemini AI Co-Pilot */}
+          {/* Gemini AI features */}
           <Route path="/copilot"       element={<CopilotPage />} />
+          <Route path="/correlation"   element={<CorrelationPage />} />
         </Route>
         <Route path="*" element={<NotFound />} />
       </Routes>

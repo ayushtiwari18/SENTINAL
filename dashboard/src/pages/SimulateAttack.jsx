@@ -72,17 +72,27 @@ export default function SimulateAttack() {
   const [waveActive, setWave]  = useState(false);
   const [liveEvents, setLive]  = useState([]);
 
-  useSocket('attack:new', useCallback((data) => {
+  // broadcastService wraps every socket event as: { event, timestamp, data: { ... } }
+  // Must unwrap .data before reading fields.
+  useSocket('attack:new', useCallback((payload) => {
+    const d = payload?.data ?? payload;   // support both wrapped and bare
     setLive(prev => [{
-      id: data.id || Date.now(), type: data.attackType,
-      ip: data.ip, severity: data.severity, time: new Date().toLocaleTimeString(),
+      id:       d.id       || Date.now(),
+      type:     d.attackType || 'unknown',
+      ip:       d.ip       || '—',
+      severity: d.severity || 'low',
+      time:     new Date().toLocaleTimeString(),
     }, ...prev].slice(0, 20));
   }, []));
 
-  useSocket('action:pending', useCallback((data) => {
+  useSocket('action:pending', useCallback((payload) => {
+    const d = payload?.data ?? payload;   // support both wrapped and bare
     setLive(prev => [{
-      id: data.id || Date.now(), type: `🔒 BLOCKED: ${data.action}`,
-      ip: data.ip, severity: 'critical', time: new Date().toLocaleTimeString(),
+      id:       d.id       || Date.now(),
+      type:     `🔒 BLOCKED: ${d.action || 'action'}`,
+      ip:       d.ip       || '—',
+      severity: 'critical',
+      time:     new Date().toLocaleTimeString(),
     }, ...prev].slice(0, 20));
   }, []));
 

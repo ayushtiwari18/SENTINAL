@@ -1,137 +1,237 @@
 # 01 — System Architecture
 
-> Source: `MASTER_REFERENCE.md` §1, §4 · Last verified: 2026-03-28
+> **Last updated:** 2026-03-31  
+> **Reflects:** Current repo state (backend/, services/, dashboard/, demo-target/)
 
 ---
 
-## System Diagram
+## System-at-a-Glance
 
 ```
-┌──────────────────────────────────────────────────────────────────────┐
-│            DEVELOPER APP  (demo-target :4000 or any Express app)     │
-│   uses sentinel-middleware → POST /api/logs/ingest (async)           │
-└──────────────────────────────┬───────────────────────────────────────┘
-                               │
-                               ▼
-┌──────────────────────────────────────────────────────────────────────┐
-│             SERVICE 1 — GATEWAY API  (Node/Express :3000)            │
-│                                                                      │
-│  POST /api/logs/ingest  →  SystemLog saved to MongoDB                │
-│                         →  detectionConnector → POST :8002/analyze   │
-│                                                                      │
-│  IF threat_detected:                                                 │
-│    AttackEvent.create()     → MongoDB                                │
-│    Alert.create()           → MongoDB  (high/critical only)          │
-│    emit(attack:new)         → Socket.io                              │
-│    emit(alert:new)          → Socket.io                              │
-│    callArmorIQ() [async]    → POST :8004/respond                     │
-│                                                                      │
-│  POST /api/pcap/upload   →  POST :8003/process → merge results       │
-│  POST /api/armoriq/trigger → direct ArmorIQ call (demo/test)        │
-│  POST /api/actions/:id/approve|reject → human enforcement           │
-│  POST /api/audit/ingest  ← called by ArmorIQ audit_logger           │
-└──────┬────────────────────────┬──────────────────────┬──────────────┘
-       │                        │                      │
-       ▼                        ▼                      ▼
-┌────────────────┐  ┌───────────────────────┐  ┌──────────────────────────┐
-│  SERVICE 2     │  │  SERVICE 3            │  │  SERVICE 4               │
-│  PCAP          │  │  DETECTION ENGINE     │  │  ARMORIQ AGENT           │
-│  PROCESSOR     │  │  (Python :8002)       │  │  (Python :8004)          │
-│  (Python :8003)│  │                       │  │                          │
-│  POST /process │  │  POST /analyze        │  │  POST /respond           │
-│  8 detectors   │  │  45-rule engine       │  │  intent_builder.py       │
-│  full pipeline │  │  adversarial decoder  │  │  openclaw_runtime.py     │
-│  10/10 tests ✅│  │  ML optional          │  │  policy_engine.py (fbck) │
-└────────────────┘  └───────────────────────┘  │  executor.py             │
-                                               │  audit_logger.py         │
-                                               │  policy.yaml             │
-                                               └──────────────────────────┘
-                                                          │
-                               ┌──────────────────────────┴─────────────┐
-                               │  ALLOWED → auto-executed                │
-                               │  send_alert / log_attack                │
-                               │  rate_limit_ip / flag_for_review        │
-                               │  generate_report                        │
-                               │                                         │
-                               │  BLOCKED → action_queue (human review)  │
-                               │  permanent_ban_ip                       │
-                               │  shutdown_endpoint                      │
-                               │  purge_all_sessions                     │
-                               │  modify_firewall_rules                  │
-                               └──────────────────┬──────────────────────┘
-                                                  │
-                                                  ▼
-┌──────────────────────────────────────────────────────────────────────┐
-│              SERVICE 5 — REACT DASHBOARD  (Vite :5173)               │
-│  /dashboard /attacks /alerts /action-queue /audit /pcap /logs        │
-│  /services /simulate → all 14 pages, Socket.io live updates          │
-└──────────────────────────────────────────────────────────────────────┘
-```
-
----
-
-## OpenClaw Decision Flow
-
-```
-POST :8004/respond
-         │
-  intent_builder.py  →  builds 5–6 ProposedAction intents per attack
-         │
-  openclaw_runtime.py  ← PRIMARY (reads policy.yaml)
-    RULE_001: action in blocked_actions  → BLOCK
-    RULE_002: risk_level == 'critical'   → BLOCK
-    RULE_003: risk_level == 'high'       → BLOCK
-    RULE_004: action in allowed_actions  → ALLOW
-    RULE_DEFAULT: no match              → BLOCK (fail-safe)
-    on crash → policy_engine.py fallback
-         │
-  ┌──────┴──────────────────────┐
-  │ ALLOW                       │ BLOCK
-  │ executor.py fires           │ ActionQueue.create() → MongoDB
-  │ emit(audit:new)             │ emit(action:pending) + emit(audit:new)
-  └─────────────────────────────┘
-         │
-  audit_logger.py → POST /api/audit/ingest → AuditLog saved
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                          SENTINAL PLATFORM                                  │
+│                                                                             │
+│  ┌──────────────┐     SDK/Agent Snippet (JS)                                │
+│  │ Target App   │ ──────────────────────────────────────────────────────►  │
+│  │ (demo-target)│                                                           │
+│  └──────────────┘                                                           │
+│                                                                             │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │                  BACKEND  (Node.js + Express)  :3000                │   │
+│  │                                                                     │   │
+│  │  server.js                                                          │   │
+│  │   ├── src/routes/        (health, logs, attacks, alerts,            │   │
+│  │   │                       armoriq, pcap, gemini, actions,           │   │
+│  │   │                       audit, forensics, stats, serviceStatus)   │   │
+│  │   ├── src/controllers/   (business logic per route)                 │   │
+│  │   ├── src/services/      (detectionConnector, pcapConnector,        │   │
+│  │   │                       armoriqConnector, mongoService…)          │   │
+│  │   ├── src/models/        (Mongoose schemas)                         │   │
+│  │   ├── src/middleware/    (auth, rateLimit, errorHandler…)           │   │
+│  │   ├── src/sockets/       (Socket.IO real-time event bus)            │   │
+│  │   ├── src/validators/    (Joi/Zod request validators)               │   │
+│  │   └── src/utils/         (helpers, logger, circuit-breaker)         │   │
+│  │                                                                     │   │
+│  └──────────────────────────┬──────────────┬──────────────┬───────────┘   │
+│                             │ HTTP         │ HTTP         │ HTTP           │
+│                             ▼              ▼              ▼               │
+│  ┌──────────────────┐  ┌──────────────┐  ┌───────────────────────────┐   │
+│  │ DETECTION ENGINE │  │PCAP PROCESSOR│  │  SENTINAL RESPONSE ENGINE │   │
+│  │  (Python/FastAPI)│  │(Python/FastAPI│  │      (Python/FastAPI)     │   │
+│  │     :8002        │  │    :8003)    │  │          :8005            │   │
+│  │                  │  │              │  │                           │   │
+│  │ app/             │  │ (pcap files) │  │ main.py                   │   │
+│  │  main.py         │  │              │  │ openclaw_runtime.py       │   │
+│  │  classifier.py   │  └──────────────┘  │ intent_builder.py         │   │
+│  │  rules.py        │                    │ policy_engine.py          │   │
+│  │  features.py     │                    │ executor.py               │   │
+│  │  explainer.py    │                    │ audit_logger.py           │   │
+│  │  decoder.py      │                    │ policy.yaml               │   │
+│  │  schemas.py      │                    └───────────────────────────┘   │
+│  │  webhook_router.py│                                                     │
+│  │ models/          │   ┌─────────────────────────────────────────────┐   │
+│  └──────────────────┘   │         ARMORIQ AGENT                       │   │
+│                         │  (services/armoriq-agent)  :8004             │   │
+│                         │  blocklist.txt                               │   │
+│                         └─────────────────────────────────────────────┘   │
+│                                                                             │
+│  ┌──────────────────────────────────────────────────────────────────────┐  │
+│  │                  DASHBOARD  (React + Vite)  :5173                    │  │
+│  │   Components, Pages, Hooks, Services, Socket.IO client               │  │
+│  └──────────────────────────────────────────────────────────────────────┘  │
+│                                                                             │
+│  ┌──────────────────────────────────────────────────────────────────────┐  │
+│  │                   MONGODB ATLAS                                       │  │
+│  │   Collections: logs, attacks, alerts, projects, auditLogs, pcap      │  │
+│  └──────────────────────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Complete Request Lifecycle
+## Port Registry
 
-### Flow A — Live Request via Middleware
+| Service | Port | Runtime | Entry Point |
+|---------|------|---------|-------------|
+| Backend (Node.js Gateway) | 3000 | Node.js 18+ | `backend/server.js` |
+| Detection Engine | 8002 | Python 3.10+ / FastAPI | `services/detection-engine/app/main.py` |
+| PCAP Processor | 8003 | Python 3.10+ / FastAPI | `services/pcap-processor/` |
+| ArmorIQ Agent | 8004 | Python 3.10+ / FastAPI | `services/armoriq-agent/` |
+| Sentinal Response Engine | 8005 | Python 3.10+ / FastAPI | `services/sentinal-response-engine/main.py` |
+| Dashboard (dev) | 5173 | Vite / React | `dashboard/` |
+| Demo Target App | 4000 | Node.js | `demo-target/` |
+
+---
+
+## Request Lifecycle — 4 Core Flows
+
+### Flow A — Normal HTTP Log (Most Common)
+```
+Target App
+  │  SDK snippet fires POST /api/logs
+  ▼
+Backend :3000  ←── JWT auth middleware
+  │  LogController → LogService → MongoDB (save raw log)
+  │  detectionConnector.js → POST :8002/analyze
+  ▼
+Detection Engine :8002
+  │  decoder.py    → URL decode + normalize
+  │  rules.py      → regex/keyword match (SQLi, XSS, LFI, SSRF, CMDi)
+  │  features.py   → extract 8 numeric features
+  │  classifier.py → XGBoost model inference (sentinel_v5.pkl)
+  │  explainer.py  → Gemini Flash LLM explanation (if attack)
+  │  Returns { isAttack, attackType, confidence, llm_explanation }
+  ▼
+Backend :3000
+  │  If isAttack → AttackService → MongoDB (save attack event)
+  │  socket.emit('new-attack') → Dashboard
+  │  If confidence > threshold → POST :8005/respond
+  ▼
+Sentinal Response Engine :8005
+  │  intent_builder.py → build intent from attack context
+  │  openclaw_runtime.py → OpenClaw LLM runtime
+  │  policy_engine.py + policy.yaml → choose action
+  │  executor.py → execute (block IP, alert, quarantine)
+  │  audit_logger.py → log action to MongoDB
+  ▼
+Dashboard notified via Socket.IO
+```
+
+### Flow B — PCAP / Network Forensics
+```
+Dashboard (file upload) or CLI
+  │  POST /api/pcap/upload
+  ▼
+Backend :3000 → pcapConnector → POST :8003/analyze
+  ▼
+PCAP Processor :8003
+  │  Parse .pcap / .pcapng
+  │  Extract flows, protocols, anomalies
+  │  Returns forensics report
+  ▼
+Backend → MongoDB (save report)
+Dashboard notified via Socket.IO
+```
+
+### Flow C — ArmorIQ / AI Chat
+```
+Dashboard chat input
+  │  POST /api/armoriq/chat
+  ▼
+Backend :3000 → armoriqConnector → POST :8004/chat
+  ▼
+ArmorIQ Agent :8004
+  │  blocklist.txt filter
+  │  Gemini Flash LLM → contextual security answer
+  │  Returns { response, context }
+  ▼
+Dashboard renders response
+```
+
+### Flow D — Direct Gemini Analysis
+```
+Dashboard / API client
+  │  POST /api/gemini/analyze-attack
+  ▼
+Backend :3000 → gemini.js route
+  │  Direct Gemini Flash call (no microservice hop)
+  │  Returns { explanation, impact, mitigation }
+  ▼
+Client
+```
+
+---
+
+## OpenClaw Decision Flow (Response Engine)
 
 ```
-1.  User hits app → sentinel-middleware captures res.on('finish') async
-2.  POST /api/logs/ingest → SystemLog saved to MongoDB
-3.  setImmediate() → detectionConnector → POST :8002/analyze
-4.  threat_detected = false → stop.
-    threat_detected = true:
-      AttackEvent.create() → emit(attack:new)
-      IF high/critical: Alert.create() → emit(alert:new)
-      callArmorIQ() [async] → POST :8004/respond
-5.  ArmorIQ: openclaw_runtime evaluates each intent
-      ALLOW → executor.py fires → audit entry
-      BLOCK → ActionQueue.create() → emit(action:pending) → audit entry
-6.  Human: /action-queue → APPROVE/REJECT → AuditLog(HUMAN_OVERRIDE)
+Attack Event Received
+        │
+        ▼
+  intent_builder.py
+  (build structured intent: type, severity, source IP, context)
+        │
+        ▼
+  policy_engine.py  ←── policy.yaml
+  (match intent to policy rule → decide action)
+        │
+        ├── BLOCK_IP    → executor.py → update blocklist
+        ├── ALERT_ONLY  → audit_logger.py → log only
+        ├── QUARANTINE  → executor.py → isolate session
+        └── ESCALATE    → emit high-severity socket event
+        │
+        ▼
+  audit_logger.py → MongoDB auditLogs collection
 ```
 
-### Flow B — PCAP Upload
+---
+
+## Service Communication Matrix
+
+| Caller | Callee | Protocol | Auth |
+|--------|--------|----------|------|
+| Backend | Detection Engine | HTTP REST | Internal (no auth) |
+| Backend | PCAP Processor | HTTP REST | Internal |
+| Backend | ArmorIQ Agent | HTTP REST | Internal |
+| Backend | Sentinal Response Engine | HTTP REST | Internal |
+| Backend | MongoDB Atlas | MongoDB Driver | Connection string |
+| Dashboard | Backend | HTTP REST + Socket.IO | JWT Bearer |
+| Demo Target | Backend | HTTP REST | API Key (SDK) |
+
+---
+
+## Real-Time Layer (Socket.IO)
+
+All real-time events flow through `backend/src/sockets/`:
+
+| Event | Direction | Payload |
+|-------|-----------|--------|
+| `new-log` | Server → Client | raw log entry |
+| `new-attack` | Server → Client | attack event with ML result |
+| `new-alert` | Server → Client | alert object |
+| `response-action` | Server → Client | executor action taken |
+| `service-status` | Server → Client | health of all Python services |
+
+---
+
+## Deployment Topology (AWS)
+
 ```
-POST /api/pcap/upload → POST :8003/process
-→ pcap_loader → packet_parser → flow_builder → attack_detector
-→ AttackEvent.create() per attack → emit(attack:new)
+  Route 53
+     │
+  CloudFront (dashboard static)
+     │
+  EC2 t3.medium (Ubuntu)
+     ├── pm2: backend :3000
+     ├── pm2 / venv: detection-engine :8002
+     ├── pm2 / venv: pcap-processor :8003
+     ├── pm2 / venv: armoriq-agent :8004
+     └── pm2 / venv: sentinal-response-engine :8005
+     │
+  Security Group: 80/443 public, 3000/8002-8005 internal only
+     │
+  MongoDB Atlas (M0 free / M10 prod)
 ```
 
-### Flow C — Direct ArmorIQ Trigger (Demo / Simulate Page)
-```
-POST /api/armoriq/trigger → reportAttack() → full pipeline (Flow A steps 4–6)
-```
-
-### Flow D — SimulateAttack Dashboard Page
-```
-Browser: /simulate page → click attack button
-→ fetch POST /api/logs/ingest  (SQLi / XSS / Traversal / Command Injection)
-  OR fetch POST /api/armoriq/trigger  (Brute Force Critical)
-→ Dashboard Socket.io: attack:new / action:pending events received live
-→ /simulate right panel updates with real detections in real time
-```
+→ Full AWS setup steps: [06-deployment-aws.md](./06-deployment-aws.md)  
+→ Full API reference: [API.md](./API.md)

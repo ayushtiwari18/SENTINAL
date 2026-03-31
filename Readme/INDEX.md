@@ -1,87 +1,94 @@
 # SENTINAL — Reference Index
 
-> **Version:** 12.0 · **Date:** 2026-03-31 · **Status:** Living index — always up to date
->
-> The original `MASTER_REFERENCE.md` has been split into focused files for easier navigation.
-> Each file below is the single source of truth for its topic.
-> **Do NOT create new standalone docs outside this folder** — add sections here.
+> **Last updated:** 2026-03-31
+
+This folder is the authoritative, split reference for the SENTINAL project.  
+The old `MASTER_REFERENCE.md` in the root is kept for history — **do not edit it**.  
+All active edits go into the files below.
 
 ---
 
-## Files in This Folder
+## Navigation
 
-| # | File | Covers | Sections from Master |
-|---|------|--------|-----------------------|
-| 01 | [Architecture](./01-architecture.md) | System diagram, OpenClaw decision flow, request lifecycle | §1, §4 |
-| 02 | [Repo Structure](./02-repo-structure.md) | Exact directory tree, every file explained | §2 |
-| 03 | [Services](./03-services.md) | Service registry, ports, Socket.io events, response envelope | §3, §10, §11, §12 |
-| 04 | [Features](./04-features.md) | Feature breakdown, build status, OpenClaw enforcement detail | §6, §8, §9 |
-| 05 | [API Contracts](./05-api-contracts.md) | Every live route, request/response schemas, field registry | §5, §7, §8 |
-| 06 | [Deployment — AWS](./06-deployment-aws.md) | Full EC2 deploy guide (Parts A–I), update scenarios, known issues | §14 |
-| 07 | [AWS Sessions](./07-aws-sessions.md) | Per-session checklist, what persists, MONGO_URI, troubleshooting | §15 |
-| 08 | [Database](./08-database.md) | MongoDB Atlas schemas, Atlas Search index, connection config | §7, §17 |
-| 09 | [Important Notes](./09-important-notes.md) | Demo day guide, critical warnings, known pitfalls, concerns | §13 |
-| 10 | [Changelog](./10-changelog.md) | Full version history v1.0 → current | §16 |
-
----
-
-## Quick Navigation
-
-### I need to...
-
-| Task | Go to |
-|------|-------|
-| Understand the full system flow | [01-architecture.md](./01-architecture.md) |
-| Find where a file lives in the repo | [02-repo-structure.md](./02-repo-structure.md) |
-| Check which port a service runs on | [03-services.md](./03-services.md) |
-| See all API routes and request bodies | [05-api-contracts.md](./05-api-contracts.md) |
-| Deploy on a new AWS session | [07-aws-sessions.md](./07-aws-sessions.md) → 4-step checklist |
-| Deploy from scratch on fresh EC2 | [06-deployment-aws.md](./06-deployment-aws.md) |
-| Update live server after a git push | [06-deployment-aws.md § Update Scenarios](./06-deployment-aws.md#update-scenarios) |
-| Check MongoDB schemas | [08-database.md](./08-database.md) |
-| Run the demo for judges | [09-important-notes.md](./09-important-notes.md) |
-| Know what NOT to break | [09-important-notes.md § Critical Rules](./09-important-notes.md#critical-rules) |
-| See what's been built / what's missing | [04-features.md](./04-features.md) |
+| # | File | Contents |
+|---|------|----------|
+| — | **[INDEX.md](./INDEX.md)** | This file — quick lookup |
+| 01 | **[01-architecture.md](./01-architecture.md)** | System diagram, port registry, 4 request flows, OpenClaw flow, deployment topology |
+| 02 | **[02-repo-structure.md](./02-repo-structure.md)** | Full directory tree (verified), key files, root scripts |
+| 03 | **[03-services.md](./03-services.md)** | Each service: purpose, tech stack, env vars, run commands |
+| 04 | **[04-features.md](./04-features.md)** | Feature breakdown: detection, response, forensics, AI |
+| 05 | **[05-api-contracts.md](./05-api-contracts.md)** | Internal service-to-service contracts (detection, response engines) |
+| **NEW** | **[API.md](./API.md)** | **Complete external + internal API reference — all endpoints** |
+| 06 | **[06-deployment-aws.md](./06-deployment-aws.md)** | AWS EC2 setup, PM2 config, Security Groups, domain/TLS |
+| 07 | **[07-aws-sessions.md](./07-aws-sessions.md)** | AWS session management, credentials, rotate keys |
+| 08 | **[08-database.md](./08-database.md)** | MongoDB Atlas: collections, schemas, indexes |
+| 09 | **[09-important-notes.md](./09-important-notes.md)** | Gotchas, known issues, critical rules to follow |
+| 10 | **[10-changelog.md](./10-changelog.md)** | Version history, breaking changes, what changed when |
 
 ---
 
 ## System at a Glance
 
 ```
-sentinel-middleware (npm)
-       │
-       ▼
-Gateway API (Node :3000)  ──→  Detection Engine (Python :8002)
-       │                                  │
-       │               threat_detected = true
-       │                                  │
-       ├──→ AttackEvent + Alert (MongoDB)
-       ├──→ Socket.io broadcast
-       └──→ SENTINAL Response Engine (Python :8004)
-                    │
-             OpenClaw runtime (policy.yaml)
-                    │
-          ALLOW ────┼──── BLOCK
-          executor  │   ActionQueue → Human review
-                    │
-             AuditLog (MongoDB)
-
-React Dashboard (Vite :5173) — 14 pages, live Socket.io
-PCAP Processor (Python :8003) — independent network analysis
+Target App (SDK)
+    │
+    ▼
+Backend — Node.js :3000  (backend/server.js)
+    │
+    ├─► Detection Engine     Python :8002  (services/detection-engine)
+    ├─► PCAP Processor        Python :8003  (services/pcap-processor)
+    ├─► ArmorIQ Agent         Python :8004  (services/armoriq-agent)
+    └─► Response Engine       Python :8005  (services/sentinal-response-engine)
+    │
+    ├─► MongoDB Atlas
+    │
+Dashboard — React :5173  (dashboard/)
 ```
 
 ---
 
-## Current Status (2026-03-31)
+## Quick Command Reference
 
-| Component | Status |
-|-----------|--------|
-| Gateway API | ✅ LIVE |
-| Detection Engine | ✅ LIVE (ML model pending) |
-| PCAP Processor | ✅ LIVE |
-| SENTINAL Response Engine | ✅ LIVE |
-| React Dashboard (14 pages) | ✅ LIVE |
-| MongoDB Atlas | ✅ LIVE |
-| sentinel-ml integration | 🟡 IN PROGRESS |
-| Dashboard Charts (Recharts) | 🔲 NOT BUILT |
-| Nginx + HTTPS | 🔲 NOT BUILT |
+```bash
+# Start everything (local dev)
+bash start.sh
+
+# Stop everything
+bash stop.sh
+
+# Check health
+bash status.sh
+
+# Deploy to AWS
+bash deploy.sh
+
+# PM2 process list
+pm2 list
+pm2 logs sentinal-backend
+
+# Backend only
+cd backend && npm run dev
+
+# Detection engine only
+cd services/detection-engine && python app/run.py
+
+# Response engine only
+cd services/sentinal-response-engine && python run.py
+```
+
+---
+
+## Where to Look for What
+
+| I want to... | Go to |
+|---|---|
+| Understand the full system flow | [01-architecture.md](./01-architecture.md) |
+| Find a file in the repo | [02-repo-structure.md](./02-repo-structure.md) |
+| Call an API endpoint | [API.md](./API.md) |
+| Change response policy | `services/sentinal-response-engine/policy.yaml` |
+| Change ML detection logic | `services/detection-engine/app/classifier.py` |
+| Add a new route | `backend/src/routes/` + `backend/src/controllers/` |
+| Change how detection is called | `backend/src/services/detectionConnector.js` |
+| Deploy to AWS | [06-deployment-aws.md](./06-deployment-aws.md) |
+| Understand DB schema | [08-database.md](./08-database.md) |
+| Check known issues | [09-important-notes.md](./09-important-notes.md) |

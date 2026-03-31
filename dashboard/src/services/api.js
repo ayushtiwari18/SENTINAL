@@ -27,15 +27,16 @@ export const uploadPcap = (file, projectId = 'pcap-upload') => {
   }).then(unwrap);
 };
 
-// ── ArmorIQ API calls ───────────────────────────────────────────────────
+// ── ArmorIQ API calls ───────────────────────────────────────────────
 export const getPendingActions = ()   => api.get('/api/actions/pending').then(unwrap);
 export const approveAction     = (id) => api.post(`/api/actions/${id}/approve`, { approvedBy: 'human' }).then(unwrapSafe);
 export const rejectAction      = (id) => api.post(`/api/actions/${id}/reject`,  { rejectedBy: 'human' }).then(unwrapSafe);
 export const getAuditLog       = (n = 50) => api.get(`/api/audit?limit=${n}`).then(unwrap);
 
-// ── Gemini AI API calls ──────────────────────────────────────────────────
+// ── Gemini AI API calls ────────────────────────────────────────────────
 export const geminiChat = (question) =>
-  api.post('/api/gemini/chat', { question }).then(unwrap);
+  // FIXED: backend expects { message } not { question }
+  api.post('/api/gemini/chat', { message: question }).then(unwrap);
 
 export const geminiReport = (attackId) =>
   api.post(`/api/gemini/report/${attackId}`).then(unwrap);

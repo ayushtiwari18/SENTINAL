@@ -1,12 +1,14 @@
 /**
  * CopilotPage — SENTINAL AI Security Co-Pilot
  *
- * Upgrades over v1:
+ * Features:
  *   - SSE streaming via GET /api/gemini/chat/stream (tokens appear as typed)
  *   - Conversation memory — last 6 turns sent as history on every request
+ *     FIX: assistant reply text is now captured correctly from the stream
  *   - AI-generated follow-up suggestions rendered as clickable chips
  *   - Source citations — "Grounded in N events" with link to Attacks page
  *   - Copy answer button per response
+ *   - Export as incident note (.txt download) per response
  */
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -62,6 +64,13 @@ const IconLink = () => (
     <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
   </svg>
 );
+const IconDownload = () => (
+  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+    <polyline points="7 10 12 15 17 10" />
+    <line x1="12" y1="15" x2="12" y2="3" />
+  </svg>
+);
 
 // ── Suggested starter questions ───────────────────────────────────────────────
 const SUGGESTIONS = [
@@ -72,6 +81,30 @@ const SUGGESTIONS = [
   'Which attacks have the highest confidence scores?',
   'Are there any signs of a coordinated attack campaign?',
 ];
+
+// ── Export answer as incident note ────────────────────────────────────────────
+function exportNote(msg) {
+  const ts = new Date().toISOString();
+  const lines = [
+    'SENTINAL AI — Incident Note',
+    `Generated: ${ts}`,
+    '',
+    `Sources: ${msg.sourcedEventIds?.length || 0} telemetry event(s)`,
+    '',
+    '─────────────────────────────────────────',
+    '',
+    msg.content,
+    '',
+    '─────────────────────────────────────────',
+    'Built for HackByte 4.0 — SENTINAL©2026',
+  ];
+  const blob = new Blob([lines.join('\n')], { type: 'text/plain' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `sentinal-note-${Date.now()}.txt`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
 
 // ── Message bubble component ──────────────────────────────────────────────────
 function MessageBubble({ msg, onSuggestionClick }) {
@@ -146,6 +179,16 @@ function MessageBubble({ msg, onSuggestionClick }) {
               padding: '2px 4px', borderRadius: 'var(--radius-sm)',
             }}>
               <IconCopy /> {copied ? 'Copied!' : 'Copy'}
+            </button>
+
+            {/* Export as incident note */}
+            <button onClick={() => exportNote(msg)} style={{
+              display: 'flex', alignItems: 'center', gap: 4,
+              background: 'none', border: 'none', cursor: 'pointer',
+              fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)',
+              padding: '2px 4px', borderRadius: 'var(--radius-sm)',
+            }}>
+              <IconDownload /> Export note
             </button>
 
             {/* Source citation */}
@@ -235,11 +278,15 @@ export default function CopilotPage() {
     const es = geminiChatStream(q, history);
     sourceRef.current = es;
 
+    // Accumulate the full answer text so we can save it to history correctly
+    let accumulatedAnswer = '';
+
     es.onmessage = (e) => {
       try {
         const event = JSON.parse(e.data);
 
         if (event.type === 'chunk') {
+          accumulatedAnswer += event.text;
           setMessages(prev => prev.map(m =>
             m.id === assistantId
               ? { ...m, content: m.content + event.text }
@@ -253,12 +300,12 @@ export default function CopilotPage() {
               ? { ...m, streaming: false, suggestions: event.suggestions || [], sourcedEventIds: event.sourcedEventIds || [] }
               : m
           ));
-          // Update conversation history for next turn
+          // FIX: save the actual accumulated answer text (was '' before)
           setHistory(prev => [
             ...prev,
             { role: 'user',  text: q },
-            { role: 'model', text: '' }, // text will be filled from messages state if needed
-          ].slice(-12));
+            { role: 'model', text: accumulatedAnswer },
+          ].slice(-12)); // keep last 6 turns (12 entries)
           setLoading(false);
           es.close();
           setTimeout(() => inputRef.current?.focus(), 100);
@@ -457,7 +504,7 @@ export default function CopilotPage() {
               </button>
             </div>
             <p style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)', marginTop: 'var(--space-1)' }}>
-              Shift+Enter for new line · streaming · conversation memory active · answers grounded in live MongoDB attack telemetry
+              Shift+Enter for new line · streaming · conversation memory active ({history.length / 2} turns) · answers grounded in live MongoDB attack telemetry
             </p>
           </div>
         </Panel>

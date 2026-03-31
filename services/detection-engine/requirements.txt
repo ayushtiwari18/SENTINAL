@@ -1,3 +1,9 @@
+# SENTINAL Detection Engine — Python dependencies
+# Updated: integrated sentinel-ml ML model + Gemini explainer
+
+# ─────────────────────────────────────────────────────────────────
+# Core FastAPI stack (unchanged)
+# ─────────────────────────────────────────────────────────────────
 annotated-doc==0.0.4
 annotated-types==0.7.0
 anyio==4.13.0
@@ -35,3 +41,23 @@ uvicorn==0.29.0
 uvloop==0.22.1
 watchfiles==1.1.1
 websockets==16.0
+
+# ─────────────────────────────────────────────────────────────────
+# NEW — sentinel-ml integration (ML model + Gemini explainer)
+# Added: 2026-03-31 — feature/integrate-sentinel-ml
+# ─────────────────────────────────────────────────────────────────
+
+# ML model loading — required to deserialise sentinel_v5.pkl
+joblib>=1.3.0
+
+# XGBoost — sentinel_v5.pkl was trained with this (must be compatible version)
+# Pin to >=2.0.0 which introduced the sklearn-compatible API used in training
+xgboost>=2.0.0
+
+# scikit-learn — required by XGBoost's sklearn wrapper + predict_proba()
+# joblib also pulls this in, but explicit pin ensures version compat
+scikit-learn>=1.3.0
+
+# Gemini LLM explainer — only used when GEMINI_API_KEY is set in .env
+# If key is absent, this package is installed but never imported at runtime
+google-generativeai>=0.8.0

@@ -43,8 +43,8 @@ const markRead = async (req, res, next) => {
 };
 
 /**
- * POST /api/alerts/Nexus
- * Called by Nexus executor after 'send_alert' action is ALLOWED by policy.
+ * POST /api/alerts/nexus
+ * Called by NEXUS executor after 'send_alert' action is ALLOWED by policy.
  * Creates a persisted alert and emits alert:new over Socket.io.
  */
 const ingestNexusAlert = async (req, res, next) => {
@@ -53,10 +53,10 @@ const ingestNexusAlert = async (req, res, next) => {
 
     const alert = await Alert.create({
       attackId: attackId || null,
-      title:    `[Nexus] ${(attackType || 'ATTACK').toUpperCase()} Alert`,
-      message:  message  || `Nexus triggered alert for ${ip}`,
+      title:    `[NEXUS] ${(attackType || 'ATTACK').toUpperCase()} Alert`,
+      message:  message  || `NEXUS triggered alert for ${ip}`,
       severity: severity || 'high',
-      type:     'Nexus_action',
+      type:     'nexus_action',
       meta:     { ip, attackType, source: source || 'sentinal-response-engine' }
     });
 
@@ -68,8 +68,8 @@ const ingestNexusAlert = async (req, res, next) => {
       timestamp: alert.createdAt
     });
 
-    logger.info(`[ALERTS] Nexus alert ingested: ${alert.title}`);
-    res.status(201).json({ success: true, message: 'Nexus alert recorded', data: { id: alert._id } });
+    logger.info(`[ALERTS] NEXUS alert ingested: ${alert.title}`);
+    res.status(201).json({ success: true, message: 'NEXUS alert recorded', data: { id: alert._id } });
   } catch (err) {
     logger.error(`[ALERTS] ingestNexusAlert failed: ${err.message}`);
     next(err);

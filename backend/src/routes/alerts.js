@@ -3,7 +3,7 @@ const router  = express.Router();
 const { getAlerts, markRead, ingestNexusAlert } = require('../controllers/alertController');
 
 // Nexus agent posts alerts here — MUST be before /:id routes to avoid route conflicts
-router.post('/Nexus', ingestNexusAlert);
+router.post('/nexus', ingestNexusAlert);
 
 // Existing routes
 router.get('/',           getAlerts);

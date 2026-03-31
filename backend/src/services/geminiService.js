@@ -1,5 +1,5 @@
 /**
- * geminiService.js — SENTINAL Gemini 1.5 Flash integration
+ * geminiService.js — SENTINAL Gemini 2.0 Flash integration
  *
  * Provides two grounded AI capabilities:
  *   1. chat()           — security analyst Q&A grounded in real AttackEvent data
@@ -21,7 +21,7 @@ function getModel() {
   const key = process.env.GEMINI_API_KEY;
   if (!key) return null;
   _genAI = new GoogleGenerativeAI(key);
-  _model = _genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+  _model = _genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
   return _model;
 }
 

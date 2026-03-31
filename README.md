@@ -27,15 +27,15 @@ https://raw.githubusercontent.com/ayushtiwari18/SENTINAL/main/SENTINAL_Postman_C
 | `base` | `http://<YOUR_EC2_IP>:3000` |
 | `detection` | `http://<YOUR_EC2_IP>:8002` |
 | `pcap` | `http://<YOUR_EC2_IP>:8003` |
-| `Nexus` | `http://<YOUR_EC2_IP>:8004` | (sentinal-response-engine)
+| `armoriq` | `http://<YOUR_EC2_IP>:8004` | (sentinal-response-engine)
 
-> The collection includes 40+ requests across 8 folders: health checks, attack simulations, Nexus enforcement tests, full pipeline triggers, human approval workflow, and an end-to-end demo sequence.
+> The collection includes 40+ requests across 8 folders: health checks, attack simulations, ArmorIQ enforcement tests, full pipeline triggers, human approval workflow, and an end-to-end demo sequence.
 
 ---
 
 ## Overview
 
-SENTINAL is a microservices-based security layer that wraps any Express.js application. It captures HTTP metadata, runs it through a multi-layer detection engine (rule-based + adversarial decoder), surfaces threats in a live React dashboard, and triggers autonomous remediation via the Nexus agent.
+SENTINAL is a microservices-based security layer that wraps any Express.js application. It captures HTTP metadata, runs it through a multi-layer detection engine (rule-based + adversarial decoder), surfaces threats in a live React dashboard, and triggers autonomous remediation via the **ArmorIQ** agent.
 
 ---
 
@@ -77,7 +77,7 @@ User Traffic
 | Gateway API | Node.js + Express + Socket.io | **3000** |
 | Detection Engine | Python + FastAPI | **8002** |
 | PCAP Processor | Python + FastAPI + Scapy | **8003** |
-| SENTINAL Response Engine | Python + FastAPI | **8004** |
+| SENTINAL Response Engine (ArmorIQ) | Python + FastAPI | **8004** |
 | React Dashboard | React + Vite | **5173** |
 | Database | MongoDB Atlas | — |
 
@@ -89,7 +89,7 @@ User Traffic
 - **Python** ≥ 3.10 — [python.org](https://python.org)
 - **PM2** — `npm install -g pm2`
 - **MongoDB Atlas** free cluster — [mongodb.com/atlas](https://www.mongodb.com/cloud/atlas/register)
-- **Google Gemini API Key** *(optional — for Nexus AI decisions)* — [aistudio.google.com](https://aistudio.google.com/app/apikey)
+- **Google Gemini API Key** *(optional — for ArmorIQ AI decisions)* — [aistudio.google.com](https://aistudio.google.com/app/apikey)
 
 ---
 
@@ -227,7 +227,7 @@ pip install -r requirements.txt
 uvicorn main:app --host 0.0.0.0 --port 8003
 ```
 
-**Terminal 4 — SENTINAL Response Engine**
+**Terminal 4 — SENTINAL Response Engine (ArmorIQ)**
 ```bash
 cd services/sentinal-response-engine
 pip install -r requirements.txt
@@ -249,7 +249,7 @@ Every service exposes a `/health` endpoint. Check them after starting:
 curl http://localhost:3000/health    # Gateway
 curl http://localhost:8002/health    # Detection Engine
 curl http://localhost:8003/health    # PCAP Processor
-curl http://localhost:8004/health    # SENTINAL Response Engine
+curl http://localhost:8004/health    # SENTINAL Response Engine (ArmorIQ)
 ```
 
 All return the same standard shape:
@@ -305,7 +305,7 @@ SENTINAL/
 │
 ├── services/
 │   ├── detection-engine/           ← Python FastAPI — rule-based + adversarial detection
-│   ├── sentinal-response-engine/      ← Python FastAPI — OpenClaw policy enforcement
+│   ├── sentinal-response-engine/   ← Python FastAPI — ArmorIQ policy enforcement
 │   ├── pcap-processor/             ← Python FastAPI + Scapy — PCAP forensics
 │   └── middleware/                 ← Express middleware package source
 │
@@ -337,13 +337,13 @@ SENTINAL/
 | GET | `/api/attacks/recent` | Last 20 attack events |
 | GET | `/api/attacks/search?q=` | Full-text search attacks |
 | GET | `/api/attacks/:id/forensics` | Full forensic report for an attack |
-| POST | `/api/Nexus/trigger` | Manually trigger full attack pipeline (returns 201) |
+| POST | `/api/nexus/trigger` | Manually trigger full attack pipeline (returns 201) |
 | GET | `/api/stats` | Aggregate platform stats |
 | GET | `/api/service-status` | Health of all microservices |
 | GET | `/api/alerts` | Alert feed |
 | PATCH | `/api/alerts/:id/read` | Mark an alert as read |
 | POST | `/api/pcap/upload` | Upload `.pcap` / `.pcapng` for analysis |
-| GET | `/api/audit` | Audit log of Nexus decisions |
+| GET | `/api/audit` | Audit log of ArmorIQ decisions |
 | GET | `/api/actions/pending` | Pending human-approval actions |
 | POST | `/api/actions/:id/approve` | Approve a blocked action (HUMAN_OVERRIDE) |
 | POST | `/api/actions/:id/reject` | Reject a blocked action |
@@ -390,13 +390,13 @@ See [`.env.example`](.env.example) for the full annotated list.
 | `GATEWAY_PORT` | ✅ | Express Gateway port (default: 3000) |
 | `DETECTION_PORT` | ✅ | Detection Engine port (default: 8002) |
 | `PCAP_PORT` | ✅ | PCAP Processor port (default: 8003) |
-| `Nexus_PORT` | ✅ | SENTINAL Response Engine port (default: 8004) |
+| `ARMORIQ_PORT` | ✅ | SENTINAL Response Engine port (default: 8004) |
 | `JWT_SECRET` | ✅ | JWT signing secret (min 32 chars) |
 | `DETECTION_URL` | ✅ | Internal URL of Detection Engine |
 | `PCAP_URL` | ✅ | Internal URL of PCAP Processor |
-| `Nexus_URL` | ✅ | Internal URL of SENTINAL Response Engine |
-| `GATEWAY_URL` | ✅ | Gateway URL (used by SENTINAL Response Engine to call back) |
-| `GEMINI_API_KEY` | ⚠️ | Google Gemini key for SENTINAL Response Engine AI decisions |
+| `ARMORIQ_URL` | ✅ | Internal URL of SENTINAL Response Engine |
+| `GATEWAY_URL` | ✅ | Gateway URL (used by ArmorIQ to call back) |
+| `GEMINI_API_KEY` | ⚠️ | Google Gemini key for ArmorIQ AI decisions |
 | `NODE_ENV` | ⚠️ | `development` \| `production` \| `test` |
 | `LOG_LEVEL` | ⚠️ | `error` \| `warn` \| `info` \| `debug` |
 
@@ -406,13 +406,13 @@ See [`.env.example`](.env.example) for the full annotated list.
 
 ## Troubleshooting
 
-**Gateway won't start — "Missing Environment Variables"**
+**Gateway won’t start — "Missing Environment Variables"**
 ```bash
 ./scripts/validate-env.sh --env-only
 # Shows exactly which variables are missing
 ```
 
-**Services start but detection isn't working**
+**Services start but detection isn’t working**
 ```bash
 ./status.sh
 # Check which service is returning non-200
@@ -421,7 +421,7 @@ pm2 logs sentinal-detection   # see Python error
 
 **Port already in use**
 ```bash
-lsof -i :8002        # find what's using the port
+lsof -i :8002        # find what’s using the port
 # Change DETECTION_PORT in .env, then ./stop.sh && ./start.sh
 ```
 

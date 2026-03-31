@@ -1,212 +1,100 @@
 /**
- * /api/gemini — SENTINAL Gemini AI routes
+ * gemini.js — Gemini AI routes
  *
  * POST /api/gemini/chat
- *   Body: { question: string }
- *   Returns: { success, data: { answer, grounded, context_attacks, errorCode? } }
+ *   Body: { history: [{role, parts}], message: string }
+ *   Returns: { success, data: { role, parts } }
  *
  * POST /api/gemini/report/:attackId
- *   Returns: { success, data: { report } }
+ *   Returns: { success, data: { report, attackId, generatedAt } }
  *
- * POST /api/gemini/correlate
- *   Analyses last 200 attacks for coordinated campaigns, shared infra, attack chains.
- *   Returns: { success, data: { campaigns, sharedInfrastructure, attackChains, riskScore, summary } }
- *
- * POST /api/gemini/mutate
- *   Body: { payload: string, attackType: string }
- *   Generates 5 evasion variants with WAF-bypass explanations.
- *   Returns: { success, data: { original, mutations: [{ variant, technique, evades, risk }] } }
+ * Rate limiting: both routes are gated behind a stricter limiter (20 req/min)
+ * to protect Gemini API quota.
  */
 
-const express       = require('express');
-const router        = express.Router();
-const AttackEvent   = require('../models/AttackEvent');
-const geminiService = require('../services/geminiService');
-const logger        = require('../utils/logger');
+const express = require('express');
+const rateLimit = require('express-rate-limit');
+const { chatWithCopilot, generateIncidentReport } = require('../services/geminiService');
+const logger = require('../utils/logger');
 
-// ── POST /api/gemini/chat ────────────────────────────────────────────────────
-router.post('/chat', async (req, res) => {
-  const { question } = req.body;
+const router = express.Router();
 
-  if (!question || typeof question !== 'string' || !question.trim()) {
-    return res.status(400).json({
-      success: false,
-      message: 'question is required and must be a non-empty string',
-      code: 'MISSING_QUESTION',
-    });
+// Stricter rate limit for Gemini endpoints (20 requests per minute per IP)
+const geminiLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, message: 'Too many AI requests. Please wait a moment.', code: 'GEMINI_RATE_LIMITED' },
+});
+
+/**
+ * POST /api/gemini/chat
+ * Security Co-Pilot multi-turn chat endpoint.
+ */
+router.post('/chat', geminiLimiter, async (req, res) => {
+  const { history = [], message } = req.body;
+
+  if (!message || typeof message !== 'string' || !message.trim()) {
+    return res.status(400).json({ success: false, message: 'message is required', code: 'VALIDATION_ERROR' });
   }
 
-  if (question.trim().length > 500) {
-    return res.status(400).json({
+  if (!Array.isArray(history)) {
+    return res.status(400).json({ success: false, message: 'history must be an array', code: 'VALIDATION_ERROR' });
+  }
+
+  if (!process.env.GEMINI_API_KEY) {
+    logger.warn('[GEMINI] Chat requested but GEMINI_API_KEY is not set');
+    return res.status(503).json({
       success: false,
-      message: 'question must be 500 characters or fewer',
-      code: 'QUESTION_TOO_LONG',
+      message: 'AI service is not configured. Set GEMINI_API_KEY in your environment.',
+      code: 'GEMINI_NOT_CONFIGURED',
     });
   }
 
   try {
-    const recentAttacks = await AttackEvent
-      .find({})
-      .sort({ timestamp: -1 })
-      .limit(50)
-      .lean();
-
-    const result = await geminiService.chat(question.trim(), recentAttacks);
-
-    logger.info(`[GeminiRoute] /chat — answered (grounded=${result.grounded}, errorCode=${result.errorCode || 'none'})`);
-
-    const httpStatus = result.errorCode === 'QUOTA_EXHAUSTED' ? 429
-                     : result.errorCode === 'NO_API_KEY'      ? 503
-                     : 200;
-
-    return res.status(httpStatus).json({
-      success: httpStatus === 200,
-      data: {
-        answer:          result.answer,
-        grounded:        result.grounded,
-        context_attacks: recentAttacks.length,
-        errorCode:       result.errorCode || null,
-      },
-    });
+    const reply = await chatWithCopilot(history, message.trim());
+    return res.status(200).json({ success: true, data: reply });
   } catch (err) {
-    logger.error(`[GeminiRoute] /chat error: ${err.message}`);
+    logger.error(`[GEMINI ROUTE] chat error: ${err.message}`);
     return res.status(500).json({
       success: false,
-      message: 'Failed to process question',
-      code: 'GEMINI_CHAT_ERROR',
+      message: 'AI service error. Please try again.',
+      code: 'GEMINI_ERROR',
     });
   }
 });
 
-// ── POST /api/gemini/report/:attackId ────────────────────────────────────────
-router.post('/report/:attackId', async (req, res) => {
+/**
+ * POST /api/gemini/report/:attackId
+ * Generate a full incident report for a given attack.
+ */
+router.post('/report/:attackId', geminiLimiter, async (req, res) => {
   const { attackId } = req.params;
 
-  if (!attackId || attackId.length < 10) {
-    return res.status(400).json({
-      success: false,
-      message: 'Valid attackId is required',
-      code: 'MISSING_ATTACK_ID',
-    });
+  if (!attackId || attackId.length !== 24) {
+    return res.status(400).json({ success: false, message: 'Invalid attackId', code: 'VALIDATION_ERROR' });
   }
 
-  let attack;
-  try {
-    attack = await AttackEvent.findById(attackId).lean();
-  } catch {
-    return res.status(400).json({
+  if (!process.env.GEMINI_API_KEY) {
+    logger.warn('[GEMINI] Report requested but GEMINI_API_KEY is not set');
+    return res.status(503).json({
       success: false,
-      message: 'Invalid attack ID format',
-      code: 'INVALID_ID',
-    });
-  }
-
-  if (!attack) {
-    return res.status(404).json({
-      success: false,
-      message: 'Attack event not found',
-      code: 'ATTACK_NOT_FOUND',
+      message: 'AI service is not configured. Set GEMINI_API_KEY in your environment.',
+      code: 'GEMINI_NOT_CONFIGURED',
     });
   }
 
   try {
-    const report = await geminiService.generateReport(attack);
-    logger.info(`[GeminiRoute] /report — done for ${attackId} (gemini=${report.generated})`);
-    return res.status(200).json({ success: true, data: { report } });
+    const result = await generateIncidentReport(attackId);
+    return res.status(200).json({ success: true, data: result });
   } catch (err) {
-    logger.error(`[GeminiRoute] /report error: ${err.message}`);
-    return res.status(500).json({
+    logger.error(`[GEMINI ROUTE] report error: ${err.message}`);
+    const status = err.message.includes('not found') ? 404 : 500;
+    return res.status(status).json({
       success: false,
-      message: 'Failed to generate incident report',
-      code: 'GEMINI_REPORT_ERROR',
-    });
-  }
-});
-
-// ── POST /api/gemini/correlate ───────────────────────────────────────────────
-router.post('/correlate', async (req, res) => {
-  try {
-    const attacks = await AttackEvent
-      .find({})
-      .sort({ timestamp: -1 })
-      .limit(200)
-      .lean();
-
-    if (attacks.length === 0) {
-      return res.status(200).json({
-        success: true,
-        data: {
-          campaigns: [],
-          sharedInfrastructure: [],
-          attackChains: [],
-          riskScore: 0,
-          summary: 'No attack data available for correlation.',
-          attackCount: 0,
-        },
-      });
-    }
-
-    const result = await geminiService.correlate(attacks);
-
-    logger.info(`[GeminiRoute] /correlate — done (attacks=${attacks.length}, campaigns=${result.campaigns?.length || 0})`);
-
-    const httpStatus = result.errorCode === 'QUOTA_EXHAUSTED' ? 429
-                     : result.errorCode === 'NO_API_KEY'      ? 503
-                     : 200;
-
-    return res.status(httpStatus).json({
-      success: httpStatus === 200,
-      data: { ...result, attackCount: attacks.length },
-    });
-  } catch (err) {
-    logger.error(`[GeminiRoute] /correlate error: ${err.message}`);
-    return res.status(500).json({
-      success: false,
-      message: 'Correlation analysis failed',
-      code: 'GEMINI_CORRELATE_ERROR',
-    });
-  }
-});
-
-// ── POST /api/gemini/mutate ────────────────────────────────────────────────────
-router.post('/mutate', async (req, res) => {
-  const { payload, attackType } = req.body;
-
-  if (!payload || typeof payload !== 'string' || !payload.trim()) {
-    return res.status(400).json({
-      success: false,
-      message: 'payload is required and must be a non-empty string',
-      code: 'MISSING_PAYLOAD',
-    });
-  }
-
-  if (payload.trim().length > 1000) {
-    return res.status(400).json({
-      success: false,
-      message: 'payload must be 1000 characters or fewer',
-      code: 'PAYLOAD_TOO_LONG',
-    });
-  }
-
-  try {
-    const result = await geminiService.mutate(payload.trim(), attackType || 'unknown');
-
-    logger.info(`[GeminiRoute] /mutate — done (type=${attackType}, mutations=${result.mutations?.length || 0})`);
-
-    const httpStatus = result.errorCode === 'QUOTA_EXHAUSTED' ? 429
-                     : result.errorCode === 'NO_API_KEY'      ? 503
-                     : 200;
-
-    return res.status(httpStatus).json({
-      success: httpStatus === 200,
-      data: result,
-    });
-  } catch (err) {
-    logger.error(`[GeminiRoute] /mutate error: ${err.message}`);
-    return res.status(500).json({
-      success: false,
-      message: 'Payload mutation failed',
-      code: 'GEMINI_MUTATE_ERROR',
+      message: err.message.includes('not found') ? 'Attack not found' : 'Failed to generate report',
+      code: 'GEMINI_ERROR',
     });
   }
 });

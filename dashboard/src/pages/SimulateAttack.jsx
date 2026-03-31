@@ -59,7 +59,8 @@ const ATTACKS = [
     id: 'bruteforce', label: 'Brute Force (CRITICAL)', icon: '🔨',
     description: 'Critical-severity brute force → triggers BLOCK + Action Queue',
     color: 'var(--color-critical)', severity: 'critical',
-    endpoint: '/api/Nexus/trigger',
+    // FIXED: was /api/Nexus/trigger (capital N) — Express route is /api/nexus (lowercase)
+    endpoint: '/api/nexus/trigger',
     payload: { ip: '203.0.113.99', attackType: 'brute_force', severity: 'critical', confidence: 0.97, status: 'successful' },
   },
 ];
@@ -168,7 +169,6 @@ export default function SimulateAttack() {
   };
 
   const loadIntoSimulator = (variant) => {
-    // Find matching attack type in ATTACKS and update URL
     const match = ATTACKS.find(a => a.id === mutType || a.id.includes(mutType));
     if (match) {
       match.payload.url = variant;

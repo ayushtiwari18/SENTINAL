@@ -13,7 +13,7 @@ import logging
 import os
 from models import DecisionModel, IntentModel
 
-logger = logging.getLogger("Nexus.audit")
+logger = logging.getLogger("nexus.audit")
 
 GATEWAY_URL = os.getenv("GATEWAY_URL", "http://localhost:3000")
 
@@ -42,7 +42,7 @@ async def log_decision(intent: IntentModel, decision: DecisionModel) -> bool:
             "attackType":  intent.attack_context.attackType,
             "severity":    intent.attack_context.severity,
             "confidence":  intent.attack_context.confidence,
-            "risk_level":  intent.proposed_action.risk_level,  # dot-access
+            "risk_level":  intent.proposed_action.risk_level,
         }
     }
     try:

@@ -16,7 +16,7 @@
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const logger = require('../utils/logger');
 
-// ── Verified model chain ─────────────────────────────────────────────────────────
+// ── Verified model chain ────────────────────────────────────────────────────────────────────
 const MODEL_CHAIN = [
   'gemini-2.5-flash-lite',
   'gemini-2.5-flash',
@@ -45,7 +45,113 @@ function getRetryDelay(errMessage, defaultMs = 20_000) {
   return defaultMs;
 }
 
-// ── Core: generate with model fallback + one retry per model on 429 ─────────
+// ── SENTINAL Platform Knowledge Map ─────────────────────────────────────────────────
+// Injected into the chat system prompt so Gemini can guide analysts
+// with exact UI navigation paths and button names.
+// Keep in sync with the actual React routes and component labels.
+const PLATFORM_KNOWLEDGE = `
+You are embedded inside SENTINAL — a real-time threat detection and response platform.
+You have full knowledge of every page and feature. Use this knowledge to give analysts
+exact navigation steps whenever your answer involves doing something in the UI.
+
+PLATFORM PAGES & FEATURES:
+
+1. /dashboard (Dashboard)
+   - Shows live KPIs: total attacks, blocked count, critical alerts, active services
+   - Attack type breakdown chart, severity distribution, recent activity feed
+   - Quick links to all other pages in the sidebar
+
+2. /attacks (Attacks)
+   - Full table of all detected attack events from MongoDB
+   - Columns: timestamp, type, severity, source IP, status (blocked/detected/allowed), confidence
+   - Filter bar at top: filter by attack type, severity, status, date range, IP address
+   - Click any row to expand details (payload, rule name, geo info)
+   - Each row has a \u{1F52C} Forensics button — opens AI-generated forensic report
+   - Each row has a 📊 Report button — generates executive/technical/forensic incident report
+   - Use this page to investigate specific IPs or payloads
+
+3. /alerts (Alerts)
+   - All system alerts with priority badges (99+ means many unread)
+   - Mark individual alerts as read, or bulk-mark all
+   - Alerts are auto-generated from high-severity or repeated attack patterns
+   - Filter by read/unread status
+
+4. /logs (Logs)
+   - Raw request logs from all monitored services
+   - Columns: timestamp, method, path, source IP, response code, service name
+   - Useful for correlating attack events with specific HTTP requests
+   - Search bar for filtering by path or IP
+
+5. /pcap (PCAP Analyzer)
+   - Upload a .pcap network capture file for AI-powered packet analysis
+   - Drag-and-drop upload zone — supports .pcap and .pcapng formats
+   - After upload, Gemini analyses the capture and surfaces anomalies, suspicious flows, and protocol violations
+   - Results show top talkers, suspicious IPs, and a plain-English threat summary
+
+6. /action-queue (Actions)
+   - AI-suggested remediation actions waiting for human approval (50+ pending shown in nav badge)
+   - Each action card shows: action type (block IP, rate-limit, quarantine), target, AI confidence, reasoning
+   - Two buttons per action: ✅ Approve and ❌ Reject — approved actions are executed immediately
+   - Audit trail of all approved/rejected actions visible in the Audit page
+   - Bulk approve all low-risk actions with the \"Approve All Low Risk\" button
+
+7. /audit (Audit Log)
+   - Immutable log of every action taken: AI suggestions, human approvals/rejections, config changes
+   - Columns: timestamp, actor (AI or human), action type, target, outcome
+   - Use for compliance evidence and post-incident review
+
+8. /services (Services)
+   - Status dashboard for all monitored upstream services
+   - Shows: service name, health status (online/degraded/offline), last checked timestamp
+   - Click a service to see its recent attack events and logs
+   - Add new services to monitor via the \"+ Add Service\" button
+
+9. /copilot (AI Copilot) — THIS IS WHERE YOU LIVE
+   - Natural language Q&A interface grounded in live MongoDB attack telemetry
+   - Conversation memory: context from last 6 turns is included in every request
+   - Streaming responses: answers appear token by token
+   - Follow-up suggestion chips appear after each answer
+   - Each answer has \"Copy\" and \"Export note\" buttons
+   - Source citations show how many telemetry events grounded the answer
+
+10. /correlation (Attack Correlation Engine)
+    - Click \"Run Correlation\" to have Gemini analyse up to 200 recent attacks
+    - Detects coordinated campaigns, shared attacker infrastructure, multi-stage attack chains
+    - Results show campaign cards (severity, IPs, attack types, timeline)
+    - Each campaign card has \"Ask Co-Pilot about this campaign\" which navigates here with the question pre-filled
+    - Risk score history sparkline shows trend across last 20 runs
+
+11. /simulate (Attack Simulator / Mutation Engine)
+    - Enter any malicious payload and select attack type
+    - AI generates 5 WAF-bypass mutation variants with evasion probability scores and technique names
+    - Each variant can be \"simulated\" — sends it to the demo target so it appears in the Attacks feed
+    - Use this to test WAF rules and detection coverage
+
+12. /settings (Settings)
+    - Configure detection thresholds, alert rules, notification preferences
+    - Add/remove monitored services
+    - API key management (not shown in UI for security)
+    - Toggle AI features on/off per environment
+
+NAVIGATION:
+- Sidebar is always visible on the left
+- Current page is highlighted in the sidebar
+- All pages are accessible from the sidebar without full page reload (React Router SPA)
+
+GUIDELINES FOR ANSWERING:
+- If the analyst asks HOW to do something in the platform, give exact numbered steps
+  using the page names and button labels above. Format steps as:
+  STEPS:
+  1. Go to [Page Name] (/route)
+  2. [Exact action with button/field name]
+  3. [Next action]
+- If answering about data, ground it in the telemetry and also tell them WHERE in the UI they can see/act on it
+- Be specific: say \"click the \u{1F52C} Forensics button on the Attacks page\" not \"view forensics\"
+- If a question is about blocking an IP, point to /action-queue
+- If a question is about a specific attack event, point to /attacks and the Forensics/Report buttons
+`;
+
+// ── Core: generate with model fallback + one retry per model on 429 ─────────────────
 async function generateWithFallback(prompt) {
   const models = getModels();
   if (!models) return null;
@@ -87,7 +193,7 @@ async function generateWithFallback(prompt) {
   throw quotaErr;
 }
 
-// ── Core: streaming version — returns async iterable of text chunks ──────────
+// ── Core: streaming version — returns async iterable of text chunks ──────────────
 async function* generateStreamWithFallback(prompt) {
   const models = getModels();
   if (!models) return;
@@ -120,7 +226,7 @@ async function* generateStreamWithFallback(prompt) {
   throw quotaErr;
 }
 
-// ── Helpers ──────────────────────────────────────────────────────────────
+// ── Helpers ────────────────────────────────────────────────────────────────────────────
 function stripFences(text) {
   return text.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
 }
@@ -158,7 +264,7 @@ function quotaFallback(errorCode) {
   return { answer, grounded: false, errorCode, suggestions: [], sourcedEventIds: [] };
 }
 
-// ── Build conversation history block ─────────────────────────────────────────
+// ── Build conversation history block ─────────────────────────────────────────────────────
 function buildHistoryBlock(history) {
   if (!history || !history.length) return '';
   return '\nCONVERSATION HISTORY (most recent last):\n' +
@@ -167,7 +273,13 @@ function buildHistoryBlock(history) {
     ).join('\n') + '\n';
 }
 
-// ── 1. Security Co-Pilot Chat ─────────────────────────────────────────────────
+// ── Build the STEPS renderer instruction ───────────────────────────────────────────────
+const STEPS_FORMAT_INSTRUCTION =
+  `If your answer involves taking an action in the SENTINAL UI, include a STEPS: block like:\n` +
+  `STEPS:\n1. Go to [Page Name] (/route)\n2. [Exact action]\n3. [Next action]\n` +
+  `Only include STEPS: if the analyst needs to DO something in the platform. Omit it for pure data questions.`;
+
+// ── 1. Security Co-Pilot Chat ───────────────────────────────────────────────────────────────
 async function chat(question, recentAttacks, history = []) {
   if (!getModels()) return quotaFallback('NO_API_KEY');
 
@@ -175,11 +287,13 @@ async function chat(question, recentAttacks, history = []) {
   const historyBlock = buildHistoryBlock(history);
 
   const prompt =
-    `You are SENTINEL AI, a senior cybersecurity analyst embedded in the SENTINAL threat detection platform.\n\n` +
+    `You are SENTINEL AI, a senior cybersecurity analyst embedded in the SENTINAL threat detection platform.\n` +
+    PLATFORM_KNOWLEDGE + '\n' +
     `LIVE ATTACK TELEMETRY (last 24h):\n${context}\n` +
     historyBlock +
     `\nAnswer the analyst's question. Be direct and actionable.\n` +
-    `Do NOT fabricate events not in the data. Keep answer under 300 words. Plain text only.\n` +
+    STEPS_FORMAT_INSTRUCTION + '\n' +
+    `Do NOT fabricate events not in the data. Keep answer under 350 words. Plain text only.\n` +
     `\nAfter your full answer, on a NEW LINE write exactly (no extra text before or after the JSON array):\n` +
     `SUGGESTIONS: ["follow-up question 1?", "follow-up question 2?", "follow-up question 3?"]\n` +
     `SOURCES: [list the index numbers from the telemetry you used, e.g. 1,3,7]\n` +
@@ -189,7 +303,6 @@ async function chat(question, recentAttacks, history = []) {
     const raw = await generateWithFallback(prompt);
     if (raw === null) return quotaFallback('NO_API_KEY');
 
-    // Parse SUGGESTIONS and SOURCES out of the tail
     let answer = raw;
     let suggestions = [];
     let sourcedEventIds = [];
@@ -217,7 +330,7 @@ async function chat(question, recentAttacks, history = []) {
   }
 }
 
-// ── 2. Streaming chat — yields text chunks then a final metadata object ───────
+// ── 2. Streaming chat — yields text chunks then a final metadata object ───────────────
 async function* chatStream(question, recentAttacks, history = []) {
   if (!getModels()) {
     yield { type: 'error', errorCode: 'NO_API_KEY' };
@@ -228,11 +341,13 @@ async function* chatStream(question, recentAttacks, history = []) {
   const historyBlock = buildHistoryBlock(history);
 
   const prompt =
-    `You are SENTINEL AI, a senior cybersecurity analyst embedded in the SENTINAL threat detection platform.\n\n` +
+    `You are SENTINEL AI, a senior cybersecurity analyst embedded in the SENTINAL threat detection platform.\n` +
+    PLATFORM_KNOWLEDGE + '\n' +
     `LIVE ATTACK TELEMETRY (last 24h):\n${context}\n` +
     historyBlock +
     `\nAnswer the analyst's question. Be direct and actionable.\n` +
-    `Do NOT fabricate events not in the data. Keep answer under 300 words. Plain text only.\n` +
+    STEPS_FORMAT_INSTRUCTION + '\n' +
+    `Do NOT fabricate events not in the data. Keep answer under 350 words. Plain text only.\n` +
     `\nAfter your full answer, on a NEW LINE write exactly:\n` +
     `SUGGESTIONS: ["follow-up question 1?", "follow-up question 2?", "follow-up question 3?"]\n` +
     `SOURCES: [list the index numbers from the telemetry you used, e.g. 1,3,7]\n` +
@@ -242,20 +357,11 @@ async function* chatStream(question, recentAttacks, history = []) {
     let fullText = '';
     for await (const chunk of generateStreamWithFallback(prompt)) {
       fullText += chunk;
-      // Only stream the answer portion — stop streaming when we hit the metadata markers
       if (!fullText.includes('SUGGESTIONS:') && !fullText.includes('SOURCES:')) {
         yield { type: 'chunk', text: chunk };
-      } else {
-        // We're now in metadata territory — flush any answer text before the marker
-        const markerPos = Math.min(
-          fullText.includes('SUGGESTIONS:') ? fullText.indexOf('SUGGESTIONS:') : Infinity,
-          fullText.includes('SOURCES:') ? fullText.indexOf('SOURCES:') : Infinity
-        );
-        // Only yield the clean answer portion that arrived before the marker
       }
     }
 
-    // Parse metadata from full accumulated text
     let suggestions = [];
     let sourcedEventIds = [];
 
@@ -280,7 +386,7 @@ async function* chatStream(question, recentAttacks, history = []) {
   }
 }
 
-// ── 3. Incident Report Generator ─────────────────────────────────────────────
+// ── 3. Incident Report Generator ───────────────────────────────────────────────────────────────
 // reportType: 'technical' (default) | 'executive' | 'forensic'
 async function generateReport(attack, reportType = 'technical') {
   const staticReport = {
@@ -334,9 +440,8 @@ async function generateReport(attack, reportType = 'technical') {
   }
 }
 
-// ── 4. Attack Correlation Engine ──────────────────────────────────────────────
+// ── 4. Attack Correlation Engine ───────────────────────────────────────────────────────────────
 async function correlate(attacks) {
-  // Pre-compute clusters in Node before sending to Gemini (saves tokens)
   const byIp = {};
   const byType = {};
   attacks.forEach(a => {
@@ -348,7 +453,6 @@ async function correlate(attacks) {
     byType[type].push(ip);
   });
 
-  // Top 10 IPs by attack count
   const topIps = Object.entries(byIp)
     .sort((a, b) => b[1].length - a[1].length)
     .slice(0, 10)
@@ -362,7 +466,6 @@ async function correlate(attacks) {
       lastSeen:  events.map(e => e.ts).filter(Boolean).sort().reverse()[0],
     }));
 
-  // Multi-type IPs (likely coordinated)
   const multiTypeIps = topIps.filter(x => x.types.length > 1);
 
   const clusterSummary = topIps.map(x =>
@@ -420,7 +523,7 @@ async function correlate(attacks) {
   }
 }
 
-// ── 5. Payload Mutation Generator ─────────────────────────────────────────────
+// ── 5. Payload Mutation Generator ───────────────────────────────────────────────────────────────
 async function mutate(payload, attackType) {
   const staticMutations = [
     { variant: payload.replace(/'/g, '%27').replace(/"/g, '%22'), technique: 'URL Encoding', evades: 'Basic string matching WAF rules', risk: 'medium', evasionProbability: 0.55, category: 'encoding' },

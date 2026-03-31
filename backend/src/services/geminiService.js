@@ -1,167 +1,310 @@
 /**
- * geminiService.js — SENTINAL × Gemini Flash Integration
+ * geminiService.js — SENTINAL Gemini AI integration
  *
- * Two exported functions:
- *   chatWithCopilot(history, userMessage)  — Security Co-Pilot chat
- *   generateIncidentReport(attackId)       — Structured incident report for a single attack
+ * Verified free-tier model chain (March 2026):
+ *   1. gemini-2.5-flash-lite  — 15 RPM, 1000 RPD — lightest quota, try first
+ *   2. gemini-2.5-flash        — 10 RPM,  250 RPD — fallback if lite exhausted
  *
- * Environment:
- *   GEMINI_API_KEY  — required (Google AI Studio key)
- *
- * Design decisions:
- *   - Uses @google/generative-ai SDK (already indirectly pulled via ArmorIQ gemini_explainer)
- *   - Falls back gracefully if GEMINI_API_KEY is missing (returns error object)
- *   - All Mongo queries are read-only — zero side effects
- *   - Max 20 messages kept in history to avoid token overflows
+ * Capabilities:
+ *   1. chat()           — Security Co-Pilot Q&A grounded in live attack telemetry
+ *   2. generateReport() — Structured incident report for a single attack
+ *   3. correlate()      — Campaign correlation across up to 200 recent attacks
+ *   4. mutate()         — Payload evasion variant generator (5 WAF-bypass mutations)
  */
 
 const { GoogleGenerativeAI } = require('@google/generative-ai');
-const AttackEvent = require('../models/AttackEvent');
-const SystemLog   = require('../models/SystemLog');
-const logger      = require('../utils/logger');
+const logger = require('../utils/logger');
 
-const MODEL_NAME = 'gemini-1.5-flash';
-const MAX_HISTORY = 20;
+// ── Verified model chain ─────────────────────────────────────────────────────────
+const MODEL_CHAIN = [
+  'gemini-2.5-flash-lite',
+  'gemini-2.5-flash',
+];
 
-// ── Lazy-init Gemini client so missing key doesn't crash startup ─────────────
-let _genAI = null;
-function getClient() {
-  if (!process.env.GEMINI_API_KEY) {
-    throw new Error('GEMINI_API_KEY is not set. Add it to your .env file.');
-  }
-  if (!_genAI) {
-    _genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-  }
-  return _genAI;
+let _genAI  = null;
+let _models = null;
+
+function getModels() {
+  if (_models) return _models;
+  const key = process.env.GEMINI_API_KEY;
+  if (!key) return null;
+  _genAI  = new GoogleGenerativeAI(key);
+  _models = MODEL_CHAIN.map(name => _genAI.getGenerativeModel({ model: name }));
+  return _models;
 }
 
-// ── System prompt for Security Co-Pilot ─────────────────────────────────────
-const COPILOT_SYSTEM_PROMPT = `You are SENTINAL Co-Pilot, an expert cybersecurity assistant embedded inside the SENTINAL security monitoring platform.
+function resetModels() { _genAI = null; _models = null; }
 
-Your responsibilities:
-- Explain attack types (SQLi, XSS, LFI, SSRF, Command Injection, etc.) clearly
-- Help analysts understand attack payloads and what they attempt to do
-- Suggest remediation steps and defensive countermeasures
-- Interpret CVSS scores, confidence levels, and severity ratings
-- Answer questions about the SENTINAL platform itself
-- Provide concise, actionable security guidance
+function getRetryDelay(errMessage, defaultMs = 20_000) {
+  const match = errMessage && errMessage.match(/retry(?:Delay)?[":\s]+([0-9.]+)s/i);
+  if (match) {
+    const s = parseFloat(match[1]);
+    if (!isNaN(s) && s > 0) return Math.ceil(s) * 1000;
+  }
+  return defaultMs;
+}
 
-Tone: professional, precise, jargon-aware but able to explain simply when asked.
-Format: use markdown for structure when helpful. Keep answers focused — no filler.
-Scope: security topics only. Politely decline unrelated requests.`;
+// ── Core: generate with model fallback + one retry per model on 429 ─────────
+async function generateWithFallback(prompt) {
+  const models = getModels();
+  if (!models) return null;
 
-/**
- * Multi-turn chat with the Security Co-Pilot.
- *
- * @param {Array<{role: 'user'|'model', parts: string}>} history - previous turns
- * @param {string} userMessage - current user message
- * @returns {Promise<{reply: string, role: 'model'}>}
- */
-async function chatWithCopilot(history = [], userMessage) {
+  for (let m = 0; m < models.length; m++) {
+    const modelName = MODEL_CHAIN[m];
+
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        const result = await models[m].generateContent(prompt);
+        logger.info(`[GeminiService] ✓ ${modelName} responded (attempt ${attempt})`);
+        return result.response.text().trim();
+      } catch (err) {
+        const msg   = err.message || '';
+        const is429 = msg.includes('429');
+        const is404 = msg.includes('404');
+
+        if (is404) {
+          logger.error(`[GeminiService] 404: model ${modelName} not found. Check MODEL_CHAIN.`);
+          throw err;
+        }
+        if (is429 && attempt === 1) {
+          const delay = getRetryDelay(msg);
+          logger.warn(`[GeminiService] ${modelName} rate-limited, retrying in ${delay / 1000}s...`);
+          await new Promise(r => setTimeout(r, delay));
+          continue;
+        }
+        if (is429 && attempt === 2) {
+          logger.warn(`[GeminiService] ${modelName} still rate-limited — moving to next model`);
+          break;
+        }
+        throw err;
+      }
+    }
+  }
+
+  const quotaErr = new Error('QUOTA_EXHAUSTED');
+  quotaErr.isQuotaError = true;
+  throw quotaErr;
+}
+
+// ── Helpers ──────────────────────────────────────────────────────────────
+function stripFences(text) {
+  return text.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
+}
+function safeParseJSON(text) {
+  try { return JSON.parse(stripFences(text)); } catch { return null; }
+}
+function buildAttackContext(attacks) {
+  if (!attacks || !attacks.length) return 'No recent attack data available.';
+  return attacks
+    .slice(0, 40)
+    .map((a, i) =>
+      `[${i + 1}] type=${a.attackType} severity=${a.severity} status=${a.status} ` +
+      `ip=${a.ip || 'unknown'} detectedBy=${a.detectedBy || 'unknown'} ` +
+      `confidence=${a.confidence != null ? Math.round(a.confidence * 100) + '%' : '?'} ` +
+      `payload=${String(a.payload || '').slice(0, 80)} ` +
+      `ts=${a.timestamp ? new Date(a.timestamp).toISOString() : 'unknown'}`
+    )
+    .join('\n');
+}
+
+function quotaFallback(errorCode) {
+  const answer = errorCode === 'QUOTA_EXHAUSTED'
+    ? 'The AI Co-Pilot has reached its free-tier API quota for today. Quota resets daily at midnight Pacific time. To remove this limit, enable billing at https://ai.google.dev.'
+    : 'Gemini API key is not configured. Add GEMINI_API_KEY to your .env file.';
+  return { answer, grounded: false, errorCode };
+}
+
+// ── 1. Security Co-Pilot Chat ─────────────────────────────────────────────────
+async function chat(question, recentAttacks) {
+  if (!getModels()) return quotaFallback('NO_API_KEY');
+
+  const context = buildAttackContext(recentAttacks);
+  const prompt =
+    `You are SENTINEL AI, a senior cybersecurity analyst embedded in the SENTINAL threat detection platform.\n\n` +
+    `LIVE ATTACK TELEMETRY (last 24h):\n${context}\n\n` +
+    `Answer the analyst's question. Be direct and actionable.\n` +
+    `Do NOT fabricate events not in the data. Keep answer under 300 words. Plain text only.\n\n` +
+    `Question: ${question}`;
+
   try {
-    const genAI = getClient();
-    const model = genAI.getGenerativeModel({
-      model: MODEL_NAME,
-      systemInstruction: COPILOT_SYSTEM_PROMPT,
-    });
+    const answer = await generateWithFallback(prompt);
+    if (answer === null) return quotaFallback('NO_API_KEY');
+    return { answer, grounded: true };
+  } catch (err) {
+    if (err.isQuotaError) return quotaFallback('QUOTA_EXHAUSTED');
+    logger.error(`[GeminiService] chat() failed: ${err.message}`);
+    return { answer: 'An unexpected error occurred. Please try again.', grounded: false, errorCode: 'UNKNOWN_ERROR' };
+  }
+}
 
-    // Trim history to prevent token overflow
-    const trimmedHistory = history.slice(-MAX_HISTORY).map(msg => ({
-      role: msg.role,
-      parts: [{ text: msg.parts }],
+// ── 2. Incident Report Generator ─────────────────────────────────────────────
+async function generateReport(attack) {
+  const staticReport = {
+    generated: false,
+    executive_summary: `${attack.attackType?.toUpperCase() || 'UNKNOWN'} attack from ${attack.ip || 'unknown'} — severity: ${attack.severity}.`,
+    technical_finding: attack.payload ? `Payload: ${String(attack.payload).slice(0, 200)}` : 'No payload captured.',
+    likely_impact: attack.severity === 'critical' ? 'Potential breach or disruption.' : 'Limited impact if mitigated.',
+    remediation_steps: [
+      `Block IP: ${attack.ip || 'unknown'}`,
+      'Review last 24h of requests from this IP',
+      `Update WAF rules for ${attack.attackType || 'this'} patterns`,
+      'Apply latest security patches',
+    ],
+    next_steps: 'Escalate if critical/high. Monitor for repeat attempts.',
+    risk_level: attack.severity || 'unknown',
+    generated_at: new Date().toISOString(),
+  };
+
+  if (!getModels()) return staticReport;
+
+  const prompt =
+    `You are SENTINEL AI generating a formal incident report.\n\n` +
+    `ATTACK: id=${attack._id} type=${attack.attackType} severity=${attack.severity} ` +
+    `status=${attack.status} ip=${attack.ip || 'unknown'} confidence=${attack.confidence != null ? Math.round(attack.confidence * 100) + '%' : '?'} ` +
+    `ts=${attack.timestamp ? new Date(attack.timestamp).toISOString() : 'unknown'} ` +
+    `payload=${String(attack.payload || 'none').slice(0, 200)}\n\n` +
+    `Return ONLY a JSON object with keys: executive_summary, technical_finding, likely_impact, ` +
+    `remediation_steps (array), next_steps, risk_level. No markdown, no extra text.`;
+
+  try {
+    const text = await generateWithFallback(prompt);
+    if (!text) return staticReport;
+    const parsed = safeParseJSON(text);
+    if (!parsed) return staticReport;
+    return { ...parsed, generated: true, generated_at: new Date().toISOString() };
+  } catch (err) {
+    if (err.isQuotaError) return staticReport;
+    logger.error(`[GeminiService] generateReport() failed: ${err.message}`);
+    return staticReport;
+  }
+}
+
+// ── 3. Attack Correlation Engine ──────────────────────────────────────────────
+async function correlate(attacks) {
+  // Pre-compute clusters in Node before sending to Gemini (saves tokens)
+  const byIp = {};
+  const byType = {};
+  attacks.forEach(a => {
+    const ip   = a.ip || 'unknown';
+    const type = a.attackType || 'unknown';
+    if (!byIp[ip])     byIp[ip]     = [];
+    if (!byType[type]) byType[type] = [];
+    byIp[ip].push({ type, severity: a.severity, status: a.status, ts: a.timestamp, payload: String(a.payload || '').slice(0, 60) });
+    byType[type].push(ip);
+  });
+
+  // Top 10 IPs by attack count
+  const topIps = Object.entries(byIp)
+    .sort((a, b) => b[1].length - a[1].length)
+    .slice(0, 10)
+    .map(([ip, events]) => ({
+      ip,
+      count: events.length,
+      types: [...new Set(events.map(e => e.type))],
+      severities: [...new Set(events.map(e => e.severity))],
+      statuses: [...new Set(events.map(e => e.status))],
+      firstSeen: events.map(e => e.ts).filter(Boolean).sort()[0],
+      lastSeen:  events.map(e => e.ts).filter(Boolean).sort().reverse()[0],
     }));
 
-    const chat = model.startChat({ history: trimmedHistory });
-    const result = await chat.sendMessage(userMessage);
-    const reply = result.response.text();
+  // Multi-type IPs (likely coordinated)
+  const multiTypeIps = topIps.filter(x => x.types.length > 1);
 
-    logger.info('[GEMINI] Co-Pilot response generated successfully');
-    return { role: 'model', parts: reply };
-  } catch (err) {
-    logger.error(`[GEMINI] chatWithCopilot error: ${err.message}`);
-    throw err;
-  }
-}
+  const clusterSummary = topIps.map(x =>
+    `IP ${x.ip}: ${x.count} attacks, types=[${x.types.join(',')}], severity=[${x.severities.join(',')}], status=[${x.statuses.join(',')}]`
+  ).join('\n');
 
-/**
- * Generate a structured incident report for a given attack ID.
- * Pulls AttackEvent + associated SystemLog from MongoDB to build full context.
- *
- * @param {string} attackId - MongoDB ObjectId string of the AttackEvent
- * @returns {Promise<{report: string, attackId: string, generatedAt: string}>}
- */
-async function generateIncidentReport(attackId) {
+  const staticFallback = {
+    campaigns: multiTypeIps.map(x => ({
+      name: `Campaign from ${x.ip}`,
+      sourceIps: [x.ip],
+      attackTypes: x.types,
+      severity: x.severities.includes('critical') ? 'critical' : x.severities.includes('high') ? 'high' : 'medium',
+      eventCount: x.count,
+      firstSeen: x.firstSeen,
+      lastSeen: x.lastSeen,
+      assessment: `Multi-vector attacker: ${x.types.join(', ')} from single IP.`,
+    })),
+    sharedInfrastructure: [],
+    attackChains: [],
+    riskScore: Math.min(100, multiTypeIps.length * 20 + topIps.length * 5),
+    summary: `Analysed ${attacks.length} attacks from ${Object.keys(byIp).length} unique IPs. ${multiTypeIps.length} IPs performed multi-vector attacks.`,
+    generated: false,
+  };
+
+  if (!getModels()) return { ...staticFallback, errorCode: 'NO_API_KEY' };
+
+  const prompt =
+    `You are SENTINEL AI performing threat intelligence correlation.\n\n` +
+    `ATTACK CLUSTER SUMMARY (${attacks.length} events, ${Object.keys(byIp).length} unique IPs):\n` +
+    `${clusterSummary}\n\n` +
+    `Based on this data, identify coordinated attack campaigns, shared attacker infrastructure, and attack chains.\n\n` +
+    `Return ONLY a JSON object with EXACTLY these fields:\n` +
+    `{\n` +
+    `  "campaigns": [{ "name": string, "sourceIps": string[], "attackTypes": string[], "severity": string, "eventCount": number, "assessment": string }],\n` +
+    `  "sharedInfrastructure": [{ "ips": string[], "evidence": string }],\n` +
+    `  "attackChains": [{ "sequence": string[], "description": string }],\n` +
+    `  "riskScore": number (0-100),\n` +
+    `  "summary": string\n` +
+    `}\n\nNo markdown. No extra text. Only valid JSON.`;
+
   try {
-    const genAI = getClient();
-    const model = genAI.getGenerativeModel({ model: MODEL_NAME });
-
-    // Fetch attack event
-    const attack = await AttackEvent.findById(attackId).lean();
-    if (!attack) {
-      throw new Error(`AttackEvent not found: ${attackId}`);
+    const text = await generateWithFallback(prompt);
+    if (!text) return { ...staticFallback, errorCode: 'NO_API_KEY' };
+    const parsed = safeParseJSON(text);
+    if (!parsed) {
+      logger.warn('[GeminiService] correlate() — JSON parse failed, returning static fallback');
+      return staticFallback;
     }
-
-    // Fetch the originating log (matched by requestId → SystemLog._id)
-    let rawLog = null;
-    if (attack.requestId) {
-      rawLog = await SystemLog.findById(attack.requestId).lean();
-    }
-
-    // Build context block for Gemini
-    const context = `
-ATTACK EVENT:
-  ID:          ${attack._id}
-  Type:        ${attack.attackType}
-  Severity:    ${attack.severity}
-  Status:      ${attack.status}
-  Confidence:  ${(attack.confidence * 100).toFixed(1)}%
-  Detected By: ${attack.detectedBy}
-  Timestamp:   ${attack.createdAt}
-  Source IP:   ${attack.ip}
-  Payload:     ${attack.payload || 'N/A'}
-  Explanation: ${attack.explanation || 'N/A'}
-
-${rawLog ? `RAW REQUEST:
-  Method:      ${rawLog.method}
-  URL:         ${rawLog.url}
-  IP:          ${rawLog.ip}
-  Response:    ${rawLog.responseCode || 'N/A'}
-  User-Agent:  ${rawLog.headers?.userAgent || 'N/A'}
-  Query Params:${JSON.stringify(rawLog.queryParams || {})}
-  Body:        ${JSON.stringify(rawLog.body || {})}` : 'RAW REQUEST: Not available'}
-`.trim();
-
-    const prompt = `You are a senior cybersecurity analyst. Based on the following SENTINAL attack event data, produce a professional incident report in markdown.
-
-Required sections:
-1. **Executive Summary** — 2-3 sentences suitable for non-technical management
-2. **Attack Details** — type, technique, payload analysis
-3. **Timeline** — what happened and when
-4. **Impact Assessment** — what data/systems could be affected
-5. **Root Cause** — why this attack reached the system
-6. **Immediate Actions Taken** — what SENTINAL detected/blocked
-7. **Recommended Remediation** — concrete steps with code examples where relevant
-8. **Prevention Measures** — long-term hardening recommendations
-9. **MITRE ATT&CK Mapping** — relevant technique IDs if applicable
-
-DATA:
-${context}
-
-Produce the report now. Be specific and technical. Reference actual values from the data above.`;
-
-    const result = await model.generateContent(prompt);
-    const report = result.response.text();
-
-    logger.info(`[GEMINI] Incident report generated for attack ${attackId}`);
-    return {
-      report,
-      attackId,
-      generatedAt: new Date().toISOString(),
-    };
+    logger.info(`[GeminiService] correlate() — done (campaigns=${parsed.campaigns?.length || 0}, riskScore=${parsed.riskScore})`);
+    return { ...parsed, generated: true };
   } catch (err) {
-    logger.error(`[GEMINI] generateIncidentReport error: ${err.message}`);
-    throw err;
+    if (err.isQuotaError) return { ...staticFallback, errorCode: 'QUOTA_EXHAUSTED' };
+    logger.error(`[GeminiService] correlate() failed: ${err.message}`);
+    return staticFallback;
   }
 }
 
-module.exports = { chatWithCopilot, generateIncidentReport };
+// ── 4. Payload Mutation Generator ─────────────────────────────────────────────
+async function mutate(payload, attackType) {
+  const staticMutations = [
+    { variant: payload.replace(/'/g, '%27').replace(/"/g, '%22'), technique: 'URL Encoding', evades: 'Basic string matching WAF rules', risk: 'medium' },
+    { variant: payload.split('').map((c, i) => i % 3 === 0 ? c.toUpperCase() : c.toLowerCase()).join(''), technique: 'Case Alternation', evades: 'Case-sensitive WAF signatures', risk: 'low' },
+    { variant: payload.replace(/\s+/g, '/**/'), technique: 'Comment Injection', evades: 'Whitespace-based tokenisation rules', risk: 'high' },
+    { variant: [...payload].map(c => `&#${c.charCodeAt(0)};`).join(''), technique: 'HTML Entity Encoding', evades: 'Plain-text WAF rules, XSS filters', risk: 'high' },
+    { variant: Buffer.from(payload).toString('base64'), technique: 'Base64 Encoding', evades: 'Payload content inspection', risk: 'medium' },
+  ];
+
+  if (!getModels()) return { original: payload, mutations: staticMutations, generated: false, errorCode: 'NO_API_KEY' };
+
+  const prompt =
+    `You are a senior red-team security researcher generating WAF evasion test cases.\n\n` +
+    `ORIGINAL PAYLOAD (${attackType}): ${payload}\n\n` +
+    `Generate exactly 5 evasion variants of this payload. Each variant should use a different evasion technique.\n` +
+    `Techniques to consider: URL encoding, double URL encoding, HTML entity encoding, Unicode escape, ` +
+    `comment injection, case alternation, whitespace manipulation, base64, hex encoding, null byte injection.\n\n` +
+    `Return ONLY a JSON object:\n` +
+    `{\n` +
+    `  "mutations": [\n` +
+    `    { "variant": "the mutated payload string", "technique": "technique name", "evades": "what WAF rule/filter this bypasses", "risk": "low|medium|high|critical" }\n` +
+    `  ]\n` +
+    `}\n\nExactly 5 items. No markdown. Valid JSON only.`;
+
+  try {
+    const text = await generateWithFallback(prompt);
+    if (!text) return { original: payload, mutations: staticMutations, generated: false, errorCode: 'NO_API_KEY' };
+    const parsed = safeParseJSON(text);
+    if (!parsed || !Array.isArray(parsed.mutations)) {
+      logger.warn('[GeminiService] mutate() — JSON parse failed, using static mutations');
+      return { original: payload, mutations: staticMutations, generated: false };
+    }
+    logger.info(`[GeminiService] mutate() — done (${parsed.mutations.length} variants)`);
+    return { original: payload, mutations: parsed.mutations, generated: true };
+  } catch (err) {
+    if (err.isQuotaError) return { original: payload, mutations: staticMutations, generated: false, errorCode: 'QUOTA_EXHAUSTED' };
+    logger.error(`[GeminiService] mutate() failed: ${err.message}`);
+    return { original: payload, mutations: staticMutations, generated: false };
+  }
+}
+
+module.exports = { chat, generateReport, correlate, mutate, resetModels };

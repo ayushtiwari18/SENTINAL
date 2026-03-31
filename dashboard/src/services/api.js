@@ -4,12 +4,10 @@ const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 const api = axios.create({ baseURL: API_BASE });
 
-// unwrap standard { success, message, data } envelope
-// Safe unwrap — returns data field if present, otherwise full response body
-const unwrap    = res => res.data.data;
+const unwrap     = res => res.data.data;
 const unwrapSafe = res => res.data.data ?? res.data;
 
-// ── Existing API calls ───────────────────────────────────────────────────────────
+// ── Core API calls ──────────────────────────────────────────────────────
 export const getStats          = ()       => api.get('/api/stats').then(unwrap);
 export const getRecentAttacks  = (n = 50) => api.get(`/api/attacks/recent?limit=${n}`).then(unwrap);
 export const getForensics      = (id)     => api.get(`/api/attacks/${id}/forensics`).then(unwrap);
@@ -20,7 +18,6 @@ export const getServiceStatus  = ()       => api.get('/api/service-status').then
 export const getHealth         = ()       => api.get('/api/health').then(unwrap);
 export const getIpIntel        = (ip)     => api.get(`/api/intel/${ip}`).then(unwrap);
 
-// PCAP upload — multipart/form-data
 export const uploadPcap = (file, projectId = 'pcap-upload') => {
   const form = new FormData();
   form.append('pcap', file);
@@ -30,28 +27,23 @@ export const uploadPcap = (file, projectId = 'pcap-upload') => {
   }).then(unwrap);
 };
 
-// ── ArmorIQ API calls ─────────────────────────────────────────────────────────────
-export const getPendingActions  = ()   => api.get('/api/actions/pending').then(unwrap);
-export const approveAction = (id) =>
-  api.post(`/api/actions/${id}/approve`, { approvedBy: 'human' }).then(unwrapSafe);
-export const rejectAction  = (id) =>
-  api.post(`/api/actions/${id}/reject`, { rejectedBy: 'human' }).then(unwrapSafe);
-export const getAuditLog  = (n = 50) => api.get(`/api/audit?limit=${n}`).then(unwrap);
+// ── ArmorIQ API calls ───────────────────────────────────────────────────
+export const getPendingActions = ()   => api.get('/api/actions/pending').then(unwrap);
+export const approveAction     = (id) => api.post(`/api/actions/${id}/approve`, { approvedBy: 'human' }).then(unwrapSafe);
+export const rejectAction      = (id) => api.post(`/api/actions/${id}/reject`,  { rejectedBy: 'human' }).then(unwrapSafe);
+export const getAuditLog       = (n = 50) => api.get(`/api/audit?limit=${n}`).then(unwrap);
 
-// ── Gemini AI — Co-Pilot + Incident Reports ───────────────────────────────────────
-/**
- * Send a message to the Security Co-Pilot.
- * @param {Array<{role: string, parts: string}>} history - conversation history
- * @param {string} message - new user message
- * @returns {Promise<{role: string, parts: string}>} model reply
- */
-export const copilotChat = (history, message) =>
-  api.post('/api/gemini/chat', { history, message }).then(unwrap);
+// ── Gemini AI API calls ──────────────────────────────────────────────────
+export const geminiChat = (question) =>
+  api.post('/api/gemini/chat', { question }).then(unwrap);
 
-/**
- * Generate a full incident report for a given attack ID.
- * @param {string} attackId - MongoDB ObjectId of the AttackEvent
- * @returns {Promise<{report: string, attackId: string, generatedAt: string}>}
- */
-export const generateReport = (attackId) =>
+export const geminiReport = (attackId) =>
   api.post(`/api/gemini/report/${attackId}`).then(unwrap);
+
+// geminiCorrelate — run campaign/infrastructure correlation across last 200 attacks
+export const geminiCorrelate = () =>
+  api.post('/api/gemini/correlate').then(unwrap);
+
+// geminiMutate — generate 5 WAF evasion variants for a given payload
+export const geminiMutate = (payload, attackType = 'unknown') =>
+  api.post('/api/gemini/mutate', { payload, attackType }).then(unwrap);

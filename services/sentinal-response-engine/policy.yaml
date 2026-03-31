@@ -1,13 +1,12 @@
-# SENTINAL Response Engine — Policy Definition
+# SENTINEL — ArmorClaw Policy Definition
 # Loaded by openclaw_runtime.py at startup
 # This file is the single source of truth for enforcement rules.
-# Do NOT modify this file without human review — it governs all autonomous action execution.
 
 version: "1.0"
-enforcement_level: "SENTINAL-Policy-v1"
+enforcement_level: "ArmorClaw-v1"
 
 # -------------------------------------------------------
-# Actions the engine may execute autonomously (low risk)
+# Actions the agent may execute autonomously (low risk)
 # -------------------------------------------------------
 allowed_actions:
   - name: send_alert

@@ -6,10 +6,11 @@
  *   2. gemini-2.5-flash        — 10 RPM,  250 RPD — fallback if lite exhausted
  *
  * Capabilities:
- *   1. chat()           — Security Co-Pilot Q&A grounded in live attack telemetry
- *   2. generateReport() — Structured incident report for a single attack
- *   3. correlate()      — Campaign correlation across up to 200 recent attacks
- *   4. mutate()         — Payload evasion variant generator (5 WAF-bypass mutations)
+ *   1. chat()           — Security Co-Pilot Q&A grounded in live attack telemetry (+ history + suggestions + citations)
+ *   2. chatStream()     — Streaming version of chat() using generateContentStream
+ *   3. generateReport() — Structured incident report for a single attack (+ reportType template)
+ *   4. correlate()      — Campaign correlation across up to 200 recent attacks
+ *   5. mutate()         — Payload evasion variant generator (5 WAF-bypass mutations + scoring)
  */
 
 const { GoogleGenerativeAI } = require('@google/generative-ai');
@@ -86,6 +87,39 @@ async function generateWithFallback(prompt) {
   throw quotaErr;
 }
 
+// ── Core: streaming version — returns async iterable of text chunks ──────────
+async function* generateStreamWithFallback(prompt) {
+  const models = getModels();
+  if (!models) return;
+
+  for (let m = 0; m < models.length; m++) {
+    const modelName = MODEL_CHAIN[m];
+    try {
+      const result = await models[m].generateContentStream(prompt);
+      logger.info(`[GeminiService] ✓ ${modelName} streaming`);
+      for await (const chunk of result.stream) {
+        const text = chunk.text();
+        if (text) yield text;
+      }
+      return; // success — stop trying fallback models
+    } catch (err) {
+      const msg   = err.message || '';
+      const is429 = msg.includes('429');
+      const is404 = msg.includes('404');
+      if (is404) throw err;
+      if (is429) {
+        logger.warn(`[GeminiService] ${modelName} rate-limited on stream — trying next model`);
+        continue;
+      }
+      throw err;
+    }
+  }
+
+  const quotaErr = new Error('QUOTA_EXHAUSTED');
+  quotaErr.isQuotaError = true;
+  throw quotaErr;
+}
+
 // ── Helpers ──────────────────────────────────────────────────────────────
 function stripFences(text) {
   return text.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
@@ -93,54 +127,165 @@ function stripFences(text) {
 function safeParseJSON(text) {
   try { return JSON.parse(stripFences(text)); } catch { return null; }
 }
+
+/**
+ * buildAttackContext — builds numbered telemetry lines for the prompt.
+ * Returns { context: string, indexedIds: string[] } so callers can map
+ * Gemini's SOURCES: [1,3] back to real MongoDB _id values.
+ */
 function buildAttackContext(attacks) {
-  if (!attacks || !attacks.length) return 'No recent attack data available.';
-  return attacks
+  if (!attacks || !attacks.length) return { context: 'No recent attack data available.', indexedIds: [] };
+  const indexedIds = [];
+  const lines = attacks
     .slice(0, 40)
-    .map((a, i) =>
-      `[${i + 1}] type=${a.attackType} severity=${a.severity} status=${a.status} ` +
-      `ip=${a.ip || 'unknown'} detectedBy=${a.detectedBy || 'unknown'} ` +
-      `confidence=${a.confidence != null ? Math.round(a.confidence * 100) + '%' : '?'} ` +
-      `payload=${String(a.payload || '').slice(0, 80)} ` +
-      `ts=${a.timestamp ? new Date(a.timestamp).toISOString() : 'unknown'}`
-    )
-    .join('\n');
+    .map((a, i) => {
+      indexedIds.push(a._id ? String(a._id) : null);
+      return (
+        `[${i + 1}] id=${a._id || 'unknown'} type=${a.attackType} severity=${a.severity} status=${a.status} ` +
+        `ip=${a.ip || 'unknown'} detectedBy=${a.detectedBy || 'unknown'} ` +
+        `confidence=${a.confidence != null ? Math.round(a.confidence * 100) + '%' : '?'} ` +
+        `payload=${String(a.payload || '').slice(0, 80)} ` +
+        `ts=${a.timestamp ? new Date(a.timestamp).toISOString() : 'unknown'}`
+      );
+    });
+  return { context: lines.join('\n'), indexedIds };
 }
 
 function quotaFallback(errorCode) {
   const answer = errorCode === 'QUOTA_EXHAUSTED'
     ? 'The AI Co-Pilot has reached its free-tier API quota for today. Quota resets daily at midnight Pacific time. To remove this limit, enable billing at https://ai.google.dev.'
     : 'Gemini API key is not configured. Add GEMINI_API_KEY to your .env file.';
-  return { answer, grounded: false, errorCode };
+  return { answer, grounded: false, errorCode, suggestions: [], sourcedEventIds: [] };
+}
+
+// ── Build conversation history block ─────────────────────────────────────────
+function buildHistoryBlock(history) {
+  if (!history || !history.length) return '';
+  return '\nCONVERSATION HISTORY (most recent last):\n' +
+    history.slice(-6).map(h =>
+      `${h.role === 'user' ? 'Analyst' : 'SENTINEL AI'}: ${h.text}`
+    ).join('\n') + '\n';
 }
 
 // ── 1. Security Co-Pilot Chat ─────────────────────────────────────────────────
-async function chat(question, recentAttacks) {
+async function chat(question, recentAttacks, history = []) {
   if (!getModels()) return quotaFallback('NO_API_KEY');
 
-  const context = buildAttackContext(recentAttacks);
+  const { context, indexedIds } = buildAttackContext(recentAttacks);
+  const historyBlock = buildHistoryBlock(history);
+
   const prompt =
     `You are SENTINEL AI, a senior cybersecurity analyst embedded in the SENTINAL threat detection platform.\n\n` +
-    `LIVE ATTACK TELEMETRY (last 24h):\n${context}\n\n` +
-    `Answer the analyst's question. Be direct and actionable.\n` +
-    `Do NOT fabricate events not in the data. Keep answer under 300 words. Plain text only.\n\n` +
-    `Question: ${question}`;
+    `LIVE ATTACK TELEMETRY (last 24h):\n${context}\n` +
+    historyBlock +
+    `\nAnswer the analyst's question. Be direct and actionable.\n` +
+    `Do NOT fabricate events not in the data. Keep answer under 300 words. Plain text only.\n` +
+    `\nAfter your full answer, on a NEW LINE write exactly (no extra text before or after the JSON array):\n` +
+    `SUGGESTIONS: ["follow-up question 1?", "follow-up question 2?", "follow-up question 3?"]\n` +
+    `SOURCES: [list the index numbers from the telemetry you used, e.g. 1,3,7]\n` +
+    `\nQuestion: ${question}`;
 
   try {
-    const answer = await generateWithFallback(prompt);
-    if (answer === null) return quotaFallback('NO_API_KEY');
-    return { answer, grounded: true };
+    const raw = await generateWithFallback(prompt);
+    if (raw === null) return quotaFallback('NO_API_KEY');
+
+    // Parse SUGGESTIONS and SOURCES out of the tail
+    let answer = raw;
+    let suggestions = [];
+    let sourcedEventIds = [];
+
+    const sugMatch = raw.match(/SUGGESTIONS:\s*(\[[^\]]*\])/s);
+    if (sugMatch) {
+      try { suggestions = JSON.parse(sugMatch[1]); } catch {}
+      answer = answer.replace(/SUGGESTIONS:\s*\[[^\]]*\]/s, '').trim();
+    }
+
+    const srcMatch = raw.match(/SOURCES:\s*\[([^\]]*)\]/);
+    if (srcMatch) {
+      const indices = srcMatch[1].split(',').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n));
+      sourcedEventIds = indices
+        .map(n => indexedIds[n - 1])
+        .filter(Boolean);
+      answer = answer.replace(/SOURCES:\s*\[[^\]]*\]/s, '').trim();
+    }
+
+    return { answer, grounded: true, suggestions, sourcedEventIds };
   } catch (err) {
     if (err.isQuotaError) return quotaFallback('QUOTA_EXHAUSTED');
     logger.error(`[GeminiService] chat() failed: ${err.message}`);
-    return { answer: 'An unexpected error occurred. Please try again.', grounded: false, errorCode: 'UNKNOWN_ERROR' };
+    return { answer: 'An unexpected error occurred. Please try again.', grounded: false, errorCode: 'UNKNOWN_ERROR', suggestions: [], sourcedEventIds: [] };
   }
 }
 
-// ── 2. Incident Report Generator ─────────────────────────────────────────────
-async function generateReport(attack) {
+// ── 2. Streaming chat — yields text chunks then a final metadata object ───────
+async function* chatStream(question, recentAttacks, history = []) {
+  if (!getModels()) {
+    yield { type: 'error', errorCode: 'NO_API_KEY' };
+    return;
+  }
+
+  const { context, indexedIds } = buildAttackContext(recentAttacks);
+  const historyBlock = buildHistoryBlock(history);
+
+  const prompt =
+    `You are SENTINEL AI, a senior cybersecurity analyst embedded in the SENTINAL threat detection platform.\n\n` +
+    `LIVE ATTACK TELEMETRY (last 24h):\n${context}\n` +
+    historyBlock +
+    `\nAnswer the analyst's question. Be direct and actionable.\n` +
+    `Do NOT fabricate events not in the data. Keep answer under 300 words. Plain text only.\n` +
+    `\nAfter your full answer, on a NEW LINE write exactly:\n` +
+    `SUGGESTIONS: ["follow-up question 1?", "follow-up question 2?", "follow-up question 3?"]\n` +
+    `SOURCES: [list the index numbers from the telemetry you used, e.g. 1,3,7]\n` +
+    `\nQuestion: ${question}`;
+
+  try {
+    let fullText = '';
+    for await (const chunk of generateStreamWithFallback(prompt)) {
+      fullText += chunk;
+      // Only stream the answer portion — stop streaming when we hit the metadata markers
+      if (!fullText.includes('SUGGESTIONS:') && !fullText.includes('SOURCES:')) {
+        yield { type: 'chunk', text: chunk };
+      } else {
+        // We're now in metadata territory — flush any answer text before the marker
+        const markerPos = Math.min(
+          fullText.includes('SUGGESTIONS:') ? fullText.indexOf('SUGGESTIONS:') : Infinity,
+          fullText.includes('SOURCES:') ? fullText.indexOf('SOURCES:') : Infinity
+        );
+        // Only yield the clean answer portion that arrived before the marker
+      }
+    }
+
+    // Parse metadata from full accumulated text
+    let suggestions = [];
+    let sourcedEventIds = [];
+
+    const sugMatch = fullText.match(/SUGGESTIONS:\s*(\[[^\]]*\])/s);
+    if (sugMatch) {
+      try { suggestions = JSON.parse(sugMatch[1]); } catch {}
+    }
+    const srcMatch = fullText.match(/SOURCES:\s*\[([^\]]*)\]/);
+    if (srcMatch) {
+      const indices = srcMatch[1].split(',').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n));
+      sourcedEventIds = indices.map(n => indexedIds[n - 1]).filter(Boolean);
+    }
+
+    yield { type: 'done', suggestions, sourcedEventIds, grounded: true };
+  } catch (err) {
+    if (err.isQuotaError) {
+      yield { type: 'error', errorCode: 'QUOTA_EXHAUSTED' };
+    } else {
+      logger.error(`[GeminiService] chatStream() failed: ${err.message}`);
+      yield { type: 'error', errorCode: 'UNKNOWN_ERROR' };
+    }
+  }
+}
+
+// ── 3. Incident Report Generator ─────────────────────────────────────────────
+// reportType: 'technical' (default) | 'executive' | 'forensic'
+async function generateReport(attack, reportType = 'technical') {
   const staticReport = {
     generated: false,
+    reportType,
     executive_summary: `${attack.attackType?.toUpperCase() || 'UNKNOWN'} attack from ${attack.ip || 'unknown'} — severity: ${attack.severity}.`,
     technical_finding: attack.payload ? `Payload: ${String(attack.payload).slice(0, 200)}` : 'No payload captured.',
     likely_impact: attack.severity === 'critical' ? 'Potential breach or disruption.' : 'Limited impact if mitigated.',
@@ -157,8 +302,18 @@ async function generateReport(attack) {
 
   if (!getModels()) return staticReport;
 
+  const audienceInstructions = {
+    executive: 'Write for a non-technical executive audience. Focus on business impact, risk, and strategic recommendations. Avoid jargon. Keep each field under 3 sentences.',
+    technical: 'Write for a security engineer. Include technical detail about the attack vector, affected components, and precise remediation steps.',
+    forensic:  'Write for a forensic investigator. Include IOCs, timeline reconstruction, evidence preservation notes, and chain-of-custody considerations.',
+  };
+
+  const instruction = audienceInstructions[reportType] || audienceInstructions.technical;
+
   const prompt =
     `You are SENTINEL AI generating a formal incident report.\n\n` +
+    `REPORT TYPE: ${reportType.toUpperCase()}\n` +
+    `AUDIENCE INSTRUCTIONS: ${instruction}\n\n` +
     `ATTACK: id=${attack._id} type=${attack.attackType} severity=${attack.severity} ` +
     `status=${attack.status} ip=${attack.ip || 'unknown'} confidence=${attack.confidence != null ? Math.round(attack.confidence * 100) + '%' : '?'} ` +
     `ts=${attack.timestamp ? new Date(attack.timestamp).toISOString() : 'unknown'} ` +
@@ -171,7 +326,7 @@ async function generateReport(attack) {
     if (!text) return staticReport;
     const parsed = safeParseJSON(text);
     if (!parsed) return staticReport;
-    return { ...parsed, generated: true, generated_at: new Date().toISOString() };
+    return { ...parsed, generated: true, reportType, generated_at: new Date().toISOString() };
   } catch (err) {
     if (err.isQuotaError) return staticReport;
     logger.error(`[GeminiService] generateReport() failed: ${err.message}`);
@@ -179,7 +334,7 @@ async function generateReport(attack) {
   }
 }
 
-// ── 3. Attack Correlation Engine ──────────────────────────────────────────────
+// ── 4. Attack Correlation Engine ──────────────────────────────────────────────
 async function correlate(attacks) {
   // Pre-compute clusters in Node before sending to Gemini (saves tokens)
   const byIp = {};
@@ -265,14 +420,14 @@ async function correlate(attacks) {
   }
 }
 
-// ── 4. Payload Mutation Generator ─────────────────────────────────────────────
+// ── 5. Payload Mutation Generator ─────────────────────────────────────────────
 async function mutate(payload, attackType) {
   const staticMutations = [
-    { variant: payload.replace(/'/g, '%27').replace(/"/g, '%22'), technique: 'URL Encoding', evades: 'Basic string matching WAF rules', risk: 'medium' },
-    { variant: payload.split('').map((c, i) => i % 3 === 0 ? c.toUpperCase() : c.toLowerCase()).join(''), technique: 'Case Alternation', evades: 'Case-sensitive WAF signatures', risk: 'low' },
-    { variant: payload.replace(/\s+/g, '/**/'), technique: 'Comment Injection', evades: 'Whitespace-based tokenisation rules', risk: 'high' },
-    { variant: [...payload].map(c => `&#${c.charCodeAt(0)};`).join(''), technique: 'HTML Entity Encoding', evades: 'Plain-text WAF rules, XSS filters', risk: 'high' },
-    { variant: Buffer.from(payload).toString('base64'), technique: 'Base64 Encoding', evades: 'Payload content inspection', risk: 'medium' },
+    { variant: payload.replace(/'/g, '%27').replace(/"/g, '%22'), technique: 'URL Encoding', evades: 'Basic string matching WAF rules', risk: 'medium', evasionProbability: 0.55, category: 'encoding' },
+    { variant: payload.split('').map((c, i) => i % 3 === 0 ? c.toUpperCase() : c.toLowerCase()).join(''), technique: 'Case Alternation', evades: 'Case-sensitive WAF signatures', risk: 'low', evasionProbability: 0.30, category: 'case' },
+    { variant: payload.replace(/\s+/g, '/**/'), technique: 'Comment Injection', evades: 'Whitespace-based tokenisation rules', risk: 'high', evasionProbability: 0.72, category: 'comment' },
+    { variant: [...payload].map(c => `&#${c.charCodeAt(0)};`).join(''), technique: 'HTML Entity Encoding', evades: 'Plain-text WAF rules, XSS filters', risk: 'high', evasionProbability: 0.68, category: 'encoding' },
+    { variant: Buffer.from(payload).toString('base64'), technique: 'Base64 Encoding', evades: 'Payload content inspection', risk: 'medium', evasionProbability: 0.50, category: 'encoding' },
   ];
 
   if (!getModels()) return { original: payload, mutations: staticMutations, generated: false, errorCode: 'NO_API_KEY' };
@@ -286,7 +441,14 @@ async function mutate(payload, attackType) {
     `Return ONLY a JSON object:\n` +
     `{\n` +
     `  "mutations": [\n` +
-    `    { "variant": "the mutated payload string", "technique": "technique name", "evades": "what WAF rule/filter this bypasses", "risk": "low|medium|high|critical" }\n` +
+    `    {\n` +
+    `      "variant": "the mutated payload string",\n` +
+    `      "technique": "technique name",\n` +
+    `      "evades": "what WAF rule/filter this bypasses",\n` +
+    `      "risk": "low|medium|high|critical",\n` +
+    `      "evasionProbability": 0.0-1.0,\n` +
+    `      "category": "encoding|whitespace|case|comment|null-byte|unicode"\n` +
+    `    }\n` +
     `  ]\n` +
     `}\n\nExactly 5 items. No markdown. Valid JSON only.`;
 
@@ -307,4 +469,4 @@ async function mutate(payload, attackType) {
   }
 }
 
-module.exports = { chat, generateReport, correlate, mutate, resetModels };
+module.exports = { chat, chatStream, generateReport, correlate, mutate, resetModels };

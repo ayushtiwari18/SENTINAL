@@ -27,24 +27,45 @@ export const uploadPcap = (file, projectId = 'pcap-upload') => {
   }).then(unwrap);
 };
 
-// ── Nexus API calls ───────────────────────────────────────────────
+// ── Nexus API calls ───────────────────────────────────────────────────────
 export const getPendingActions = ()   => api.get('/api/actions/pending').then(unwrap);
 export const approveAction     = (id) => api.post(`/api/actions/${id}/approve`, { approvedBy: 'human' }).then(unwrapSafe);
 export const rejectAction      = (id) => api.post(`/api/actions/${id}/reject`,  { rejectedBy: 'human' }).then(unwrapSafe);
 export const getAuditLog       = (n = 50) => api.get(`/api/audit?limit=${n}`).then(unwrap);
 
-// ── Gemini AI API calls ────────────────────────────────────────────────
-export const geminiChat = (question) =>
-  // FIXED: backend expects { message } not { question }
-  api.post('/api/gemini/chat', { message: question }).then(unwrap);
+// ── Gemini AI API calls ────────────────────────────────────────────────────
 
-export const geminiReport = (attackId) =>
-  api.post(`/api/gemini/report/${attackId}`).then(unwrap);
+// Single-shot chat (POST) — supports conversation history
+// history: [{ role: 'user'|'model', text: string }]
+export const geminiChat = (question, history = []) =>
+  api.post('/api/gemini/chat', { message: question, history }).then(unwrap);
 
-// geminiCorrelate — run campaign/infrastructure correlation across last 200 attacks
+// Streaming chat — returns an EventSource the caller must manage
+// Yields SSE events: { type: 'chunk', text } | { type: 'done', suggestions, sourcedEventIds } | { type: 'error', errorCode }
+export const geminiChatStream = (question, history = []) => {
+  const params = new URLSearchParams({
+    message: question,
+    ...(history.length ? { history: JSON.stringify(history) } : {}),
+  });
+  return new EventSource(`${API_BASE}/api/gemini/chat/stream?${params}`);
+};
+
+// Report — supports reportType: 'technical' | 'executive' | 'forensic'
+export const geminiReport = (attackId, reportType = 'technical') =>
+  api.post(`/api/gemini/report/${attackId}`, { reportType }).then(unwrap);
+
+// Report export — opens as a download URL
+export const geminiReportExportUrl = (attackId, reportType = 'technical') =>
+  `${API_BASE}/api/gemini/report/${attackId}/export?reportType=${reportType}`;
+
+// Correlation
 export const geminiCorrelate = () =>
   api.post('/api/gemini/correlate').then(unwrap);
 
-// geminiMutate — generate 5 WAF evasion variants for a given payload
+// Correlation history — last 20 snapshots for risk score trending
+export const geminiCorrelateHistory = () =>
+  api.get('/api/gemini/correlate/history').then(unwrap);
+
+// Mutation — returns variants with evasionProbability + category scoring
 export const geminiMutate = (payload, attackType = 'unknown') =>
   api.post('/api/gemini/mutate', { payload, attackType }).then(unwrap);

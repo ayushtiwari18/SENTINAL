@@ -12,7 +12,7 @@ const AuditLogSchema = new mongoose.Schema(
     },
     reason:            { type: String, default: '' },
     policy_rule_id:    { type: String, default: '' },
-    enforcement_level: { type: String, default: 'Nexus-Policy-v1' },
+    enforcement_level: { type: String, default: 'nexus-policy-v1' },
     triggeredBy:       {
       type: String,
       enum: ['agent', 'human'],

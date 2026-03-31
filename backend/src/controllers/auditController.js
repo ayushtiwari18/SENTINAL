@@ -38,7 +38,8 @@ const ingestAudit = async (req, res) => {
       status:            normStatus,
       reason:            reason            || '',
       policy_rule_id:    policy_rule_id    || '',
-      enforcement_level: enforcement_level || 'Nexus-Policy-v1',
+      // Always lowercase — consistent across agent writes, human approval, and direct Mongoose upserts
+      enforcement_level: enforcement_level || 'nexus-policy-v1',
       triggeredBy:       triggeredBy       || 'agent',
       ip:                ip                || '',
       attackId:          attackId          ? String(attackId) : null,

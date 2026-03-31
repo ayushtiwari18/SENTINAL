@@ -264,7 +264,7 @@ module.exports = {
       log_date_format: 'YYYY-MM-DD HH:mm:ss',
     },
     {
-      name:         'sentinal-armoriq',
+      name:         'sentinal-Nexus',
       script:       path.join(root, 'services', 'sentinal-response-engine', '.venv', 'bin', 'python3'),
       args:         '-m uvicorn main:app --host 0.0.0.0 --port 8004 --no-access-log',
       cwd:          path.join(root, 'services', 'sentinal-response-engine'),
@@ -276,8 +276,8 @@ module.exports = {
       max_restarts: 10,
       restart_delay: 3000,
       env: { PYTHONUNBUFFERED: '1' },
-      out_file:   path.join(root, 'logs', 'armoriq.out.log'),
-      error_file: path.join(root, 'logs', 'armoriq.err.log'),
+      out_file:   path.join(root, 'logs', 'Nexus.out.log'),
+      error_file: path.join(root, 'logs', 'Nexus.err.log'),
       log_date_format: 'YYYY-MM-DD HH:mm:ss',
     },
   ],
@@ -322,7 +322,7 @@ check_health() {
 check_health "sentinal-gateway"   "http://localhost:3000/health"
 check_health "sentinal-detection" "http://localhost:8002/health"
 check_health "sentinal-pcap"      "http://localhost:8003/health"
-check_health "sentinal-armoriq"   "http://localhost:8004/health"
+check_health "sentinal-Nexus"   "http://localhost:8004/health"
 
 # ── STEP 11: Update MongoDB Atlas IP allowlist reminder ──────────────────────
 echo ""

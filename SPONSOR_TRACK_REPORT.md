@@ -1,10 +1,10 @@
 # SPONSOR_TRACK_REPORT — SENTINAL @ HackByte 4.0
 
-> **Tracks Targeted:** ArmorIQ · MongoDB Atlas · Vultr · Google Gemini · General Championship
+> **Tracks Targeted:** Nexus · MongoDB Atlas · Vultr · Google Gemini · General Championship
 
 | Track | Status |
 |-------|--------|
-| ArmorIQ Claw & Shield | ✅ BUILT |
+| Nexus Claw & Shield | ✅ BUILT |
 | MongoDB Atlas | 🟡 90% there |
 | Vultr | 🔴 NOT STARTED |
 | Google Gemini | 🔴 NOT STARTED |
@@ -12,14 +12,14 @@
 
 ---
 
-## TRACK 1 — ArmorIQ Claw & Shield ($109 / ₹10,000)
+## TRACK 1 — Nexus Claw & Shield ($109 / ₹10,000)
 
 ### What They Want
 
 Build an autonomous agent that operates inside enforced intent boundaries. Not just a chatbot. A real agent that executes actions, but only within a declared policy. They want to see:
 
 - A structured intent model
-- Policy-based runtime enforcement using ArmorClaw
+- Policy-based runtime enforcement using PolicyGuard
 - Clean separation between reasoning and execution
 - One action that is **allowed** and executes
 - One action that is **deterministically blocked**
@@ -430,7 +430,7 @@ Execute in this exact order. Do not deviate.
   - Time: 2–3 hours
   - Impact: Unlocks Gemini track + makes ForensicsDrawer dramatically better
 
-### PRIORITY 3 — ArmorIQ demo polish
+### PRIORITY 3 — Nexus demo polish
 
 - [ ] Make `rate_limit_ip` call real Gateway endpoint (not just a log)
   - File: `services/sentinal-response-engine/executor.py`
@@ -466,7 +466,7 @@ Execute in this exact order. Do not deviate.
 
 | Track | Prize | Current State | Gap | Win Probability |
 |-------|-------|---------------|-----|-----------------|
-| ArmorIQ Claw & Shield | ₹10,000 | ✅ BUILT | Minor: executor + audit UI | **HIGH** |
+| Nexus Claw & Shield | ₹10,000 | ✅ BUILT | Minor: executor + audit UI | **HIGH** |
 | MongoDB Atlas | IoT Kit × team | 🟡 90% | Switch connection string | **HIGH** (after 10 min fix) |
 | Vultr | Portable Projectors × team | 🔴 0% | Deploy to Vultr VPS | **MEDIUM** (2 hr work) |
 | Google Gemini | Google Swag Kit | 🔴 0% | Rewrite `explainer.py` | **MEDIUM** (3 hr work) |
@@ -474,4 +474,4 @@ Execute in this exact order. Do not deviate.
 
 ---
 
-> **Bottom line:** You are already winning ArmorIQ. MongoDB takes 10 minutes. Vultr takes 2 hours. Gemini takes 3 hours. All four tracks are reachable in one hackathon session. **Execute in the priority order above.**
+> **Bottom line:** You are already winning Nexus. MongoDB takes 10 minutes. Vultr takes 2 hours. Gemini takes 3 hours. All four tracks are reachable in one hackathon session. **Execute in the priority order above.**

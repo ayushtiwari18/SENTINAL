@@ -17,7 +17,7 @@ const SERVICES = [
   },
   {
     name: 'sentinal-response-engine',
-    url:  process.env.ARMORIQ_URL || 'http://localhost:8004',
+    url:  process.env.Nexus_URL || 'http://localhost:8004',
     healthPath: '/health',
   },
 ];

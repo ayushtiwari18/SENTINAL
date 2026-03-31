@@ -5,14 +5,14 @@ SENTINAL services with commercial/vendor product names.
 
 ---
 
-## Commercial ArmorIQ
+## Commercial Nexus
 
-**ArmorIQ** is the name of a commercial cybersecurity product by ArmorIQ Inc.
-This repository does NOT contain the commercial ArmorIQ product.
-References to "ArmorIQ" in older code or comments refer to the concept
+**Nexus** is the name of a commercial cybersecurity product by Nexus Inc.
+This repository does NOT contain the commercial Nexus product.
+References to "Nexus" in older code or comments refer to the concept
 that inspired the design, not the vendor product.
 
-See: https://armoriq.ai
+See: https://Nexus.ai
 
 ---
 
@@ -21,7 +21,7 @@ See: https://armoriq.ai
 ### sentinal-response-engine  (`services/sentinal-response-engine/`)
 
 This is our **custom-built** backend service. It was previously named
-`armoriq-agent` — that name has been retired to avoid confusion.
+`Nexus-agent` — that name has been retired to avoid confusion.
 
 **What it does:**
 - Receives threat context from the Detection Engine
@@ -31,13 +31,13 @@ This is our **custom-built** backend service. It was previously named
 - Queues high-risk actions for human review via the dashboard
 
 **What it is NOT:**
-- It is not the commercial ArmorIQ product
+- It is not the commercial Nexus product
 - It is not OpenClaw itself
-- It is not ArmorClaw itself
+- It is not PolicyGuard itself
 
 ---
 
-### OpenClaw  (`openclaw-armoriq-skill/`)
+### OpenClaw  (`openclaw-Nexus-skill/`)
 
 OpenClaw is the AI reasoning agent layer. It reads the SENTINAL skill
 definition (SKILL.md) and proposes a JSON action array in response to
@@ -46,16 +46,16 @@ proposes.
 
 ---
 
-### ArmorClaw  (concept, not a separate service)
+### PolicyGuard  (concept, not a separate service)
 
-ArmorClaw refers to the **guarded policy boundary** between proposed
+PolicyGuard refers to the **guarded policy boundary** between proposed
 actions and actual execution. It is implemented inside
 `sentinal-response-engine/` via `policy.yaml` and `openclaw_runtime.py`.
 
 - Actions with `risk_level: low` are executed automatically
 - Actions with `risk_level: high` are blocked and queued for human approval
 
-ArmorClaw is the concept/logic layer. It is not a separate standalone service.
+PolicyGuard is the concept/logic layer. It is not a separate standalone service.
 
 ---
 
@@ -71,8 +71,8 @@ human approves or rejects high-risk queued actions. No other component
 
 | Name | Type | Lives in |
 |---|---|---|
-| Commercial ArmorIQ | External vendor product | Not in this repo |
+| Commercial Nexus | External vendor product | Not in this repo |
 | sentinal-response-engine | Our custom backend service | `services/sentinal-response-engine/` |
-| OpenClaw | AI reasoning agent | `openclaw-armoriq-skill/` |
-| ArmorClaw | Policy enforcement concept/logic | Inside sentinal-response-engine |
+| OpenClaw | AI reasoning agent | `openclaw-Nexus-skill/` |
+| PolicyGuard | Policy enforcement concept/logic | Inside sentinal-response-engine |
 | SENTINAL Dashboard | React frontend + human approval UI | `dashboard/` |

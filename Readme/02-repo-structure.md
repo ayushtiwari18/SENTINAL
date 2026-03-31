@@ -52,7 +52,7 @@ backend/
     │   ├── logController.js
     │   ├── attackController.js
     │   ├── alertController.js
-    │   ├── armoriqController.js
+    │   ├── NexusController.js
     │   ├── pcapController.js
     │   ├── geminiController.js
     │   ├── actionController.js
@@ -74,7 +74,7 @@ backend/
     │   ├── logs.js            ← /api/logs
     │   ├── attacks.js         ← /api/attacks
     │   ├── alerts.js          ← /api/alerts
-    │   ├── armoriq.js         ← /api/armoriq  (ArmorIQ agent proxy)
+    │   ├── Nexus.js         ← /api/Nexus  (Nexus agent proxy)
     │   ├── pcap.js            ← /api/pcap     (PCAP processor proxy)
     │   ├── gemini.js          ← /api/gemini   (direct Gemini calls)
     │   ├── actions.js         ← /api/actions  (response actions)
@@ -85,7 +85,7 @@ backend/
     ├── services/              ← External service connectors
     │   ├── detectionConnector.js   ← → :8002 Detection Engine
     │   ├── pcapConnector.js        ← → :8003 PCAP Processor
-    │   ├── armoriqConnector.js     ← → :8004 ArmorIQ Agent
+    │   ├── NexusConnector.js     ← → :8004 Nexus Agent
     │   ├── responseConnector.js    ← → :8005 Response Engine
     │   └── mongoService.js         ← MongoDB CRUD helpers
     ├── sockets/               ← Socket.IO event handlers
@@ -125,7 +125,7 @@ services/
 ├── pcap-processor/            ← Network packet capture analysis  :8003
 │   └── (Python FastAPI service)
 │
-├── armoriq-agent/             ← ArmorIQ AI security agent  :8004
+├── Nexus-agent/             ← Nexus AI security agent  :8004
 │   └── blocklist.txt          ← IP/domain blocklist
 │
 ├── sentinal-response-engine/  ← OpenClaw autonomous response  :8005

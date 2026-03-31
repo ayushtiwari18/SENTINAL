@@ -19,7 +19,7 @@ import PageWrapper     from '../components/layout/PageWrapper';
 const POLL = 30000;
 
 const TYPE_COLOR = {
-  armoriq_action:  'var(--color-accent)',
+  Nexus_action:  'var(--color-accent)',
   attack_detected: 'var(--color-high)',
   service_down:    'var(--color-critical)',
   rate_limit:      'var(--color-warning)',
@@ -80,7 +80,7 @@ export default function Alerts() {
                 <span style={styles.unreadPill}>{unread} unread</span>
               )}
             </h1>
-            <p className="page-subtitle">Attack detections and ArmorIQ enforcement alerts.</p>
+            <p className="page-subtitle">Attack detections and Nexus enforcement alerts.</p>
           </div>
           {unread > 0 && (
             <div className="page-actions">
@@ -108,7 +108,7 @@ export default function Alerts() {
               onChange={e => setFilter(f => ({ ...f, type: e.target.value }))}
             >
               <option value="">All Types</option>
-              {['attack_detected','armoriq_action','service_down','rate_limit','anomaly'].map(t => (
+              {['attack_detected','Nexus_action','service_down','rate_limit','anomaly'].map(t => (
                 <option key={t} value={t}>{t}</option>
               ))}
             </select>
@@ -152,7 +152,7 @@ export default function Alerts() {
                       key={a._id}
                       style={{
                         opacity: a.isRead ? 0.5 : 1,
-                        background: a.type === 'armoriq_action' && !a.isRead
+                        background: a.type === 'Nexus_action' && !a.isRead
                           ? 'rgba(0,212,170,0.04)' : 'transparent',
                       }}
                     >

@@ -66,7 +66,7 @@ That's it. Every request is now monitored.
 ### 4. Features Grid (3 columns)
 ```
 [⚡ Real-Time Detection]   [AI Forensics]    [🛡️ Auto-Response (soon)]
-[45+ attack patterns]    [LLM explains]    [ArmorIQ agent]
+[45+ attack patterns]    [LLM explains]    [Nexus agent]
 [ML + rules engine]      [full chain]      [approve/reject]
 ```
 Using lucide-react icons.

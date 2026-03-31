@@ -21,7 +21,7 @@ GET  /api/attacks/search/stats
 
 GET   /api/alerts?limit=50
 PATCH /api/alerts/:id/read
-POST  /api/alerts/armoriq        ← ArmorIQ executor only
+POST  /api/alerts/Nexus        ← Nexus executor only
 
 GET  /api/actions/pending
 POST /api/actions/:id/approve   Body: { approvedBy: string }
@@ -30,7 +30,7 @@ POST /api/actions/:id/reject    Body: { rejectedBy: string }
 GET  /api/audit?limit=100
 POST /api/audit/ingest          ← audit_logger.py only
 
-POST /api/armoriq/trigger       Body: { ip?, attackType?, severity?, confidence?, status? }
+POST /api/Nexus/trigger       Body: { ip?, attackType?, severity?, confidence?, status? }
 POST /api/pcap/upload           multipart: field "pcap" + field "projectId"
 GET  /api/stats
 GET  /api/service-status
@@ -59,7 +59,7 @@ POST /respond
 Body: { attackId, ip, attackType, severity, status, confidence }
 
 GET  /health
-Response: { openclaw_loaded: bool, enforcement: 'ArmorClaw-v1' }
+Response: { openclaw_loaded: bool, enforcement: 'PolicyGuard-v1' }
 ```
 
 ---

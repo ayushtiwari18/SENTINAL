@@ -8,8 +8,8 @@ const EVENTS = {
   ALERT_NEW:      'alert:new',
   SERVICE_STATUS: 'service:status',
   STATS_UPDATE:   'stats:update',
-  ACTION_PENDING: 'action:pending',  // ArmorIQ blocked action awaiting human review
-  AUDIT_NEW:      'audit:new'        // ArmorIQ policy decision logged (ALLOW or BLOCK)
+  ACTION_PENDING: 'action:pending',  // Nexus blocked action awaiting human review
+  AUDIT_NEW:      'audit:new'        // Nexus policy decision logged (ALLOW or BLOCK)
 };
 
 const init = (ioInstance) => {
@@ -44,7 +44,7 @@ const init = (ioInstance) => {
     });
   });
 
-  // ArmorIQ blocked action — notify Dashboard ActionQueue
+  // Nexus blocked action — notify Dashboard ActionQueue
   emitter.on(EVENTS.ACTION_PENDING, (actionData) => {
     if (!io) return;
     io.emit(EVENTS.ACTION_PENDING, {
@@ -55,7 +55,7 @@ const init = (ioInstance) => {
     logger.info(`[BROADCAST] action:pending → ${actionData.action} for ip=${actionData.ip}`);
   });
 
-  // ArmorIQ audit decision — notify Dashboard AuditLog panel in real time
+  // Nexus audit decision — notify Dashboard AuditLog panel in real time
   emitter.on(EVENTS.AUDIT_NEW, (auditData) => {
     if (!io) return;
     io.emit(EVENTS.AUDIT_NEW, {

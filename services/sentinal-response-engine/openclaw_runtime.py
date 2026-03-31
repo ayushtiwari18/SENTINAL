@@ -1,5 +1,5 @@
 """
-OpenClaw Runtime — ArmorClaw Policy Enforcement
+OpenClaw Runtime — PolicyGuard Policy Enforcement
 ------------------------------------------------
 Implements the OpenClaw intent-boundary enforcement pattern required by
 the Claw & Shield sponsor track.
@@ -30,7 +30,7 @@ from pathlib import Path
 
 from models import IntentModel, DecisionModel
 
-logger = logging.getLogger("armoriq.openclaw")
+logger = logging.getLogger("Nexus.openclaw")
 
 POLICY_FILE = Path(__file__).parent / "policy.yaml"
 
@@ -95,7 +95,7 @@ def evaluate(intent: IntentModel) -> DecisionModel:
     policies = _load_policies()   # raises RuntimeError if policy.yaml broken
 
     proposed     = intent.proposed_action
-    enforcement  = policies.get("enforcement_level", "ArmorClaw-v1")
+    enforcement  = policies.get("enforcement_level", "PolicyGuard-v1")
 
     blocked_list = policies.get("blocked_actions", [])
     allowed_list = policies.get("allowed_actions", [])

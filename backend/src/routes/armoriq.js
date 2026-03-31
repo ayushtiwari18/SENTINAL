@@ -1,9 +1,9 @@
 /**
- * ArmorIQ Trigger Route
- * POST /api/armoriq/trigger
+ * Nexus Trigger Route
+ * POST /api/Nexus/trigger
  *
  * Creates a real SystemLog + AttackEvent in MongoDB, then triggers
- * the ArmorIQ enforcement pipeline. Does NOT require the Detection
+ * the Nexus enforcement pipeline. Does NOT require the Detection
  * Engine to be running. Use this for demos and testing.
  *
  * Body: { ip, attackType, severity, confidence, status }
@@ -63,14 +63,14 @@ const ACTION_MAP = {
 const buildSimulatedExplanation = (attackType, severity) =>
   JSON.stringify({
     summary:            `${severity.toUpperCase()} severity ${attackType.replace(/_/g, ' ')} attack detected`,
-    what_happened:      TYPE_DESCRIPTIONS[attackType] || `Simulated ${attackType} attack triggered via ArmorIQ demo route.`,
+    what_happened:      TYPE_DESCRIPTIONS[attackType] || `Simulated ${attackType} attack triggered via Nexus demo route.`,
     potential_impact:   IMPACT_MAP[severity]           || 'Impact depends on the attack type and target surface.',
-    recommended_action: ACTION_MAP[attackType]         || 'ArmorIQ will evaluate and enforce policy automatically.',
+    recommended_action: ACTION_MAP[attackType]         || 'Nexus will evaluate and enforce policy automatically.',
     rule_triggered:     'DEMO_SIMULATE',
     source:             'static',
   });
 
-// POST /api/armoriq/trigger
+// POST /api/Nexus/trigger
 router.post('/trigger', async (req, res) => {
   try {
     const {
@@ -96,21 +96,21 @@ router.post('/trigger', async (req, res) => {
       });
     }
 
-    logger.info(`[ARMORIQ-TRIGGER] Simulating ${attackType} from ${ip} (${severity})`);
+    logger.info(`[Nexus-TRIGGER] Simulating ${attackType} from ${ip} (${severity})`);
 
     // Step 1 — Create a real SystemLog so requestId has a valid ObjectId ref
     const demoLog = await SystemLog.create({
-      projectId:    'armoriq-demo',
+      projectId:    'Nexus-demo',
       method:       'GET',
       url:          `/demo/${attackType}-attack`,
       ip,
       queryParams:  {},
       body:         {},
-      headers:      { userAgent: 'armoriq-demo', contentType: '', referer: '' },
+      headers:      { userAgent: 'Nexus-demo', contentType: '', referer: '' },
       responseCode: 200
     });
 
-    // Step 2 — reportAttack saves AttackEvent + calls ArmorIQ fire-and-forget
+    // Step 2 — reportAttack saves AttackEvent + calls Nexus fire-and-forget
     const attack = await attackService.reportAttack({
       requestId:            demoLog._id,
       ip,
@@ -121,15 +121,15 @@ router.post('/trigger', async (req, res) => {
       confidence:           parseFloat(confidence) || 0.97,
       payload:              `/demo/${attackType}-attack`,
       explanation:          buildSimulatedExplanation(attackType, severity),
-      mitigationSuggestion: ACTION_MAP[attackType] || 'ArmorIQ will evaluate and enforce policy',
+      mitigationSuggestion: ACTION_MAP[attackType] || 'Nexus will evaluate and enforce policy',
       responseCode:         200
     });
 
-    logger.info(`[ARMORIQ-TRIGGER] AttackEvent created: ${attack._id}`);
+    logger.info(`[Nexus-TRIGGER] AttackEvent created: ${attack._id}`);
 
     res.status(201).json({
       success: true,
-      message: 'Attack simulated — ArmorIQ enforcement triggered',
+      message: 'Attack simulated — Nexus enforcement triggered',
       data: {
         attackId:  attack._id,
         logId:     demoLog._id,
@@ -141,7 +141,7 @@ router.post('/trigger', async (req, res) => {
       }
     });
   } catch (err) {
-    logger.error(`[ARMORIQ-TRIGGER] Error: ${err.message}`);
+    logger.error(`[Nexus-TRIGGER] Error: ${err.message}`);
     res.status(500).json({
       success: false,
       message: 'Trigger failed',

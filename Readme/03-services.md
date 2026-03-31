@@ -54,7 +54,7 @@
 | `sentinal-gateway` | Gateway API (Node :3000) |
 | `sentinal-detection` | Detection Engine (Python :8002) |
 | `sentinal-pcap` | PCAP Processor (Python :8003) |
-| `sentinal-armoriq` | SENTINAL Response Engine (Python :8004) |
+| `sentinal-Nexus` | SENTINAL Response Engine (Python :8004) |
 | `sentinal-dashboard` | React Dashboard (Vite :5173) |
 
 ---

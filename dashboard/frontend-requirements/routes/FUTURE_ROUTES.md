@@ -8,7 +8,7 @@
 
 ## Why This File Exists
 
-As features get added to the backend (ArmorIQ agent, auth, PCAP processor, rate limiting),
+As features get added to the backend (Nexus agent, auth, PCAP processor, rate limiting),
 this file tracks what frontend surfaces they will need.
 When a backend feature is ready, move it to an active route doc.
 
@@ -25,15 +25,15 @@ When a backend feature is ready, move it to an active route doc.
 
 ---
 
-### `/actions` — ArmorIQ Action Queue
-**Blocked by**: ArmorIQ agent (service 5) not built
+### `/actions` — Nexus Action Queue
+**Blocked by**: Nexus agent (service 5) not built
 **When ready**: Shows pending AI-suggested actions (block IP, rate limit, alert admin).
 **UI**: Table of action items. Each has: type, target, reason, [Approve] [Reject] buttons.
 **API**:
   - `GET /api/actions` → list pending actions
   - `POST /api/actions/:id/approve` → execute action
   - `POST /api/actions/:id/reject` → dismiss action
-**Socket**: `action:pending` event when ArmorIQ suggests a new action.
+**Socket**: `action:pending` event when Nexus suggests a new action.
 
 ---
 

@@ -1,9 +1,9 @@
-# SENTINEL — ArmorClaw Policy Definition
+# SENTINEL — PolicyGuard Policy Definition
 # Loaded by openclaw_runtime.py at startup
 # This file is the single source of truth for enforcement rules.
 
 version: "1.0"
-enforcement_level: "ArmorClaw-v1"
+enforcement_level: "PolicyGuard-v1"
 
 # -------------------------------------------------------
 # Actions the agent may execute autonomously (low risk)

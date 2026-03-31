@@ -14,9 +14,9 @@ export default function ActionQueuePage() {
 
         <div className="page-header">
           <div className="page-title-group">
-            <h1 className="page-title">ArmorIQ Action Queue</h1>
+            <h1 className="page-title">Nexus Action Queue</h1>
             <p className="page-subtitle">
-              Actions blocked by ArmorIQ policy that require human review before execution.
+              Actions blocked by Nexus policy that require human review before execution.
               Only{' '}
               <strong style={{ color: 'var(--color-critical)' }}>high-risk and critical</strong>
               {' '}actions appear here. Low-risk actions execute automatically.
@@ -28,7 +28,7 @@ export default function ActionQueuePage() {
         <div style={styles.warningBanner}>
           <span style={styles.warningIcon}>⚠️</span>
           <span>
-            These actions were proposed by ArmorIQ but{' '}
+            These actions were proposed by Nexus but{' '}
             <strong>blocked by policy</strong> before execution.
             Review carefully before approving.
           </span>

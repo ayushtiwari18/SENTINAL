@@ -168,7 +168,7 @@ def analyze(request: AnalyzeRequest):
                 )
             }
 
-            # Fire confirmed threat to ArmorIQ (background, non-blocking)
+            # Fire confirmed threat to Nexus (background, non-blocking)
             fire_alert_background(None, {
                 "logId":               request.logId,
                 "ip":                  request.ip,

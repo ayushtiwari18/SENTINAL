@@ -28,7 +28,7 @@ const FEATURES = [
   },
   {
     icon: <IconShield />,
-    title: 'ArmorIQ Auto-Response',
+    title: 'Nexus Auto-Response',
     desc: 'AI agent blocks threats automatically. Human-in-the-loop approval queue ensures zero false-positive actions.',
   },
   {
@@ -44,7 +44,7 @@ const FEATURES = [
   {
     icon: <IconFile />,
     title: 'Audit Trail',
-    desc: 'Immutable, timestamped log of every automated and manual action taken by ArmorIQ. Compliance-ready.',
+    desc: 'Immutable, timestamped log of every automated and manual action taken by Nexus. Compliance-ready.',
   },
   {
     icon: <IconList />,

@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "SENTINAL — Complete API + Attack Test Collection",
-    "description": "Production-verified Postman collection for all SENTINAL services.\n\nServices covered:\n- Gateway API (:3000)\n- Detection Engine (:8002)\n- PCAP Processor (:8003)\n- ArmorIQ Agent (:8004)\n\nIncludes: health checks, normal flows, and controlled attack simulations for each service.\n\nBase URL variable: {{base}} = http://<YOUR_EC2_IP>:3000\nSet in Postman Environment: SENTINAL Production",
+    "description": "Production-verified Postman collection for all SENTINAL services.\n\nServices covered:\n- Gateway API (:3000)\n- Detection Engine (:8002)\n- PCAP Processor (:8003)\n- Nexus Agent (:8004)\n\nIncludes: health checks, normal flows, and controlled attack simulations for each service.\n\nBase URL variable: {{base}} = http://<YOUR_EC2_IP>:3000\nSet in Postman Environment: SENTINAL Production",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
     "version": "1.1.0"
   },
@@ -9,7 +9,7 @@
     { "key": "base",            "value": "http://98.94.36.226:3000", "type": "string" },
     { "key": "detection",       "value": "http://98.94.36.226:8002", "type": "string" },
     { "key": "pcap",            "value": "http://98.94.36.226:8003", "type": "string" },
-    { "key": "armoriq",         "value": "http://98.94.36.226:8004", "type": "string" },
+    { "key": "Nexus",         "value": "http://98.94.36.226:8004", "type": "string" },
     { "key": "attackId",        "value": "",                        "type": "string" },
     { "key": "pendingActionId", "value": "",                        "type": "string" }
   ],
@@ -60,15 +60,15 @@
           }]
         },
         {
-          "name": "ArmorIQ Agent Health",
+          "name": "Nexus Agent Health",
           "request": {
             "method": "GET",
-            "url": { "raw": "{{armoriq}}/health", "host": ["{{armoriq}}"], "path": ["health"] }
+            "url": { "raw": "{{Nexus}}/health", "host": ["{{Nexus}}"], "path": ["health"] }
           },
           "event": [{
             "listen": "test",
             "script": { "exec": [
-              "pm.test('ArmorIQ online', () => pm.response.to.have.status(200));",
+              "pm.test('Nexus online', () => pm.response.to.have.status(200));",
               "pm.test('OpenClaw loaded', () => { const b = pm.response.json(); pm.expect(b.openclaw_loaded).to.be.true; });"
             ]}
           }]
@@ -225,7 +225,7 @@
 
     {
       "name": "02 — Gateway API — Attack Simulations",
-      "description": "Controlled attack payloads sent to /api/logs/ingest. Each triggers the full pipeline: Detection → ArmorIQ → Dashboard.",
+      "description": "Controlled attack payloads sent to /api/logs/ingest. Each triggers the full pipeline: Detection → Nexus → Dashboard.",
       "item": [
         {
           "name": "[ATTACK] SQL Injection — Login Body",
@@ -379,15 +379,15 @@
     },
 
     {
-      "name": "03 — ArmorIQ Agent — Direct Enforcement Tests",
-      "description": "Test ArmorIQ's OpenClaw enforcement engine directly on :8004.\n\nALLOW: medium/low severity → safe actions auto-execute (actionsExecuted array of strings).\nBLOCK: critical/high severity → dangerous actions queued (actionsQueued array of objects with .action field).\n\nNOTE: actionsExecuted = array of action name strings.\nactionsQueued = array of objects: [{ action, status, reason, ... }]",
+      "name": "03 — Nexus Agent — Direct Enforcement Tests",
+      "description": "Test Nexus's OpenClaw enforcement engine directly on :8004.\n\nALLOW: medium/low severity → safe actions auto-execute (actionsExecuted array of strings).\nBLOCK: critical/high severity → dangerous actions queued (actionsQueued array of objects with .action field).\n\nNOTE: actionsExecuted = array of action name strings.\nactionsQueued = array of objects: [{ action, status, reason, ... }]",
       "item": [
         {
           "name": "[ALLOW] SQLi Medium — Auto-Execute Safe Actions",
           "request": {
             "method": "POST",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": { "raw": "{{armoriq}}/respond", "host": ["{{armoriq}}"], "path": ["respond"] },
+            "url": { "raw": "{{Nexus}}/respond", "host": ["{{Nexus}}"], "path": ["respond"] },
             "body": {
               "mode": "raw",
               "raw": "{\n  \"attackId\": \"test-allow-sqli\",\n  \"ip\": \"5.5.5.5\",\n  \"attackType\": \"sqli\",\n  \"severity\": \"medium\",\n  \"confidence\": 0.90,\n  \"status\": \"attempt\"\n}"
@@ -396,7 +396,7 @@
           "event": [{
             "listen": "test",
             "script": { "exec": [
-              "pm.test('ArmorIQ responded 200', () => pm.response.to.have.status(200));",
+              "pm.test('Nexus responded 200', () => pm.response.to.have.status(200));",
               "const b = pm.response.json();",
               "console.log('actionsExecuted:', JSON.stringify(b.actionsExecuted));",
               "pm.test('Has actionsExecuted array', () => pm.expect(b.actionsExecuted).to.be.an('array'));",
@@ -410,7 +410,7 @@
           "request": {
             "method": "POST",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": { "raw": "{{armoriq}}/respond", "host": ["{{armoriq}}"], "path": ["respond"] },
+            "url": { "raw": "{{Nexus}}/respond", "host": ["{{Nexus}}"], "path": ["respond"] },
             "body": {
               "mode": "raw",
               "raw": "{\n  \"attackId\": \"test-allow-xss\",\n  \"ip\": \"5.5.5.6\",\n  \"attackType\": \"xss\",\n  \"severity\": \"low\",\n  \"confidence\": 0.75,\n  \"status\": \"attempt\"\n}"
@@ -419,7 +419,7 @@
           "event": [{
             "listen": "test",
             "script": { "exec": [
-              "pm.test('ArmorIQ responded 200', () => pm.response.to.have.status(200));",
+              "pm.test('Nexus responded 200', () => pm.response.to.have.status(200));",
               "pm.test('Has actionsExecuted', () => pm.expect(pm.response.json().actionsExecuted).to.be.an('array'));"
             ]}
           }]
@@ -429,7 +429,7 @@
           "request": {
             "method": "POST",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": { "raw": "{{armoriq}}/respond", "host": ["{{armoriq}}"], "path": ["respond"] },
+            "url": { "raw": "{{Nexus}}/respond", "host": ["{{Nexus}}"], "path": ["respond"] },
             "body": {
               "mode": "raw",
               "raw": "{\n  \"attackId\": \"test-block-bruteforce\",\n  \"ip\": \"6.6.6.6\",\n  \"attackType\": \"brute_force\",\n  \"severity\": \"critical\",\n  \"confidence\": 0.97,\n  \"status\": \"successful\"\n}"
@@ -438,7 +438,7 @@
           "event": [{
             "listen": "test",
             "script": { "exec": [
-              "pm.test('ArmorIQ responded 200', () => pm.response.to.have.status(200));",
+              "pm.test('Nexus responded 200', () => pm.response.to.have.status(200));",
               "const b = pm.response.json();",
               "console.log('actionsQueued:', JSON.stringify(b.actionsQueued));",
               "pm.test('Has actionsQueued array', () => pm.expect(b.actionsQueued).to.be.an('array'));",
@@ -455,7 +455,7 @@
           "request": {
             "method": "POST",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": { "raw": "{{armoriq}}/respond", "host": ["{{armoriq}}"], "path": ["respond"] },
+            "url": { "raw": "{{Nexus}}/respond", "host": ["{{Nexus}}"], "path": ["respond"] },
             "body": {
               "mode": "raw",
               "raw": "{\n  \"attackId\": \"test-block-sqli-critical\",\n  \"ip\": \"7.7.7.7\",\n  \"attackType\": \"sqli\",\n  \"severity\": \"critical\",\n  \"confidence\": 0.99,\n  \"status\": \"successful\"\n}"
@@ -464,7 +464,7 @@
           "event": [{
             "listen": "test",
             "script": { "exec": [
-              "pm.test('ArmorIQ responded 200', () => pm.response.to.have.status(200));",
+              "pm.test('Nexus responded 200', () => pm.response.to.have.status(200));",
               "pm.test('Actions queued for critical', () => pm.expect(pm.response.json().actionsQueued).to.be.an('array'));"
             ]}
           }]
@@ -474,7 +474,7 @@
           "request": {
             "method": "POST",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": { "raw": "{{armoriq}}/respond", "host": ["{{armoriq}}"], "path": ["respond"] },
+            "url": { "raw": "{{Nexus}}/respond", "host": ["{{Nexus}}"], "path": ["respond"] },
             "body": {
               "mode": "raw",
               "raw": "{\n  \"attackId\": \"test-block-cmdinject\",\n  \"ip\": \"8.8.8.100\",\n  \"attackType\": \"command_injection\",\n  \"severity\": \"high\",\n  \"confidence\": 0.95,\n  \"status\": \"attempt\"\n}"
@@ -483,7 +483,7 @@
           "event": [{
             "listen": "test",
             "script": { "exec": [
-              "pm.test('ArmorIQ responded 200', () => pm.response.to.have.status(200));"
+              "pm.test('Nexus responded 200', () => pm.response.to.have.status(200));"
             ]}
           }]
         }
@@ -491,15 +491,15 @@
     },
 
     {
-      "name": "04 — Gateway API — ArmorIQ Trigger (Full Pipeline)",
-      "description": "Use /api/armoriq/trigger to fire the full attack pipeline through the Gateway.\nThis creates AttackEvent + Alert + calls ArmorIQ — all 4 socket events fire.\nNOTE: /api/armoriq/trigger returns HTTP 201 (not 200) — attack record created.",
+      "name": "04 — Gateway API — Nexus Trigger (Full Pipeline)",
+      "description": "Use /api/Nexus/trigger to fire the full attack pipeline through the Gateway.\nThis creates AttackEvent + Alert + calls Nexus — all 4 socket events fire.\nNOTE: /api/Nexus/trigger returns HTTP 201 (not 200) — attack record created.",
       "item": [
         {
           "name": "[TRIGGER] XSS High — Full Pipeline",
           "request": {
             "method": "POST",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": { "raw": "{{base}}/api/armoriq/trigger", "host": ["{{base}}"], "path": ["api", "armoriq", "trigger"] },
+            "url": { "raw": "{{base}}/api/Nexus/trigger", "host": ["{{base}}"], "path": ["api", "Nexus", "trigger"] },
             "body": {
               "mode": "raw",
               "raw": "{\n  \"ip\": \"10.0.0.55\",\n  \"attackType\": \"xss\",\n  \"severity\": \"high\",\n  \"confidence\": 0.88,\n  \"status\": \"attempt\"\n}"
@@ -519,7 +519,7 @@
           "request": {
             "method": "POST",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": { "raw": "{{base}}/api/armoriq/trigger", "host": ["{{base}}"], "path": ["api", "armoriq", "trigger"] },
+            "url": { "raw": "{{base}}/api/Nexus/trigger", "host": ["{{base}}"], "path": ["api", "Nexus", "trigger"] },
             "body": {
               "mode": "raw",
               "raw": "{\n  \"ip\": \"203.0.113.99\",\n  \"attackType\": \"brute_force\",\n  \"severity\": \"critical\",\n  \"confidence\": 0.97,\n  \"status\": \"successful\"\n}"
@@ -539,7 +539,7 @@
           "request": {
             "method": "POST",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": { "raw": "{{base}}/api/armoriq/trigger", "host": ["{{base}}"], "path": ["api", "armoriq", "trigger"] },
+            "url": { "raw": "{{base}}/api/Nexus/trigger", "host": ["{{base}}"], "path": ["api", "Nexus", "trigger"] },
             "body": {
               "mode": "raw",
               "raw": "{\n  \"ip\": \"203.0.113.77\",\n  \"attackType\": \"sqli\",\n  \"severity\": \"critical\",\n  \"confidence\": 0.99,\n  \"status\": \"successful\"\n}"
@@ -817,7 +817,7 @@
           "request": {
             "method": "POST",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "url": { "raw": "{{base}}/api/armoriq/trigger", "host": ["{{base}}"], "path": ["api", "armoriq", "trigger"] },
+            "url": { "raw": "{{base}}/api/Nexus/trigger", "host": ["{{base}}"], "path": ["api", "Nexus", "trigger"] },
             "body": {
               "mode": "raw",
               "raw": "{\n  \"ip\": \"203.0.113.99\",\n  \"attackType\": \"brute_force\",\n  \"severity\": \"critical\",\n  \"confidence\": 0.97,\n  \"status\": \"successful\"\n}"

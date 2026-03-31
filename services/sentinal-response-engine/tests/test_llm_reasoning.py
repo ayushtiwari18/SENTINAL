@@ -117,7 +117,7 @@ def test_blocked_action(critical_ctx):
     """
     permanent_ban_ip is on the blocked_actions list in policy.yaml.
     openclaw_runtime must return BLOCK with RULE_001.
-    This proves ArmorClaw enforcement is working.
+    This proves PolicyGuard enforcement is working.
     """
     intent = IntentModel(
         attack_context=critical_ctx,
@@ -233,7 +233,7 @@ def test_demo_scenario(critical_ctx):
     → Policy BLOCKS it (RULE_002: critical risk)
     → Audit log entry has all required fields
 
-    This is the exact ArmorIQ sponsor track narrative.
+    This is the exact Nexus sponsor track narrative.
     """
     # Simulate what LLM would propose for a critical successful attack
     shutdown_intent = IntentModel(
@@ -250,7 +250,7 @@ def test_demo_scenario(critical_ctx):
     # Policy MUST block it
     decision = openclaw_runtime.evaluate(shutdown_intent)
     assert decision.decision == "BLOCK", (
-        "DEMO FAILED: shutdown_endpoint must be BLOCKED by ArmorClaw"
+        "DEMO FAILED: shutdown_endpoint must be BLOCKED by PolicyGuard"
     )
 
     # The decision must have full audit fields
@@ -266,6 +266,6 @@ def test_demo_scenario(critical_ctx):
 
     print(f"\n[DEMO] Attack: {critical_ctx.attackType} from {critical_ctx.ip}")
     print(f"[DEMO] LLM proposed: shutdown_endpoint (risk=critical)")
-    print(f"[DEMO] ArmorClaw decision: {decision.decision} (rule={decision.policy_rule_id})")
+    print(f"[DEMO] PolicyGuard decision: {decision.decision} (rule={decision.policy_rule_id})")
     print(f"[DEMO] Reason: {decision.reason}")
     print(f"[DEMO] Audit: intent_id={decision.intent_id[:8]}... enforcement={decision.enforcement_level}")

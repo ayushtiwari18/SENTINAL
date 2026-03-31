@@ -2,7 +2,7 @@
 	"info": {
 		"_postman_id": "39541497-7df66b3d-6d86-494c-9ba7-b3b943d50de3",
 		"name": "SENTINAL — Complete API + Attack Test Collection",
-		"description": "Production-verified Postman collection for all SENTINAL services.\n\nServices covered:\n\n- Gateway API (:3000)\n    \n- Detection Engine (:8002)\n    \n- PCAP Processor (:8003)\n    \n- ArmorIQ Agent (:8004)\n    \n\nIncludes: health checks, normal flows, and controlled attack simulations for each service.\n\nBase URL variable: {{base}} = [http://98.82.8.144:3000](http://98.82.8.144:3000)  \nSet in Postman Environment.",
+		"description": "Production-verified Postman collection for all SENTINAL services.\n\nServices covered:\n\n- Gateway API (:3000)\n    \n- Detection Engine (:8002)\n    \n- PCAP Processor (:8003)\n    \n- Nexus Agent (:8004)\n    \n\nIncludes: health checks, normal flows, and controlled attack simulations for each service.\n\nBase URL variable: {{base}} = [http://98.82.8.144:3000](http://98.82.8.144:3000)  \nSet in Postman Environment.",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
 	},
 	"item": [
@@ -110,13 +110,13 @@
 					"response": []
 				},
 				{
-					"name": "ArmorIQ Agent Health",
+					"name": "Nexus Agent Health",
 					"event": [
 						{
 							"listen": "test",
 							"script": {
 								"exec": [
-									"pm.test('ArmorIQ online', () => pm.response.to.have.status(200));",
+									"pm.test('Nexus online', () => pm.response.to.have.status(200));",
 									"pm.test('OpenClaw loaded', () => { const b = pm.response.json(); pm.expect(b.openclaw_loaded).to.be.true; });"
 								],
 								"type": "text/javascript",
@@ -132,9 +132,9 @@
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "{{armoriq}}/health",
+							"raw": "{{Nexus}}/health",
 							"host": [
-								"{{armoriq}}"
+								"{{Nexus}}"
 							],
 							"path": [
 								"health"
@@ -867,10 +867,10 @@
 				}
 			],
 			"id": "39541497-f6dafcc9-8f9f-432c-aa86-02660ca9a5fe",
-			"description": "Controlled attack payloads sent to /api/logs/ingest. Each triggers the full pipeline: Detection → ArmorIQ → Dashboard."
+			"description": "Controlled attack payloads sent to /api/logs/ingest. Each triggers the full pipeline: Detection → Nexus → Dashboard."
 		},
 		{
-			"name": "03 — ArmorIQ Agent — Direct Enforcement Tests",
+			"name": "03 — Nexus Agent — Direct Enforcement Tests",
 			"item": [
 				{
 					"name": "[ALLOW] SQLi Medium — Auto-Execute Safe Actions",
@@ -879,7 +879,7 @@
 							"listen": "test",
 							"script": {
 								"exec": [
-									"pm.test('ArmorIQ responded 200', () => pm.response.to.have.status(200));",
+									"pm.test('Nexus responded 200', () => pm.response.to.have.status(200));",
 									"const b = pm.response.json();",
 									"pm.test('Has actionsExecuted', () => pm.expect(b).to.have.property('actionsExecuted'));",
 									"pm.test('send_alert executed', () => pm.expect(b.actionsExecuted).to.include('send_alert'));",
@@ -907,9 +907,9 @@
 							"raw": "{\n  \"attackId\": \"test-allow-sqli\",\n  \"ip\": \"5.5.5.5\",\n  \"attackType\": \"sqli\",\n  \"severity\": \"medium\",\n  \"confidence\": 0.90,\n  \"status\": \"attempt\"\n}"
 						},
 						"url": {
-							"raw": "{{armoriq}}/respond",
+							"raw": "{{Nexus}}/respond",
 							"host": [
-								"{{armoriq}}"
+								"{{Nexus}}"
 							],
 							"path": [
 								"respond"
@@ -925,7 +925,7 @@
 							"listen": "test",
 							"script": {
 								"exec": [
-									"pm.test('ArmorIQ responded 200', () => pm.response.to.have.status(200));"
+									"pm.test('Nexus responded 200', () => pm.response.to.have.status(200));"
 								],
 								"type": "text/javascript",
 								"id": "4421738d-413e-45e2-82db-9cc9d278c07e"
@@ -949,9 +949,9 @@
 							"raw": "{\n  \"attackId\": \"test-allow-xss\",\n  \"ip\": \"5.5.5.6\",\n  \"attackType\": \"xss\",\n  \"severity\": \"low\",\n  \"confidence\": 0.75,\n  \"status\": \"attempt\"\n}"
 						},
 						"url": {
-							"raw": "{{armoriq}}/respond",
+							"raw": "{{Nexus}}/respond",
 							"host": [
-								"{{armoriq}}"
+								"{{Nexus}}"
 							],
 							"path": [
 								"respond"
@@ -967,7 +967,7 @@
 							"listen": "test",
 							"script": {
 								"exec": [
-									"pm.test('ArmorIQ responded 200', () => pm.response.to.have.status(200));",
+									"pm.test('Nexus responded 200', () => pm.response.to.have.status(200));",
 									"const b = pm.response.json();",
 									"pm.test('Has actionsQueued (BLOCKED)', () => pm.expect(b).to.have.property('actionsQueued'));",
 									"pm.test('permanent_ban_ip blocked', () => pm.expect(b.actionsQueued).to.include('permanent_ban_ip'));",
@@ -995,9 +995,9 @@
 							"raw": "{\n  \"attackId\": \"test-block-bruteforce\",\n  \"ip\": \"6.6.6.6\",\n  \"attackType\": \"brute_force\",\n  \"severity\": \"critical\",\n  \"confidence\": 0.97,\n  \"status\": \"successful\"\n}"
 						},
 						"url": {
-							"raw": "{{armoriq}}/respond",
+							"raw": "{{Nexus}}/respond",
 							"host": [
-								"{{armoriq}}"
+								"{{Nexus}}"
 							],
 							"path": [
 								"respond"
@@ -1013,7 +1013,7 @@
 							"listen": "test",
 							"script": {
 								"exec": [
-									"pm.test('ArmorIQ responded 200', () => pm.response.to.have.status(200));",
+									"pm.test('Nexus responded 200', () => pm.response.to.have.status(200));",
 									"pm.test('Actions queued for critical', () => pm.expect(pm.response.json()).to.have.property('actionsQueued'));"
 								],
 								"type": "text/javascript",
@@ -1038,9 +1038,9 @@
 							"raw": "{\n  \"attackId\": \"test-block-sqli-critical\",\n  \"ip\": \"7.7.7.7\",\n  \"attackType\": \"sqli\",\n  \"severity\": \"critical\",\n  \"confidence\": 0.99,\n  \"status\": \"successful\"\n}"
 						},
 						"url": {
-							"raw": "{{armoriq}}/respond",
+							"raw": "{{Nexus}}/respond",
 							"host": [
-								"{{armoriq}}"
+								"{{Nexus}}"
 							],
 							"path": [
 								"respond"
@@ -1056,7 +1056,7 @@
 							"listen": "test",
 							"script": {
 								"exec": [
-									"pm.test('ArmorIQ responded 200', () => pm.response.to.have.status(200));"
+									"pm.test('Nexus responded 200', () => pm.response.to.have.status(200));"
 								],
 								"type": "text/javascript",
 								"id": "c122bef2-6014-4ec0-8c77-daf37988af73"
@@ -1080,9 +1080,9 @@
 							"raw": "{\n  \"attackId\": \"test-block-cmdinject\",\n  \"ip\": \"8.8.8.100\",\n  \"attackType\": \"command_injection\",\n  \"severity\": \"high\",\n  \"confidence\": 0.95,\n  \"status\": \"attempt\"\n}"
 						},
 						"url": {
-							"raw": "{{armoriq}}/respond",
+							"raw": "{{Nexus}}/respond",
 							"host": [
-								"{{armoriq}}"
+								"{{Nexus}}"
 							],
 							"path": [
 								"respond"
@@ -1093,10 +1093,10 @@
 				}
 			],
 			"id": "39541497-9a1b24dc-e6c2-4680-abc4-5197de47a1df",
-			"description": "Test ArmorIQ's OpenClaw enforcement engine directly on :8004.\nALLOW tests: medium/low severity → safe actions auto-execute.\nBLOCK tests: critical/high severity → dangerous actions queued."
+			"description": "Test Nexus's OpenClaw enforcement engine directly on :8004.\nALLOW tests: medium/low severity → safe actions auto-execute.\nBLOCK tests: critical/high severity → dangerous actions queued."
 		},
 		{
-			"name": "04 — Gateway API — ArmorIQ Trigger (Full Pipeline)",
+			"name": "04 — Gateway API — Nexus Trigger (Full Pipeline)",
 			"item": [
 				{
 					"name": "[TRIGGER] XSS High — Full Pipeline",
@@ -1130,13 +1130,13 @@
 							"raw": "{\n  \"ip\": \"10.0.0.55\",\n  \"attackType\": \"xss\",\n  \"severity\": \"high\",\n  \"confidence\": 0.88,\n  \"status\": \"attempt\"\n}"
 						},
 						"url": {
-							"raw": "{{base}}/api/armoriq/trigger",
+							"raw": "{{base}}/api/Nexus/trigger",
 							"host": [
 								"{{base}}"
 							],
 							"path": [
 								"api",
-								"armoriq",
+								"Nexus",
 								"trigger"
 							]
 						}
@@ -1174,13 +1174,13 @@
 							"raw": "{\n  \"ip\": \"203.0.113.99\",\n  \"attackType\": \"brute_force\",\n  \"severity\": \"critical\",\n  \"confidence\": 0.97,\n  \"status\": \"successful\"\n}"
 						},
 						"url": {
-							"raw": "{{base}}/api/armoriq/trigger",
+							"raw": "{{base}}/api/Nexus/trigger",
 							"host": [
 								"{{base}}"
 							],
 							"path": [
 								"api",
-								"armoriq",
+								"Nexus",
 								"trigger"
 							]
 						}
@@ -1218,13 +1218,13 @@
 							"raw": "{\n  \"ip\": \"203.0.113.77\",\n  \"attackType\": \"sqli\",\n  \"severity\": \"critical\",\n  \"confidence\": 0.99,\n  \"status\": \"successful\"\n}"
 						},
 						"url": {
-							"raw": "{{base}}/api/armoriq/trigger",
+							"raw": "{{base}}/api/Nexus/trigger",
 							"host": [
 								"{{base}}"
 							],
 							"path": [
 								"api",
-								"armoriq",
+								"Nexus",
 								"trigger"
 							]
 						}
@@ -1233,7 +1233,7 @@
 				}
 			],
 			"id": "39541497-ce395670-5328-46fb-a356-8f123692daec",
-			"description": "Use /api/armoriq/trigger to fire the full attack pipeline through the Gateway.\nThis creates AttackEvent + Alert + calls ArmorIQ — all 4 socket events fire."
+			"description": "Use /api/Nexus/trigger to fire the full attack pipeline through the Gateway.\nThis creates AttackEvent + Alert + calls Nexus — all 4 socket events fire."
 		},
 		{
 			"name": "05 — Action Queue — Human Approval Workflow",
@@ -1806,13 +1806,13 @@
 							"raw": "{\n  \"ip\": \"203.0.113.99\",\n  \"attackType\": \"brute_force\",\n  \"severity\": \"critical\",\n  \"confidence\": 0.97,\n  \"status\": \"successful\"\n}"
 						},
 						"url": {
-							"raw": "{{base}}/api/armoriq/trigger",
+							"raw": "{{base}}/api/Nexus/trigger",
 							"host": [
 								"{{base}}"
 							],
 							"path": [
 								"api",
-								"armoriq",
+								"Nexus",
 								"trigger"
 							]
 						}
@@ -1962,7 +1962,7 @@
 			"type": "string"
 		},
 		{
-			"key": "armoriq",
+			"key": "Nexus",
 			"value": "http://98.82.8.144:8004",
 			"type": "string"
 		},

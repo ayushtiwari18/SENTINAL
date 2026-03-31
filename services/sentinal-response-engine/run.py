@@ -5,7 +5,7 @@ Usage:
   python run.py
   # or via PM2 / shell script
 
-Reads ARMORIQ_PORT and HOST from the root .env file.
+Reads Nexus_PORT and HOST from the root .env file.
 """
 import os
 import uvicorn
@@ -18,11 +18,11 @@ load_dotenv(dotenv_path=_env_path, override=False)
 
 if __name__ == "__main__":
     host = os.getenv("HOST", "0.0.0.0")
-    port = int(os.getenv("ARMORIQ_PORT", "8004"))
+    port = int(os.getenv("Nexus_PORT", "8004"))
     log_level = os.getenv("LOG_LEVEL", "info").lower()
 
-    print(f"[ARMORIQ] Starting on {host}:{port}")
-    print(f"[ARMORIQ] Root .env: {_env_path} (exists={_env_path.exists()})")
+    print(f"[Nexus] Starting on {host}:{port}")
+    print(f"[Nexus] Root .env: {_env_path} (exists={_env_path.exists()})")
 
     uvicorn.run(
         "main:app",

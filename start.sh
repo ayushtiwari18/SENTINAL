@@ -78,7 +78,7 @@ set +a
 GATEWAY_PORT="${GATEWAY_PORT:-3000}"
 DETECTION_PORT="${DETECTION_PORT:-8002}"
 PCAP_PORT="${PCAP_PORT:-8003}"
-ARMORIQ_PORT="${ARMORIQ_PORT:-8004}"
+Nexus_PORT="${Nexus_PORT:-8004}"
 
 # ── 3. Create logs directory ───────────────────────────────────────────────────────
 log "Ensuring logs/ directory exists..."
@@ -131,14 +131,14 @@ healthcheck() {
 healthcheck "Gateway    " "http://localhost:${GATEWAY_PORT}/health"
 healthcheck "Detection  " "http://localhost:${DETECTION_PORT}/health"
 healthcheck "PCAP       " "http://localhost:${PCAP_PORT}/health"
-healthcheck "ArmorIQ    " "http://localhost:${ARMORIQ_PORT}/health"
+healthcheck "Nexus    " "http://localhost:${Nexus_PORT}/health"
 
 echo ""
 log "Service log files:"
 echo "  Gateway   : ${LOGS_DIR}/gateway.out.log"
 echo "  Detection : ${LOGS_DIR}/detection.out.log"
 echo "  PCAP      : ${LOGS_DIR}/pcap.out.log"
-echo "  ArmorIQ   : ${LOGS_DIR}/armoriq.out.log"
+echo "  Nexus   : ${LOGS_DIR}/Nexus.out.log"
 echo ""
 log "Useful PM2 commands:"
 echo -e "  ${CYAN}pm2 logs${RESET}                   tail all logs"

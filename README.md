@@ -27,15 +27,15 @@ https://raw.githubusercontent.com/ayushtiwari18/SENTINAL/main/SENTINAL_Postman_C
 | `base` | `http://<YOUR_EC2_IP>:3000` |
 | `detection` | `http://<YOUR_EC2_IP>:8002` |
 | `pcap` | `http://<YOUR_EC2_IP>:8003` |
-| `armoriq` | `http://<YOUR_EC2_IP>:8004` | (sentinal-response-engine)
+| `Nexus` | `http://<YOUR_EC2_IP>:8004` | (sentinal-response-engine)
 
-> The collection includes 40+ requests across 8 folders: health checks, attack simulations, ArmorIQ enforcement tests, full pipeline triggers, human approval workflow, and an end-to-end demo sequence.
+> The collection includes 40+ requests across 8 folders: health checks, attack simulations, Nexus enforcement tests, full pipeline triggers, human approval workflow, and an end-to-end demo sequence.
 
 ---
 
 ## Overview
 
-SENTINAL is a microservices-based security layer that wraps any Express.js application. It captures HTTP metadata, runs it through a multi-layer detection engine (rule-based + adversarial decoder), surfaces threats in a live React dashboard, and triggers autonomous remediation via the ArmorIQ agent.
+SENTINAL is a microservices-based security layer that wraps any Express.js application. It captures HTTP metadata, runs it through a multi-layer detection engine (rule-based + adversarial decoder), surfaces threats in a live React dashboard, and triggers autonomous remediation via the Nexus agent.
 
 ---
 
@@ -89,7 +89,7 @@ User Traffic
 - **Python** ≥ 3.10 — [python.org](https://python.org)
 - **PM2** — `npm install -g pm2`
 - **MongoDB Atlas** free cluster — [mongodb.com/atlas](https://www.mongodb.com/cloud/atlas/register)
-- **Google Gemini API Key** *(optional — for ArmorIQ AI decisions)* — [aistudio.google.com](https://aistudio.google.com/app/apikey)
+- **Google Gemini API Key** *(optional — for Nexus AI decisions)* — [aistudio.google.com](https://aistudio.google.com/app/apikey)
 
 ---
 
@@ -337,13 +337,13 @@ SENTINAL/
 | GET | `/api/attacks/recent` | Last 20 attack events |
 | GET | `/api/attacks/search?q=` | Full-text search attacks |
 | GET | `/api/attacks/:id/forensics` | Full forensic report for an attack |
-| POST | `/api/armoriq/trigger` | Manually trigger full attack pipeline (returns 201) |
+| POST | `/api/Nexus/trigger` | Manually trigger full attack pipeline (returns 201) |
 | GET | `/api/stats` | Aggregate platform stats |
 | GET | `/api/service-status` | Health of all microservices |
 | GET | `/api/alerts` | Alert feed |
 | PATCH | `/api/alerts/:id/read` | Mark an alert as read |
 | POST | `/api/pcap/upload` | Upload `.pcap` / `.pcapng` for analysis |
-| GET | `/api/audit` | Audit log of ArmorIQ decisions |
+| GET | `/api/audit` | Audit log of Nexus decisions |
 | GET | `/api/actions/pending` | Pending human-approval actions |
 | POST | `/api/actions/:id/approve` | Approve a blocked action (HUMAN_OVERRIDE) |
 | POST | `/api/actions/:id/reject` | Reject a blocked action |
@@ -390,11 +390,11 @@ See [`.env.example`](.env.example) for the full annotated list.
 | `GATEWAY_PORT` | ✅ | Express Gateway port (default: 3000) |
 | `DETECTION_PORT` | ✅ | Detection Engine port (default: 8002) |
 | `PCAP_PORT` | ✅ | PCAP Processor port (default: 8003) |
-| `ARMORIQ_PORT` | ✅ | SENTINAL Response Engine port (default: 8004) |
+| `Nexus_PORT` | ✅ | SENTINAL Response Engine port (default: 8004) |
 | `JWT_SECRET` | ✅ | JWT signing secret (min 32 chars) |
 | `DETECTION_URL` | ✅ | Internal URL of Detection Engine |
 | `PCAP_URL` | ✅ | Internal URL of PCAP Processor |
-| `ARMORIQ_URL` | ✅ | Internal URL of SENTINAL Response Engine |
+| `Nexus_URL` | ✅ | Internal URL of SENTINAL Response Engine |
 | `GATEWAY_URL` | ✅ | Gateway URL (used by SENTINAL Response Engine to call back) |
 | `GEMINI_API_KEY` | ⚠️ | Google Gemini key for SENTINAL Response Engine AI decisions |
 | `NODE_ENV` | ⚠️ | `development` \| `production` \| `test` |

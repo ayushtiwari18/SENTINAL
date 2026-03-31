@@ -2,7 +2,7 @@
 
 Standalone microservice that ingests `.pcap` / `.pcapng` network capture files,
 parses every packet, reconstructs flows, and runs rule-based attack detection —
-independent of the ArmorIQ backend and frontend.
+independent of the Nexus backend and frontend.
 
 ## Architecture
 

@@ -3,7 +3,7 @@ const logger   = require('../utils/logger');
 const emitter  = require('../utils/eventEmitter');
 const { EVENTS } = require('../sockets/broadcastService');
 
-// POST /api/audit/ingest  — called by ArmorIQ agent
+// POST /api/audit/ingest  — called by Nexus agent
 const ingestAudit = async (req, res) => {
   try {
     const {
@@ -38,7 +38,7 @@ const ingestAudit = async (req, res) => {
       status:            normStatus,
       reason:            reason            || '',
       policy_rule_id:    policy_rule_id    || '',
-      enforcement_level: enforcement_level || 'ArmorIQ-Policy-v1',
+      enforcement_level: enforcement_level || 'Nexus-Policy-v1',
       triggeredBy:       triggeredBy       || 'agent',
       ip:                ip                || '',
       attackId:          attackId          ? String(attackId) : null,

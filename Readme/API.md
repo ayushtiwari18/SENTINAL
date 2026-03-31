@@ -15,7 +15,7 @@
 | `/api/logs` | Request logs | `routes/logs.js` |
 | `/api/attacks` | Attack events | `routes/attacks.js` |
 | `/api/alerts` | Alerts | `routes/alerts.js` |
-| `/api/armoriq` | ArmorIQ AI agent | `routes/armoriq.js` |
+| `/api/Nexus` | Nexus AI agent | `routes/Nexus.js` |
 | `/api/pcap` | PCAP / forensics upload | `routes/pcap.js` |
 | `/api/gemini` | Direct Gemini AI | `routes/gemini.js` |
 | `/api/actions` | Response actions | `routes/actions.js` |
@@ -154,11 +154,11 @@ Called by the SDK snippet embedded in the target app. This is the **primary inge
 
 ---
 
-## ArmorIQ Agent — `/api/armoriq`
+## Nexus Agent — `/api/Nexus`
 
-Proxy layer to `services/armoriq-agent` on port 8004.
+Proxy layer to `services/Nexus-agent` on port 8004.
 
-### `POST /api/armoriq/chat` — AI security chat
+### `POST /api/Nexus/chat` — AI security chat
 Send a natural-language security question; receive an AI-powered answer.
 
 **Request Body**
@@ -178,7 +178,7 @@ Send a natural-language security question; receive an AI-powered answer.
 }
 ```
 
-### `POST /api/armoriq/analyze-attack` — Analyze specific attack
+### `POST /api/Nexus/analyze-attack` — Analyze specific attack
 
 **Request Body**
 ```json
@@ -193,7 +193,7 @@ Send a natural-language security question; receive an AI-powered answer.
 }
 ```
 
-### `POST /api/armoriq/generate-response` — Generate incident response plan
+### `POST /api/Nexus/generate-response` — Generate incident response plan
 
 **Request Body**
 ```json
@@ -205,11 +205,11 @@ Send a natural-language security question; receive an AI-powered answer.
 { "plan": "Step 1: Isolate endpoint...", "steps": [...] }
 ```
 
-### `GET /api/armoriq/blocklist` — Get current IP blocklist
+### `GET /api/Nexus/blocklist` — Get current IP blocklist
 
 **Response 200** `{ "blocked": ["203.0.113.42", "198.51.100.0/24"] }`
 
-### `POST /api/armoriq/blocklist` — Add IP to blocklist
+### `POST /api/Nexus/blocklist` — Add IP to blocklist
 
 **Request Body** `{ "ip": "203.0.113.42", "reason": "SQLi probe" }`  
 **Response 201** `{ "success": true }`
@@ -390,7 +390,7 @@ All automated and manual response actions are logged here.
   "services": {
     "detection-engine":          { "status": "up", "port": 8002, "latency": 12 },
     "pcap-processor":            { "status": "up", "port": 8003, "latency": 8 },
-    "armoriq-agent":             { "status": "up", "port": 8004, "latency": 20 },
+    "Nexus-agent":             { "status": "up", "port": 8004, "latency": 20 },
     "sentinal-response-engine":  { "status": "up", "port": 8005, "latency": 15 }
   }
 }

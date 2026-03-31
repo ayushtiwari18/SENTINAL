@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """
-SENTINEL + ArmorIQ — Full Pipeline Test Script
+SENTINEL + Nexus — Full Pipeline Test Script
 ===============================================
 Simulates a real attack hitting the system end-to-end:
 
   1. POST /api/logs/ingest  → Gateway receives malicious request
   2. Gateway calls Detection Engine /analyze
   3. Gateway saves AttackEvent → emits attack:new
-  4. Gateway calls ArmorIQ /respond (non-blocking)
-  5. ArmorIQ evaluates intents → ALLOWS safe actions, BLOCKS risky ones
+  4. Gateway calls Nexus /respond (non-blocking)
+  5. Nexus evaluates intents → ALLOWS safe actions, BLOCKS risky ones
   6. Blocked actions saved to action_queue
   7. Audit log populated
 
@@ -23,7 +23,7 @@ Requirements:
 
 Services must be running:
   Gateway   → http://localhost:3000
-  ArmorIQ   → http://localhost:8004  (needed for enforcement)
+  Nexus   → http://localhost:8004  (needed for enforcement)
   Detection → http://localhost:8002  (optional, gateway falls back)
 """
 
@@ -35,7 +35,7 @@ import sys
 from datetime import datetime
 
 GATEWAY = "http://localhost:3000"
-ARMORIQ = "http://localhost:8004"
+Nexus = "http://localhost:8004"
 
 COLOURS = {
     "green":  "\033[92m",
@@ -182,8 +182,8 @@ def ingest_log(payload):
     return r.json()
 
 
-def test_armoriq_direct(scenario_key, scenario):
-    """Call ArmorIQ /respond directly with a mock attackId (bypass Gateway)."""
+def test_Nexus_direct(scenario_key, scenario):
+    """Call Nexus /respond directly with a mock attackId (bypass Gateway)."""
     import uuid
     severity = scenario["severity_override"]
     attack_type_map = {
@@ -201,7 +201,7 @@ def test_armoriq_direct(scenario_key, scenario):
         "confidence": 0.97 if severity == "critical" else 0.85
     }
     r = requests.post(
-        f"{ARMORIQ}/respond",
+        f"{Nexus}/respond",
         json=payload,
         timeout=10,
         headers={"Content-Type": "application/json"}
@@ -225,18 +225,18 @@ def run_scenario(key, scenario, use_direct=False):
             ok(f"Gateway accepted log → id={resp.get('data', {}).get('id', 'N/A')}")
         except Exception as e:
             fail(f"Gateway ingest failed: {e}")
-            info("Falling back to direct ArmorIQ test...")
+            info("Falling back to direct Nexus test...")
             use_direct = True
 
-    # ── Step 2: Direct ArmorIQ test (always run for clarity) ─────────────────
-    step(2, "Calling ArmorIQ POST /respond directly (demonstrates enforcement)")
+    # ── Step 2: Direct Nexus test (always run for clarity) ─────────────────
+    step(2, "Calling Nexus POST /respond directly (demonstrates enforcement)")
     try:
-        armoriq_resp = test_armoriq_direct(key, scenario)
-        executed = armoriq_resp.get("actionsExecuted", [])
-        queued   = armoriq_resp.get("actionsQueued",   [])
-        audited  = armoriq_resp.get("auditEntries",    0)
+        Nexus_resp = test_Nexus_direct(key, scenario)
+        executed = Nexus_resp.get("actionsExecuted", [])
+        queued   = Nexus_resp.get("actionsQueued",   [])
+        audited  = Nexus_resp.get("auditEntries",    0)
 
-        ok(f"ArmorIQ responded")
+        ok(f"Nexus responded")
         print()
         print(f"  {c('green', 'ALLOWED (auto-executed):')}", executed if executed else "(none)")
         if queued:
@@ -252,8 +252,8 @@ def run_scenario(key, scenario, use_direct=False):
         print(f"  {c('cyan', 'Audit entries written:')} {audited}")
 
     except Exception as e:
-        fail(f"ArmorIQ call failed: {e}")
-        info("Is ArmorIQ running? → uvicorn main:app --port 8004")
+        fail(f"Nexus call failed: {e}")
+        info("Is Nexus running? → uvicorn main:app --port 8004")
         return False
 
     return True
@@ -285,27 +285,27 @@ def print_next_steps():
 
 
 def main():
-    parser = argparse.ArgumentParser(description="SENTINEL ArmorIQ test simulator")
+    parser = argparse.ArgumentParser(description="SENTINEL Nexus test simulator")
     parser.add_argument("--all",      action="store_true", help="Run all scenarios")
     parser.add_argument("--scenario", default="sqli_critical",
                         choices=list(SCENARIOS.keys()),
                         help="Which scenario to run (default: sqli_critical)")
     parser.add_argument("--direct",   action="store_true",
-                        help="Call ArmorIQ directly, skip Gateway ingest")
+                        help="Call Nexus directly, skip Gateway ingest")
     args = parser.parse_args()
 
     print()
-    print(c("bold", "SENTINEL + ArmorIQ — Pipeline Test"))
+    print(c("bold", "SENTINEL + Nexus — Pipeline Test"))
     print(c("cyan",  f"Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"))
 
     # ── Service health check ─────────────────────────────────────────────────
     header("Service Health Check")
     gateway_ok = check_service(GATEWAY, "Gateway API")
-    armoriq_ok = check_service(ARMORIQ, "SENTINAL Response Engine")
+    Nexus_ok = check_service(Nexus, "SENTINAL Response Engine")
 
-    if not armoriq_ok:
+    if not Nexus_ok:
         print()
-        print(c("red", "  ArmorIQ is not running. Start it first:"))
+        print(c("red", "  Nexus is not running. Start it first:"))
         print(c("yellow", "  cd services/sentinal-response-engine && uvicorn main:app --port 8004 --reload"))
         print()
         sys.exit(1)

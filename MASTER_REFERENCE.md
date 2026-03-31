@@ -50,18 +50,18 @@
 │    Alert.create()           → MongoDB  (high/critical only)          │
 │    emit(attack:new)         → Socket.io                              │
 │    emit(alert:new)          → Socket.io                              │
-│    callArmorIQ() [async]    → POST :8004/respond                     │
+│    callNexus() [async]    → POST :8004/respond                     │
 │                                                                      │
 │  POST /api/pcap/upload   →  POST :8003/process → merge results       │
-│  POST /api/armoriq/trigger → direct ArmorIQ call (demo/test)        │
+│  POST /api/Nexus/trigger → direct Nexus call (demo/test)        │
 │  POST /api/actions/:id/approve|reject → human enforcement           │
-│  POST /api/audit/ingest  ← called by ArmorIQ audit_logger           │
+│  POST /api/audit/ingest  ← called by Nexus audit_logger           │
 └──────┬────────────────────────┬──────────────────────┬──────────────┘
        │                        │                      │
        ▼                        ▼                      ▼
 ┌────────────────┐  ┌───────────────────────┐  ┌──────────────────────────┐
 │  SERVICE 2     │  │  SERVICE 3            │  │  SERVICE 4               │
-│  PCAP          │  │  DETECTION ENGINE     │  │  ARMORIQ AGENT           │
+│  PCAP          │  │  DETECTION ENGINE     │  │  Nexus AGENT           │
 │  PROCESSOR     │  │  (Python :8002)       │  │  (Python :8004)          │
 │  (Python :8003)│  │                       │  │                          │
 │  POST /process │  │  POST /analyze        │  │  POST /respond           │
@@ -130,7 +130,7 @@ SENTINAL/
 ├── .gitignore
 ├── README.md
 ├── MASTER_REFERENCE.md              ← this file (only doc)
-├── SPONSOR_TRACK_REPORT.md          ArmorIQ/sponsor track submission doc
+├── SPONSOR_TRACK_REPORT.md          Nexus/sponsor track submission doc
 ├── SENTINAL_Postman_Collection.json ← complete Postman v2.1 collection (40+ requests)
 ├── ecosystem.config.js              PM2 config — uses absolute .venv Python paths
 ├── deploy.sh                        ← ONE-COMMAND full deploy for AWS Academy
@@ -151,7 +151,7 @@ SENTINAL/
 │       │   ├── alertController.js
 │       │   ├── actionQueueController.js
 │       │   ├── auditController.js
-│       │   ├── armoriqController.js
+│       │   ├── NexusController.js
 │       │   ├── logController.js
 │       │   ├── pcapController.js
 │       │   ├── statsController.js
@@ -171,7 +171,7 @@ SENTINAL/
 │       │   ├── alerts.js            GET /api/alerts · PATCH :id/read
 │       │   ├── actions.js           GET pending · POST :id/approve · POST :id/reject
 │       │   ├── audit.js             GET /api/audit · POST /api/audit/ingest
-│       │   ├── armoriq.js           POST /api/armoriq/trigger
+│       │   ├── Nexus.js           POST /api/Nexus/trigger
 │       │   ├── pcap.js              POST /api/pcap/upload · GET jobs · GET :id
 │       │   ├── stats.js             GET /api/stats
 │       │   ├── serviceStatus.js     GET /api/service-status
@@ -179,7 +179,7 @@ SENTINAL/
 │       ├── services/                (5 services)
 │       │   ├── attackService.js     creates AttackEvent + Alert + emits sockets
 │       │   ├── detectionConnector.js POST :8002/analyze
-│       │   ├── armoriqConnector.js  POST :8004/respond
+│       │   ├── NexusConnector.js  POST :8004/respond
 │       │   ├── serviceHealthService.js polls all 4 services
 │       │   └── statsService.js      aggregate stats + emit stats:update
 │       ├── sockets/broadcastService.js  Socket.io emit helpers
@@ -302,8 +302,8 @@ SENTINAL/
     threat_detected = true:
       AttackEvent.create() → emit(attack:new)
       IF high/critical: Alert.create() → emit(alert:new)
-      callArmorIQ() [async] → POST :8004/respond
-5.  ArmorIQ: openclaw_runtime evaluates each intent
+      callNexus() [async] → POST :8004/respond
+5.  Nexus: openclaw_runtime evaluates each intent
       ALLOW → executor.py fires → audit entry
       BLOCK → ActionQueue.create() → emit(action:pending) → audit entry
 6.  Human: /action-queue → APPROVE/REJECT → AuditLog(HUMAN_OVERRIDE)
@@ -316,16 +316,16 @@ POST /api/pcap/upload → POST :8003/process
 → AttackEvent.create() per attack → emit(attack:new)
 ```
 
-### Flow C — Direct ArmorIQ Trigger (Demo / Simulate Page)
+### Flow C — Direct Nexus Trigger (Demo / Simulate Page)
 ```
-POST /api/armoriq/trigger → reportAttack() → full pipeline (Flow A steps 4–6)
+POST /api/Nexus/trigger → reportAttack() → full pipeline (Flow A steps 4–6)
 ```
 
 ### Flow D — SimulateAttack Dashboard Page
 ```
 Browser: /simulate page → click attack button
 → fetch POST /api/logs/ingest  (SQLi / XSS / Traversal / Command Injection)
-  OR fetch POST /api/armoriq/trigger  (Brute Force Critical)
+  OR fetch POST /api/Nexus/trigger  (Brute Force Critical)
 → Dashboard Socket.io: attack:new / action:pending events received live
 → /simulate right panel updates with real detections in real time
 ```
@@ -350,7 +350,7 @@ GET  /api/attacks/search/stats
 
 GET   /api/alerts?limit=50
 PATCH /api/alerts/:id/read
-POST  /api/alerts/armoriq        ← ArmorIQ executor only
+POST  /api/alerts/Nexus        ← Nexus executor only
 
 GET  /api/actions/pending
 POST /api/actions/:id/approve   Body: { approvedBy: string }
@@ -359,7 +359,7 @@ POST /api/actions/:id/reject    Body: { rejectedBy: string }
 GET  /api/audit?limit=100
 POST /api/audit/ingest          ← audit_logger.py only
 
-POST /api/armoriq/trigger       Body: { ip?, attackType?, severity?, confidence?, status? }
+POST /api/Nexus/trigger       Body: { ip?, attackType?, severity?, confidence?, status? }
 POST /api/pcap/upload           multipart: field "pcap" + field "projectId"
 GET  /api/stats
 GET  /api/service-status
@@ -376,7 +376,7 @@ GET  /health
 ### SENTINAL Response Engine (`:8004`)
 ```
 POST /respond   Body: { attackId, ip, attackType, severity, status, confidence }
-GET  /health    → { openclaw_loaded:bool, enforcement:'ArmorClaw-v1' }
+GET  /health    → { openclaw_loaded:bool, enforcement:'PolicyGuard-v1' }
 ```
 
 ### PCAP Processor (`:8003`)
@@ -440,7 +440,7 @@ servicestatuses:{ serviceName(unique), status, lastChecked, responseTimeMs, erro
 ### `attackType` enum
 `sqli` · `xss` · `traversal` · `command_injection` · `ssrf` · `lfi_rfi` · `brute_force` · `hpp` · `xxe` · `webshell` · `recon` · `ddos` · `unknown`
 
-### ArmorIQ Action enum + Policy
+### Nexus Action enum + Policy
 | Action | Policy | Rule |
 |--------|--------|------|
 | `send_alert` / `log_attack` / `rate_limit_ip` / `flag_for_review` / `generate_report` | ALLOW | RULE_004 |
@@ -458,7 +458,7 @@ servicestatuses:{ serviceName(unique), status, lastChecked, responseTimeMs, erro
 | Socket.io — 6 events | Live dashboard confirmed |
 | Detection pipeline | sqli/xss/traversal/command_injection classified |
 | PCAP Processor | 10/10 tests pass |
-| ArmorIQ + OpenClaw | 7/7 pytest pass, live enforcement confirmed |
+| Nexus + OpenClaw | 7/7 pytest pass, live enforcement confirmed |
 | React Dashboard — 14 pages | Live data, all pages functional |
 | SimulateAttack page `/simulate` | One-click attack simulator, live socket feed |
 | Postman Collection | 40+ requests, 8 folders, automated test scripts |
@@ -558,7 +558,7 @@ curl http://<EC2_IP>:3000/health
 | ⚡ XSS Attack | `<script>alert(document.cookie)</script>` in URL | POST /api/logs/ingest |
 | 📁 Path Traversal | `/../../../etc/passwd` in query | POST /api/logs/ingest |
 | 💻 Command Injection | `hello; cat /etc/shadow` | POST /api/logs/ingest |
-| 🔨 Brute Force (CRITICAL) | severity:critical → triggers BLOCK | POST /api/armoriq/trigger |
+| 🔨 Brute Force (CRITICAL) | severity:critical → triggers BLOCK | POST /api/Nexus/trigger |
 
 ### Option B — Postman (SENTINAL_Postman_Collection.json)
 Import from repo root or via:
@@ -581,12 +581,12 @@ curl -s -X POST http://localhost:3000/api/logs/ingest \
   -d '{"projectId":"demo","method":"POST","url":"/login","ip":"1.2.3.4",
        "headers":{},"queryParams":{},"body":{"username":"admin'\'''\'' OR '\''1'\''='\''1'\'' --","password":"x"}}'
 
-# ArmorIQ ALLOW (medium)
+# Nexus ALLOW (medium)
 curl -X POST http://localhost:8004/respond -H "Content-Type: application/json" \
   -d '{"attackId":"demo-1","ip":"5.5.5.5","attackType":"sqli","severity":"medium","confidence":0.9,"status":"attempt"}'
 # actionsExecuted: [send_alert, log_attack, rate_limit_ip]
 
-# ArmorIQ BLOCK (critical)
+# Nexus BLOCK (critical)
 curl -X POST http://localhost:8004/respond -H "Content-Type: application/json" \
   -d '{"attackId":"demo-2","ip":"6.6.6.6","attackType":"brute_force","severity":"critical","confidence":0.97,"status":"successful"}'
 # actionsQueued: [permanent_ban_ip(BLOCK), shutdown_endpoint(BLOCK)]
@@ -614,7 +614,7 @@ All steps are derived from `deploy.sh` (SHA: `6bab1b30b2cb7369d404a27693c605dea9
 | Gateway (Backend) | 3000 | Node.js / Express | `sentinal-gateway` |
 | Detection Engine | 8002 | Python / FastAPI + uvicorn | `sentinal-detection` |
 | PCAP Processor | 8003 | Python / FastAPI + uvicorn | `sentinal-pcap` |
-| SENTINAL Response Engine | 8004 | Python / FastAPI + uvicorn | `sentinal-armoriq` |
+| SENTINAL Response Engine | 8004 | Python / FastAPI + uvicorn | `sentinal-Nexus` |
 | React Dashboard | 5173 | Vite build, served via `serve` | `sentinal-dashboard` |
 
 ---
@@ -753,9 +753,9 @@ curl http://localhost:8003/health
 curl http://localhost:8004/health
 # All should return HTTP 200
 
-# ArmorIQ openclaw check
+# Nexus openclaw check
 curl http://localhost:8004/health
-# Must show: { "openclaw_loaded": true, "enforcement": "ArmorClaw-v1" }
+# Must show: { "openclaw_loaded": true, "enforcement": "PolicyGuard-v1" }
 ```
 
 **Open in browser:**
@@ -781,7 +781,7 @@ git pull origin main
 pm2 restart sentinal-gateway       # if backend/ changed
 pm2 restart sentinal-detection     # if services/detection-engine/ changed
 pm2 restart sentinal-pcap          # if services/pcap-processor/ changed
-pm2 restart sentinal-armoriq       # if services/sentinal-response-engine/ changed
+pm2 restart sentinal-Nexus       # if services/sentinal-response-engine/ changed
 
 pm2 save                           # persist the updated state
 ```
@@ -838,7 +838,7 @@ deactivate
 # source ~/SENTINAL/services/pcap-processor/.venv/bin/activate && pip install -r requirements.txt -q && deactivate
 # source ~/SENTINAL/services/sentinal-response-engine/.venv/bin/activate && pip install -r requirements.txt -q && deactivate
 
-pm2 restart sentinal-detection     # or sentinal-pcap / sentinal-armoriq
+pm2 restart sentinal-detection     # or sentinal-pcap / sentinal-Nexus
 pm2 save
 ```
 
@@ -873,7 +873,7 @@ curl http://localhost:3000/health
 | `backend/` JS files only | `git pull` → `pm2 restart sentinal-gateway` → `pm2 save` |
 | `services/detection-engine/` Python files | `git pull` → `pm2 restart sentinal-detection` → `pm2 save` |
 | `services/pcap-processor/` Python files | `git pull` → `pm2 restart sentinal-pcap` → `pm2 save` |
-| `services/sentinal-response-engine/` Python or `policy.yaml` | `git pull` → `pm2 restart sentinal-armoriq` → `pm2 save` |
+| `services/sentinal-response-engine/` Python or `policy.yaml` | `git pull` → `pm2 restart sentinal-Nexus` → `pm2 save` |
 | `dashboard/src/` React/JSX files | `git pull` → `npm run build` (in dashboard/) → `pm2 restart sentinal-dashboard` → `pm2 save` |
 | `backend/package.json` (new npm dep) | `git pull` → `npm install --omit=dev` (in backend/) → `pm2 restart sentinal-gateway` → `pm2 save` |
 | `*/requirements.txt` (new pip dep) | `git pull` → activate venv → `pip install -r requirements.txt` → deactivate → `pm2 restart <service>` → `pm2 save` |
@@ -892,7 +892,7 @@ pm2 list
 pm2 logs sentinal-gateway
 pm2 logs sentinal-detection
 pm2 logs sentinal-pcap
-pm2 logs sentinal-armoriq
+pm2 logs sentinal-Nexus
 pm2 logs sentinal-dashboard
 pm2 logs --lines 50 --nostream      # last 50 lines of all services
 
@@ -900,7 +900,7 @@ pm2 logs --lines 50 --nostream      # last 50 lines of all services
 pm2 restart sentinal-gateway
 pm2 restart sentinal-detection
 pm2 restart sentinal-pcap
-pm2 restart sentinal-armoriq
+pm2 restart sentinal-Nexus
 pm2 restart sentinal-dashboard
 
 # Restart everything
@@ -1063,7 +1063,7 @@ mongodb+srv://USERNAME:PASSWORD@cluster0.xxxxx.mongodb.net/sentinal
 ```
 Server: AWS EC2 — current IP: 98.94.36.226 (updated from 98.82.8.144)
 All 5 services: online via PM2
-Health checks: gateway ✓  detection ✓  pcap ✓  armoriq ✓
+Health checks: gateway ✓  detection ✓  pcap ✓  Nexus ✓
 MongoDB Atlas: IP allowlisted, connection confirmed
 Dashboard: http://98.94.36.226:5173 — 14 pages live, all data rendering
 Attack Simulator: http://98.94.36.226:5173/simulate — live socket feed confirmed

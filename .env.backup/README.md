@@ -11,7 +11,7 @@ consolidated into the root `/.env.example` file.
 | Original Location | Backup File |
 |---|---|
 | `backend/.env.example` | `backend.env.example` |
-| `services/armoriq-agent/.env.example` | `armoriq-agent.env.example` |
+| `services/Nexus-agent/.env.example` | `Nexus-agent.env.example` |
 | `services/pcap-processor/.env.example` | `pcap-processor.env.example` |
 
 ## Status

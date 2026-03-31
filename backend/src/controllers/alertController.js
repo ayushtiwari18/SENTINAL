@@ -43,20 +43,20 @@ const markRead = async (req, res, next) => {
 };
 
 /**
- * POST /api/alerts/armoriq
- * Called by ArmorIQ executor after 'send_alert' action is ALLOWED by policy.
+ * POST /api/alerts/Nexus
+ * Called by Nexus executor after 'send_alert' action is ALLOWED by policy.
  * Creates a persisted alert and emits alert:new over Socket.io.
  */
-const ingestArmorIQAlert = async (req, res, next) => {
+const ingestNexusAlert = async (req, res, next) => {
   try {
     const { attackId, ip, attackType, severity, message, source } = req.body;
 
     const alert = await Alert.create({
       attackId: attackId || null,
-      title:    `[ArmorIQ] ${(attackType || 'ATTACK').toUpperCase()} Alert`,
-      message:  message  || `ArmorIQ triggered alert for ${ip}`,
+      title:    `[Nexus] ${(attackType || 'ATTACK').toUpperCase()} Alert`,
+      message:  message  || `Nexus triggered alert for ${ip}`,
       severity: severity || 'high',
-      type:     'armoriq_action',
+      type:     'Nexus_action',
       meta:     { ip, attackType, source: source || 'sentinal-response-engine' }
     });
 
@@ -68,12 +68,12 @@ const ingestArmorIQAlert = async (req, res, next) => {
       timestamp: alert.createdAt
     });
 
-    logger.info(`[ALERTS] ArmorIQ alert ingested: ${alert.title}`);
-    res.status(201).json({ success: true, message: 'ArmorIQ alert recorded', data: { id: alert._id } });
+    logger.info(`[ALERTS] Nexus alert ingested: ${alert.title}`);
+    res.status(201).json({ success: true, message: 'Nexus alert recorded', data: { id: alert._id } });
   } catch (err) {
-    logger.error(`[ALERTS] ingestArmorIQAlert failed: ${err.message}`);
+    logger.error(`[ALERTS] ingestNexusAlert failed: ${err.message}`);
     next(err);
   }
 };
 
-module.exports = { getAlerts, markRead, ingestArmorIQAlert };
+module.exports = { getAlerts, markRead, ingestNexusAlert };

@@ -59,7 +59,7 @@ const ATTACKS = [
     id: 'bruteforce', label: 'Brute Force (CRITICAL)', icon: '🔨',
     description: 'Critical-severity brute force → triggers BLOCK + Action Queue',
     color: 'var(--color-critical)', severity: 'critical',
-    endpoint: '/api/armoriq/trigger',
+    endpoint: '/api/Nexus/trigger',
     payload: { ip: '203.0.113.99', attackType: 'brute_force', severity: 'critical', confidence: 0.97, status: 'successful' },
   },
 ];

@@ -4,7 +4,7 @@ SENTINAL Detection Engine — OpenClaw Webhook Router
 Exposes POST /webhook/alert — called internally by main.py after a confirmed
 threat detection. Fires a structured natural-language alert to the OpenClaw
 inject endpoint so the LLM (Gemini 2.5 Flash) can reason about the threat
-and route it through ArmorClaw enforcement.
+and route it through PolicyGuard enforcement.
 
 Design constraints:
   - NEVER blocks the detection pipeline (called via asyncio background task)
@@ -79,7 +79,7 @@ def _build_alert_text(alert: ThreatAlert) -> str:
         f"from IP {alert.ip or 'unknown'} with {alert.severity} severity and "
         f"{alert.confidence:.0%} confidence. "
         f"Please evaluate this threat using the sentinal-security skill and "
-        f"propose appropriate ArmorClaw-authorized response actions."
+        f"propose appropriate PolicyGuard-authorized response actions."
     )
 
 

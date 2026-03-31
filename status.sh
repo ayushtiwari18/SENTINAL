@@ -34,7 +34,7 @@ fi
 GATEWAY_PORT="${GATEWAY_PORT:-3000}"
 DETECTION_PORT="${DETECTION_PORT:-8002}"
 PCAP_PORT="${PCAP_PORT:-8003}"
-ARMORIQ_PORT="${ARMORIQ_PORT:-8004}"
+Nexus_PORT="${Nexus_PORT:-8004}"
 
 echo ""
 echo -e "${BOLD}  SENTINAL — Service Status${RESET}"
@@ -80,6 +80,6 @@ healthcheck() {
 healthcheck "Gateway   " "http://localhost:${GATEWAY_PORT}/health"
 healthcheck "Detection " "http://localhost:${DETECTION_PORT}/health"
 healthcheck "PCAP      " "http://localhost:${PCAP_PORT}/health"
-healthcheck "ArmorIQ   " "http://localhost:${ARMORIQ_PORT}/health"
+healthcheck "Nexus   " "http://localhost:${Nexus_PORT}/health"
 
 echo ""

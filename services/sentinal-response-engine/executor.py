@@ -19,7 +19,7 @@ import os
 from pathlib import Path
 from datetime import datetime
 
-logger = logging.getLogger("armoriq.executor")
+logger = logging.getLogger("Nexus.executor")
 
 GATEWAY_URL    = os.getenv("GATEWAY_URL", "http://localhost:3000")
 BLOCKLIST_PATH = Path(__file__).parent / "blocklist.txt"
@@ -100,10 +100,10 @@ async def _send_alert(intent_data: dict, attack_context: dict) -> bool:
         "attackType": attack_context.get("attackType"),
         "severity":   attack_context.get("severity"),
         "source":     "sentinal-response-engine",
-        "message":    intent_data.get("reason", "ArmorIQ triggered alert"),
+        "message":    intent_data.get("reason", "Nexus triggered alert"),
     }
     async with httpx.AsyncClient(timeout=5.0) as client:
-        resp = await client.post(f"{GATEWAY_URL}/api/alerts/armoriq", json=payload)
+        resp = await client.post(f"{GATEWAY_URL}/api/alerts/Nexus", json=payload)
         if resp.status_code in (200, 201):
             logger.info(f"[EXECUTOR] send_alert \u2192 Gateway responded {resp.status_code}")
             return True

@@ -23,7 +23,7 @@ class RespondRequest(BaseModel):
 
 
 class ProposedAction(BaseModel):
-    """Typed schema for ArmorIQ proposed actions — replaces untyped dict."""
+    """Typed schema for Nexus proposed actions — replaces untyped dict."""
     action:     str
     target:     str
     reason:     str
@@ -45,7 +45,7 @@ class DecisionModel(BaseModel):
     reason: str
     policy_rule_id: str
     timestamp: str = Field(default_factory=lambda: datetime.utcnow().isoformat() + "Z")
-    enforcement_level: str = "ArmorIQ-Policy-v1"
+    enforcement_level: str = "Nexus-Policy-v1"
 
 
 class ActionResult(BaseModel):

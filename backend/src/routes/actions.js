@@ -2,7 +2,7 @@ const express = require('express');
 const router  = express.Router();
 const { getPending, approveAction, rejectAction } = require('../controllers/actionQueueController');
 
-// List all pending ArmorIQ-blocked actions
+// List all pending Nexus-blocked actions
 router.get('/pending', getPending);
 
 // Human approves a blocked action

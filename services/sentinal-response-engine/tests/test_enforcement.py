@@ -119,7 +119,7 @@ def test_allow_send_alert(low_risk_intent):
     )
     assert decision.action == "send_alert"
     assert decision.intent_id == low_risk_intent.intent_id
-    assert decision.enforcement_level in ("ArmorClaw-v1", "ArmorIQ-Policy-v1")
+    assert decision.enforcement_level in ("PolicyGuard-v1", "Nexus-Policy-v1")
 
 
 # ---------------------------------------------------------------------------

@@ -37,7 +37,7 @@ Backend — Node.js :3000  (backend/server.js)
     │
     ├─► Detection Engine     Python :8002  (services/detection-engine)
     ├─► PCAP Processor        Python :8003  (services/pcap-processor)
-    ├─► ArmorIQ Agent         Python :8004  (services/armoriq-agent)
+    ├─► Nexus Agent         Python :8004  (services/Nexus-agent)
     └─► Response Engine       Python :8005  (services/sentinal-response-engine)
     │
     ├─► MongoDB Atlas

@@ -1,12 +1,12 @@
 #!/bin/bash
-# SENTINEL + ArmorIQ — Complete Test Suite
+# SENTINEL + Nexus — Complete Test Suite
 # Usage: bash scripts/simulate_attack.sh
 #
-# Uses /api/armoriq/trigger — creates a REAL AttackEvent and fires ArmorIQ.
+# Uses /api/Nexus/trigger — creates a REAL AttackEvent and fires Nexus.
 # Does NOT require Detection Engine to be running.
 
 GATEWAY="http://localhost:3000"
-ARMORIQ="http://localhost:8004"
+Nexus="http://localhost:8004"
 
 GREEN='\033[0;32m'
 RED='\033[0;31m'
@@ -17,7 +17,7 @@ NC='\033[0m'
 
 echo
 echo -e "${BOLD}══════════════════════════════════════════════════════════${NC}"
-echo -e "${CYAN}  SENTINEL + ArmorIQ — Full Pipeline Test${NC}"
+echo -e "${CYAN}  SENTINEL + Nexus — Full Pipeline Test${NC}"
 echo -e "${BOLD}══════════════════════════════════════════════════════════${NC}"
 
 # ── Health Checks ─────────────────────────────────────────────────────────
@@ -32,18 +32,18 @@ else
   exit 1
 fi
 
-AQ_HEALTH=$(curl -s "${ARMORIQ}/health" 2>/dev/null)
+AQ_HEALTH=$(curl -s "${Nexus}/health" 2>/dev/null)
 if echo "$AQ_HEALTH" | grep -q '"status":"ok"'; then
-  echo -e "  ${GREEN}✓${NC} ArmorIQ is online"
+  echo -e "  ${GREEN}✓${NC} Nexus is online"
 else
-  echo -e "  ${RED}✗${NC} ArmorIQ OFFLINE — start: cd services/sentinal-response-engine && uvicorn main:app --port 8004 --reload"
+  echo -e "  ${RED}✗${NC} Nexus OFFLINE — start: cd services/sentinal-response-engine && uvicorn main:app --port 8004 --reload"
   exit 1
 fi
 
 # ── TEST 2: Trigger critical SQLi via Gateway (full pipeline) ─────────────
 echo
-echo -e "${YELLOW}[TEST 2]${NC} Critical SQLi via Gateway trigger (creates real AttackEvent + fires ArmorIQ)"
-T2=$(curl -s -X POST "${GATEWAY}/api/armoriq/trigger" \
+echo -e "${YELLOW}[TEST 2]${NC} Critical SQLi via Gateway trigger (creates real AttackEvent + fires Nexus)"
+T2=$(curl -s -X POST "${GATEWAY}/api/Nexus/trigger" \
   -H "Content-Type: application/json" \
   -d '{"ip":"192.168.5.22","attackType":"sqli","severity":"critical","confidence":0.97,"status":"successful"}')
 echo "$T2" | python3 -m json.tool 2>/dev/null || echo "$T2"
@@ -58,14 +58,14 @@ fi
 # ── TEST 3: Trigger high XSS via Gateway ───────────────────────────────────
 echo
 echo -e "${YELLOW}[TEST 3]${NC} High XSS via Gateway trigger"
-curl -s -X POST "${GATEWAY}/api/armoriq/trigger" \
+curl -s -X POST "${GATEWAY}/api/Nexus/trigger" \
   -H "Content-Type: application/json" \
   -d '{"ip":"10.0.0.55","attackType":"xss","severity":"high","confidence":0.85,"status":"attempt"}' \
   | python3 -m json.tool 2>/dev/null
 
-# ── Wait for ArmorIQ to process (it’s async) ─────────────────────────────
+# ── Wait for Nexus to process (it’s async) ─────────────────────────────
 echo
-echo -e "  ${CYAN}Waiting 3s for ArmorIQ to process and write to MongoDB...${NC}"
+echo -e "  ${CYAN}Waiting 3s for Nexus to process and write to MongoDB...${NC}"
 sleep 3
 
 # ── TEST 4: Check action_queue ─────────────────────────────────────────────
@@ -95,8 +95,8 @@ if [ "$COUNT" -gt "0" ] 2>/dev/null; then
   fi
 else
   echo -e "  ${RED}✗ action_queue is still empty${NC}"
-  echo -e "  This means ArmorIQ could not reach Gateway to write audit entries."
-  echo -e "  Check ArmorIQ terminal for [AUDIT] log lines."
+  echo -e "  This means Nexus could not reach Gateway to write audit entries."
+  echo -e "  Check Nexus terminal for [AUDIT] log lines."
 fi
 
 # ── TEST 6: Audit log ──────────────────────────────────────────────────────────
@@ -146,7 +146,7 @@ echo -e "     BLOCKED rows (red):   permanent_ban_ip, shutdown_endpoint"
 echo -e "     APPROVED row (blue):  after human clicks Approve"
 echo
 echo -e "  ${CYAN}③ Alerts${NC}        → http://localhost:5173/alerts"
-echo -e "     New ArmorIQ alert (type: armoriq_action) should be visible"
+echo -e "     New Nexus alert (type: Nexus_action) should be visible"
 echo
 echo -e "  ${CYAN}④ Live Attacks${NC}  → http://localhost:5173/dashboard"
 echo -e "     New SQLI + XSS attack events in the live feed"

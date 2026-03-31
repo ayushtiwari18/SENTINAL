@@ -172,7 +172,7 @@ export default function Settings() {
               ['Version',   '1.0.0'],
               ['Event',     'HackByte 4.0'],
               ['Backend',   <code style={{ fontSize: 'var(--text-xs)' }}>{cfg.gatewayUrl}</code>],
-              ['AI Engine', 'ArmorIQ'],
+              ['AI Engine', 'Nexus'],
             ].map(([label, val]) => (
               <div key={label} style={{
                 display: 'flex',

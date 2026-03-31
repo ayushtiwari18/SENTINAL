@@ -65,7 +65,7 @@ brute_force · hpp · xxe · webshell · recon · ddos · unknown
 | Socket.io — 6 events | Live dashboard confirmed |
 | Detection pipeline | sqli/xss/traversal/command_injection classified |
 | PCAP Processor | 10/10 tests pass |
-| ArmorIQ + OpenClaw | 7/7 pytest pass, live enforcement confirmed |
+| Nexus + OpenClaw | 7/7 pytest pass, live enforcement confirmed |
 | React Dashboard — 14 pages | Live data, all pages functional |
 | SimulateAttack page `/simulate` | One-click attack simulator, live socket feed |
 | Postman Collection | 40+ requests, 8 folders, automated test scripts |

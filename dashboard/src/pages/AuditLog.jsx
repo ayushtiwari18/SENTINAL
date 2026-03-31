@@ -59,9 +59,9 @@ export default function AuditLog() {
 
         <div className="page-header">
           <div className="page-title-group">
-            <h1 className="page-title">ArmorIQ Audit Log</h1>
+            <h1 className="page-title">Nexus Audit Log</h1>
             <p className="page-subtitle">
-              Every policy decision made by ArmorIQ — full traceability. Auto-refreshes every 10s.
+              Every policy decision made by Nexus — full traceability. Auto-refreshes every 10s.
             </p>
           </div>
         </div>

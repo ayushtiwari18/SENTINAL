@@ -71,13 +71,13 @@ echo "  → Check ActionQueue:"
 curl -s "$GATEWAY/api/actions/pending" | jq '[.data[] | {action: .action, status: .status}]'
 
 
-# ── TEST 5: Command Injection (critical + direct ArmorIQ trigger) ─────────────
+# ── TEST 5: Command Injection (critical + direct Nexus trigger) ─────────────
 echo ""
-echo "▶ TEST 5 — Direct ArmorIQ Trigger (critical + successful)"
+echo "▶ TEST 5 — Direct Nexus Trigger (critical + successful)"
 echo "  Expected: shutdown_endpoint + permanent_ban_ip BLOCKED"
 echo "  Expected: send_alert + log_attack + rate_limit_ip + flag_for_review EXECUTED"
 echo ""
-curl -s -X POST "$GATEWAY/api/armoriq/trigger" \
+curl -s -X POST "$GATEWAY/api/Nexus/trigger" \
   -H "Content-Type: application/json" \
   -d '{
     "ip":         "192.168.1.100",
@@ -93,13 +93,13 @@ echo "  → Full audit log (last 5):"
 curl -s "$GATEWAY/api/audit?limit=5" | jq '[.data[] | {action, status, policy_rule_id}]'
 
 
-# ── TEST 6: ArmorIQ Failure Resilience ────────────────────────────────────────
+# ── TEST 6: Nexus Failure Resilience ────────────────────────────────────────
 echo ""
-echo "▶ TEST 6 — ArmorIQ Failure Resilience"
-echo "  ⚠ Stop ArmorIQ service before running this test"
+echo "▶ TEST 6 — Nexus Failure Resilience"
+echo "  ⚠ Stop Nexus service before running this test"
 echo "  Expected: attack still saved, gateway continues"
 echo ""
-read -p "  Press ENTER when ArmorIQ is stopped..."
+read -p "  Press ENTER when Nexus is stopped..."
 curl -s -X POST "$BASE/login" \
   -H "Content-Type: application/json" \
   -d '{"username":"test","password":"test"}' > /dev/null

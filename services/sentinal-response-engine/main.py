@@ -39,12 +39,12 @@ logging.basicConfig(
     level=getattr(logging, LOG_LEVEL, logging.INFO),
     format="%(asctime)s [%(name)s] %(levelname)s — %(message)s"
 )
-logger = logging.getLogger("armoriq")
+logger = logging.getLogger("Nexus")
 
-logger.info(f"[ARMORIQ] Loading env from: {_env_path}")
-logger.info(f"[ARMORIQ] .env found: {_env_path.exists()}")
-logger.info(f"[ARMORIQ] GATEWAY_URL:  {os.getenv('GATEWAY_URL', 'http://localhost:3000')}")
-logger.info(f"[ARMORIQ] ARMORIQ_PORT: {os.getenv('ARMORIQ_PORT', '8004')}")
+logger.info(f"[Nexus] Loading env from: {_env_path}")
+logger.info(f"[Nexus] .env found: {_env_path.exists()}")
+logger.info(f"[Nexus] GATEWAY_URL:  {os.getenv('GATEWAY_URL', 'http://localhost:3000')}")
+logger.info(f"[Nexus] Nexus_PORT: {os.getenv('Nexus_PORT', '8004')}")
 
 app = FastAPI(
     title="SENTINAL Response Engine",
@@ -82,10 +82,10 @@ def health():
         "service":     "sentinal-response-engine",
         "version":     "2.0.0",
         "uptime":      int(time.time() - _start_time),   # seconds since process start
-        "port":        int(os.getenv("ARMORIQ_PORT", "8004")),
+        "port":        int(os.getenv("Nexus_PORT", "8004")),
         "environment": os.getenv("NODE_ENV", os.getenv("ENVIRONMENT", "development")),
         "timestamp":   time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-        "enforcement": "ArmorClaw-v1" if openclaw_ok else "ArmorIQ-Policy-v1 (fallback)",
+        "enforcement": "PolicyGuard-v1" if openclaw_ok else "Nexus-Policy-v1 (fallback)",
         "openclaw_loaded": openclaw_ok,
         "gateway_url": os.getenv("GATEWAY_URL", "http://localhost:3000")
     }
@@ -98,7 +98,7 @@ async def respond(body: RespondRequest):
     Called by Gateway after every confirmed attack.
     """
     logger.info(
-        f"[ARMORIQ] respond called — attackId={body.attackId} "
+        f"[Nexus] respond called — attackId={body.attackId} "
         f"ip={body.ip} type={body.attackType} severity={body.severity}"
     )
 
@@ -112,7 +112,7 @@ async def respond(body: RespondRequest):
     )
 
     intents = build_intents(ctx)
-    logger.info(f"[ARMORIQ] Built {len(intents)} intents for attackId={body.attackId}")
+    logger.info(f"[Nexus] Built {len(intents)} intents for attackId={body.attackId}")
 
     actions_executed = []
     actions_queued   = []
@@ -139,9 +139,9 @@ async def respond(body: RespondRequest):
             )
             if ok:
                 actions_executed.append(action)
-                logger.info(f"[ARMORIQ] EXECUTED: {action}")
+                logger.info(f"[Nexus] EXECUTED: {action}")
             else:
-                logger.warning(f"[ARMORIQ] Execution of '{action}' failed — see executor log")
+                logger.warning(f"[Nexus] Execution of '{action}' failed — see executor log")
         else:
             actions_queued.append(
                 ActionResult(
@@ -152,10 +152,10 @@ async def respond(body: RespondRequest):
                     blockedReason=decision.reason,
                 )
             )
-            logger.info(f"[ARMORIQ] BLOCKED (queued): {action} — {decision.reason}")
+            logger.info(f"[Nexus] BLOCKED (queued): {action} — {decision.reason}")
 
     logger.info(
-        f"[ARMORIQ] Complete — executed={actions_executed} "
+        f"[Nexus] Complete — executed={actions_executed} "
         f"queued={[a.action for a in actions_queued]} "
         f"audit_entries={audit_count}"
     )

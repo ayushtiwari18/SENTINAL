@@ -21,11 +21,11 @@
 │  │                                                                     │   │
 │  │  server.js                                                          │   │
 │  │   ├── src/routes/        (health, logs, attacks, alerts,            │   │
-│  │   │                       armoriq, pcap, gemini, actions,           │   │
+│  │   │                       Nexus, pcap, gemini, actions,           │   │
 │  │   │                       audit, forensics, stats, serviceStatus)   │   │
 │  │   ├── src/controllers/   (business logic per route)                 │   │
 │  │   ├── src/services/      (detectionConnector, pcapConnector,        │   │
-│  │   │                       armoriqConnector, mongoService…)          │   │
+│  │   │                       NexusConnector, mongoService…)          │   │
 │  │   ├── src/models/        (Mongoose schemas)                         │   │
 │  │   ├── src/middleware/    (auth, rateLimit, errorHandler…)           │   │
 │  │   ├── src/sockets/       (Socket.IO real-time event bus)            │   │
@@ -50,8 +50,8 @@
 │  │  schemas.py      │                    └───────────────────────────┘   │
 │  │  webhook_router.py│                                                     │
 │  │ models/          │   ┌─────────────────────────────────────────────┐   │
-│  └──────────────────┘   │         ARMORIQ AGENT                       │   │
-│                         │  (services/armoriq-agent)  :8004             │   │
+│  └──────────────────┘   │         Nexus AGENT                       │   │
+│                         │  (services/Nexus-agent)  :8004             │   │
 │                         │  blocklist.txt                               │   │
 │                         └─────────────────────────────────────────────┘   │
 │                                                                             │
@@ -76,7 +76,7 @@
 | Backend (Node.js Gateway) | 3000 | Node.js 18+ | `backend/server.js` |
 | Detection Engine | 8002 | Python 3.10+ / FastAPI | `services/detection-engine/app/main.py` |
 | PCAP Processor | 8003 | Python 3.10+ / FastAPI | `services/pcap-processor/` |
-| ArmorIQ Agent | 8004 | Python 3.10+ / FastAPI | `services/armoriq-agent/` |
+| Nexus Agent | 8004 | Python 3.10+ / FastAPI | `services/Nexus-agent/` |
 | Sentinal Response Engine | 8005 | Python 3.10+ / FastAPI | `services/sentinal-response-engine/main.py` |
 | Dashboard (dev) | 5173 | Vite / React | `dashboard/` |
 | Demo Target App | 4000 | Node.js | `demo-target/` |
@@ -133,14 +133,14 @@ Backend → MongoDB (save report)
 Dashboard notified via Socket.IO
 ```
 
-### Flow C — ArmorIQ / AI Chat
+### Flow C — Nexus / AI Chat
 ```
 Dashboard chat input
-  │  POST /api/armoriq/chat
+  │  POST /api/Nexus/chat
   ▼
-Backend :3000 → armoriqConnector → POST :8004/chat
+Backend :3000 → NexusConnector → POST :8004/chat
   ▼
-ArmorIQ Agent :8004
+Nexus Agent :8004
   │  blocklist.txt filter
   │  Gemini Flash LLM → contextual security answer
   │  Returns { response, context }
@@ -192,7 +192,7 @@ Attack Event Received
 |--------|--------|----------|------|
 | Backend | Detection Engine | HTTP REST | Internal (no auth) |
 | Backend | PCAP Processor | HTTP REST | Internal |
-| Backend | ArmorIQ Agent | HTTP REST | Internal |
+| Backend | Nexus Agent | HTTP REST | Internal |
 | Backend | Sentinal Response Engine | HTTP REST | Internal |
 | Backend | MongoDB Atlas | MongoDB Driver | Connection string |
 | Dashboard | Backend | HTTP REST + Socket.IO | JWT Bearer |
@@ -225,7 +225,7 @@ All real-time events flow through `backend/src/sockets/`:
      ├── pm2: backend :3000
      ├── pm2 / venv: detection-engine :8002
      ├── pm2 / venv: pcap-processor :8003
-     ├── pm2 / venv: armoriq-agent :8004
+     ├── pm2 / venv: Nexus-agent :8004
      └── pm2 / venv: sentinal-response-engine :8005
      │
   Security Group: 80/443 public, 3000/8002-8005 internal only

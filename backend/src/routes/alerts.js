@@ -1,9 +1,9 @@
 const express = require('express');
 const router  = express.Router();
-const { getAlerts, markRead, ingestArmorIQAlert } = require('../controllers/alertController');
+const { getAlerts, markRead, ingestNexusAlert } = require('../controllers/alertController');
 
-// ArmorIQ agent posts alerts here — MUST be before /:id routes to avoid route conflicts
-router.post('/armoriq', ingestArmorIQAlert);
+// Nexus agent posts alerts here — MUST be before /:id routes to avoid route conflicts
+router.post('/Nexus', ingestNexusAlert);
 
 // Existing routes
 router.get('/',           getAlerts);

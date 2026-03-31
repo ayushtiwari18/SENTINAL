@@ -3,7 +3,7 @@
  * ----------------------------
  * A real Express app protected by sentinel-middleware.
  * Send attack payloads to this server to trigger the full
- * SENTINEL pipeline: Middleware → Gateway → Detection → ArmorIQ → Dashboard
+ * SENTINEL pipeline: Middleware → Gateway → Detection → Nexus → Dashboard
  *
  * Port: 4000
  * Usage: node server.js

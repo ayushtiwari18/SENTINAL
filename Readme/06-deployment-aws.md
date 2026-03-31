@@ -12,7 +12,7 @@
 | Gateway (Backend) | 3000 | Node.js / Express | `sentinal-gateway` |
 | Detection Engine | 8002 | Python / FastAPI + uvicorn | `sentinal-detection` |
 | PCAP Processor | 8003 | Python / FastAPI + uvicorn | `sentinal-pcap` |
-| SENTINAL Response Engine | 8004 | Python / FastAPI + uvicorn | `sentinal-armoriq` |
+| SENTINAL Response Engine | 8004 | Python / FastAPI + uvicorn | `sentinal-Nexus` |
 | React Dashboard | 5173 | Vite build, served via `serve` | `sentinal-dashboard` |
 
 ---
@@ -131,9 +131,9 @@ curl http://localhost:8002/health
 curl http://localhost:8003/health
 curl http://localhost:8004/health
 
-# ArmorIQ openclaw check
+# Nexus openclaw check
 curl http://localhost:8004/health
-# Must return: { "openclaw_loaded": true, "enforcement": "ArmorClaw-v1" }
+# Must return: { "openclaw_loaded": true, "enforcement": "PolicyGuard-v1" }
 ```
 
 ```
@@ -152,7 +152,7 @@ cd ~/SENTINAL && git pull origin main
 pm2 restart sentinal-gateway     # if backend/ changed
 pm2 restart sentinal-detection   # if services/detection-engine/ changed
 pm2 restart sentinal-pcap        # if services/pcap-processor/ changed
-pm2 restart sentinal-armoriq     # if services/sentinal-response-engine/ changed
+pm2 restart sentinal-Nexus     # if services/sentinal-response-engine/ changed
 pm2 save
 ```
 
@@ -195,7 +195,7 @@ pm2 list && curl http://localhost:3000/health
 | `backend/` JS only | `git pull` → `pm2 restart sentinal-gateway` → `pm2 save` |
 | `services/detection-engine/` | `git pull` → `pm2 restart sentinal-detection` → `pm2 save` |
 | `services/pcap-processor/` | `git pull` → `pm2 restart sentinal-pcap` → `pm2 save` |
-| `services/sentinal-response-engine/` or `policy.yaml` | `git pull` → `pm2 restart sentinal-armoriq` → `pm2 save` |
+| `services/sentinal-response-engine/` or `policy.yaml` | `git pull` → `pm2 restart sentinal-Nexus` → `pm2 save` |
 | `dashboard/src/` React/JSX | `git pull` → `npm run build` (in dashboard/) → `pm2 restart sentinal-dashboard` → `pm2 save` |
 | `backend/package.json` new dep | `git pull` → `npm install --omit=dev` (in backend/) → `pm2 restart sentinal-gateway` → `pm2 save` |
 | `*/requirements.txt` new dep | `git pull` → activate venv → `pip install -r requirements.txt` → deactivate → `pm2 restart <service>` → `pm2 save` |
@@ -214,7 +214,7 @@ pm2 list
 pm2 logs sentinal-gateway
 pm2 logs sentinal-detection
 pm2 logs sentinal-pcap
-pm2 logs sentinal-armoriq
+pm2 logs sentinal-Nexus
 pm2 logs sentinal-dashboard
 pm2 logs --lines 50 --nostream
 

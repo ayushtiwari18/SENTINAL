@@ -25,7 +25,7 @@ curl http://localhost:8004/health   # must show openclaw_loaded:true
 | ⚡ XSS Attack | `<script>alert(document.cookie)</script>` in URL | POST /api/logs/ingest |
 | 📁 Path Traversal | `/../../../etc/passwd` in query | POST /api/logs/ingest |
 | 💻 Command Injection | `hello; cat /etc/shadow` | POST /api/logs/ingest |
-| 🔨 Brute Force (CRITICAL) | severity:critical → triggers BLOCK | POST /api/armoriq/trigger |
+| 🔨 Brute Force (CRITICAL) | severity:critical → triggers BLOCK | POST /api/Nexus/trigger |
 
 ### Option B — Postman
 ```
@@ -47,11 +47,11 @@ curl -s -X POST http://localhost:3000/api/logs/ingest \
   -d '{"projectId":"demo","method":"POST","url":"/login","ip":"1.2.3.4",
        "headers":{},"queryParams":{},"body":{"username":"admin'\'''\'' OR '\''1'\''='\''1'\'' --","password":"x"}}'
 
-# ArmorIQ ALLOW (medium)
+# Nexus ALLOW (medium)
 curl -X POST http://localhost:8004/respond -H "Content-Type: application/json" \
   -d '{"attackId":"demo-1","ip":"5.5.5.5","attackType":"sqli","severity":"medium","confidence":0.9,"status":"attempt"}'
 
-# ArmorIQ BLOCK (critical)
+# Nexus BLOCK (critical)
 curl -X POST http://localhost:8004/respond -H "Content-Type: application/json" \
   -d '{"attackId":"demo-2","ip":"6.6.6.6","attackType":"brute_force","severity":"critical","confidence":0.97,"status":"successful"}'
 ```
@@ -84,7 +84,7 @@ curl -X POST http://localhost:8004/respond -H "Content-Type: application/json" \
 ### Architecture
 - The gateway is the **only entry point** for external traffic — never expose Python services directly in prod
 - `setImmediate()` in `detectionConnector.js` keeps detection **async** — does not block the log ingest response
-- `callArmorIQ()` is **also async** — ArmorIQ processing never blocks the gateway response
+- `callNexus()` is **also async** — Nexus processing never blocks the gateway response
 - Socket.io events are emitted **after** MongoDB writes — order is guaranteed
 
 ### Data

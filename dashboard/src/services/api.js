@@ -27,7 +27,7 @@ export const uploadPcap = (file, projectId = 'pcap-upload') => {
   }).then(unwrap);
 };
 
-// ── ArmorIQ API calls ───────────────────────────────────────────────
+// ── Nexus API calls ───────────────────────────────────────────────
 export const getPendingActions = ()   => api.get('/api/actions/pending').then(unwrap);
 export const approveAction     = (id) => api.post(`/api/actions/${id}/approve`, { approvedBy: 'human' }).then(unwrapSafe);
 export const rejectAction      = (id) => api.post(`/api/actions/${id}/reject`,  { rejectedBy: 'human' }).then(unwrapSafe);

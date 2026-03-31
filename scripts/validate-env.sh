@@ -71,10 +71,10 @@ if $CHECK_ENV; then
     "GATEWAY_PORT|Express Gateway port"
     "DETECTION_PORT|Detection Engine port"
     "PCAP_PORT|PCAP Processor port"
-    "ARMORIQ_PORT|SENTINAL Response Engine port"
+    "Nexus_PORT|SENTINAL Response Engine port"
     "DETECTION_URL|Detection Engine internal URL"
     "PCAP_URL|PCAP Processor internal URL"
-    "ARMORIQ_URL|SENTINAL Response Engine internal URL"
+    "Nexus_URL|SENTINAL Response Engine internal URL"
     "GATEWAY_URL|Gateway URL (used by SENTINAL Response Engine)"
     "JWT_SECRET|JWT signing secret"
   )
@@ -125,7 +125,7 @@ if $CHECK_ENV; then
 
   section "■ Section 4 — Recommended Variables"
   RECOMMENDED_VARS=(
-    "GEMINI_API_KEY|Google Gemini key for ArmorIQ"
+    "GEMINI_API_KEY|Google Gemini key for Nexus"
     "NODE_ENV|Runtime mode"
     "LOG_LEVEL|Log verbosity"
     "PUBLIC_URL|Public-facing deployment URL"
@@ -152,7 +152,7 @@ if $CHECK_HEALTH; then
   GATEWAY_PORT="${GATEWAY_PORT:-3000}"
   DETECTION_PORT="${DETECTION_PORT:-8002}"
   PCAP_PORT="${PCAP_PORT:-8003}"
-  ARMORIQ_PORT="${ARMORIQ_PORT:-8004}"
+  Nexus_PORT="${Nexus_PORT:-8004}"
 
   section "■ Section 5 — Service Health Checks"
   echo "  (requires services to be running)"
@@ -173,7 +173,7 @@ if $CHECK_HEALTH; then
   check_health "Gateway          (port ${GATEWAY_PORT})  " "http://localhost:${GATEWAY_PORT}/health"
   check_health "Detection Engine (port ${DETECTION_PORT}) " "http://localhost:${DETECTION_PORT}/health"
   check_health "PCAP Processor   (port ${PCAP_PORT})  " "http://localhost:${PCAP_PORT}/health"
-  check_health "Response Engine  (port ${ARMORIQ_PORT})  " "http://localhost:${ARMORIQ_PORT}/health"
+  check_health "Response Engine  (port ${Nexus_PORT})  " "http://localhost:${Nexus_PORT}/health"
 fi
 
 echo ""

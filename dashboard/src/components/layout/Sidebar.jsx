@@ -63,7 +63,7 @@ export default function Sidebar() {
           <span style={styles.logoIcon}>⚔</span>
           <div>
             <div style={styles.logoName}>SENTINAL</div>
-            <div style={styles.logoSub}>by ArmorIQ</div>
+            <div style={styles.logoSub}>by Nexus</div>
           </div>
         </div>
 

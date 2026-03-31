@@ -1,5 +1,5 @@
 /**
- * ActionQueue — ArmorIQ blocked actions with confirm modal.
+ * ActionQueue — Nexus blocked actions with confirm modal.
  * Modal rendered via ReactDOM.createPortal to escape PageWrapper stacking context.
  */
 import { useEffect, useState, useCallback } from 'react';
@@ -87,7 +87,7 @@ export default function ActionQueue() {
         </p>
         <p style={{ ...styles.modalBody, color: 'var(--color-text-secondary)', marginBottom: 'var(--space-5)' }}>
           {confirm.type === 'approve'
-            ? 'This will authorise ArmorIQ to execute this action. Are you sure?'
+            ? 'This will authorise Nexus to execute this action. Are you sure?'
             : 'This will permanently reject this action. It will not be executed.'}
         </p>
 
@@ -122,7 +122,7 @@ export default function ActionQueue() {
   if (loading) return <LoadingState message="Loading action queue..." />;
   if (!items.length) return (
     <EmptyState
-      message="No pending actions — ArmorIQ has not blocked anything requiring review."
+      message="No pending actions — Nexus has not blocked anything requiring review."
       icon="✅"
     />
   );

@@ -113,9 +113,9 @@ module.exports = {
 
     // ── 4. SENTINAL Response Engine (Python / FastAPI / Uvicorn) ─────────────────
     {
-      name:         'sentinal-armoriq',
+      name:         'sentinal-Nexus',
       script:       'python3',
-      args:         '-m uvicorn main:app --host 0.0.0.0 --port ${ARMORIQ_PORT:-8004} --no-access-log',
+      args:         '-m uvicorn main:app --host 0.0.0.0 --port ${Nexus_PORT:-8004} --no-access-log',
       cwd:          path.join(root, 'services', 'sentinal-response-engine'),
       interpreter:  'none',
       instances:    1,
@@ -132,8 +132,8 @@ module.exports = {
         NODE_ENV: 'development',
         PYTHONUNBUFFERED: '1',
       },
-      out_file:   path.join(root, 'logs', 'armoriq.out.log'),
-      error_file: path.join(root, 'logs', 'armoriq.err.log'),
+      out_file:   path.join(root, 'logs', 'Nexus.out.log'),
+      error_file: path.join(root, 'logs', 'Nexus.err.log'),
       log_date_format: 'YYYY-MM-DD HH:mm:ss',
     },
 

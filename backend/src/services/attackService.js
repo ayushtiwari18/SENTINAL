@@ -6,18 +6,18 @@ const { EVENTS }  = require('../sockets/broadcastService');
 const axios       = require('axios');
 const logger      = require('../utils/logger');
 
-// Supports both new centralized ARMORIQ_URL and old name (same key, kept for clarity)
-const ARMORIQ_URL = process.env.ARMORIQ_URL || 'http://localhost:8004';
+// Supports both new centralized Nexus_URL and old name (same key, kept for clarity)
+const Nexus_URL = process.env.Nexus_URL || 'http://localhost:8004';
 
 /**
- * Non-blocking ArmorIQ call.
+ * Non-blocking Nexus call.
  * Called AFTER AttackEvent is saved. Never awaited from the main flow.
- * If ArmorIQ is down, system continues normally.
+ * If Nexus is down, system continues normally.
  */
-const callArmorIQ = async (attack) => {
+const callNexus = async (attack) => {
   try {
     const response = await axios.post(
-      `${ARMORIQ_URL}/respond`,
+      `${Nexus_URL}/respond`,
       {
         attackId:   attack._id.toString(),
         ip:         attack.ip,
@@ -32,7 +32,7 @@ const callArmorIQ = async (attack) => {
     const { actionsExecuted, actionsQueued } = response.data;
 
     logger.info(
-      `[ARMORIQ] executed=${JSON.stringify(actionsExecuted)} ` +
+      `[Nexus] executed=${JSON.stringify(actionsExecuted)} ` +
       `queued=${JSON.stringify(actionsQueued.map(a => a.action))}`
     );
 
@@ -55,11 +55,11 @@ const callArmorIQ = async (attack) => {
         attackId:     queued.attackId
       });
 
-      logger.info(`[ARMORIQ] Queued for human review: ${queued.action}`);
+      logger.info(`[Nexus] Queued for human review: ${queued.action}`);
     }
 
   } catch (err) {
-    logger.warn(`[ARMORIQ] Unreachable or error: ${err.message}`);
+    logger.warn(`[Nexus] Unreachable or error: ${err.message}`);
   }
 };
 
@@ -109,7 +109,7 @@ const reportAttack = async (data) => {
   }
 
   // Fire-and-forget — never blocks the detection pipeline
-  callArmorIQ(attack);
+  callNexus(attack);
 
   return attack;
 };

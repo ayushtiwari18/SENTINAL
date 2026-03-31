@@ -46,7 +46,7 @@ uvicorn main:app --port 8004 --reload
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `GATEWAY_URL` | `http://localhost:3000` | Gateway API base URL |
-| `ARMORIQ_PORT` | `8004` | Port to serve on |
+| `Nexus_PORT` | `8004` | Port to serve on |
 
 ---
 

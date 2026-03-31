@@ -46,7 +46,7 @@ const REQUIRED_VARS = [
     example: '8003'
   },
   {
-    name: 'ARMORIQ_PORT',
+    name: 'Nexus_PORT',
     description: 'Port for the SENTINAL Response Engine (Python FastAPI)',
     example: '8004'
   },
@@ -67,7 +67,7 @@ const INSECURE_DEFAULTS = [
 
 // ── Optional but recommended ──────────────────────────────────────────────
 const RECOMMENDED_VARS = [
-  { name: 'GEMINI_API_KEY',  description: 'Google Gemini key for ArmorIQ AI decisions' },
+  { name: 'GEMINI_API_KEY',  description: 'Google Gemini key for Nexus AI decisions' },
   { name: 'NODE_ENV',        description: 'Runtime mode (development|production|test)' },
   { name: 'LOG_LEVEL',       description: 'Log verbosity (error|warn|info|debug)' }
 ];
@@ -151,11 +151,11 @@ function validateEnv({ exitOnFailure = true } = {}) {
   console.log(`  [ENV]   GATEWAY_PORT   : ${env.GATEWAY_PORT}`);
   console.log(`  [ENV]   DETECTION_PORT : ${env.DETECTION_PORT}`);
   console.log(`  [ENV]   PCAP_PORT      : ${env.PCAP_PORT}`);
-  console.log(`  [ENV]   ARMORIQ_PORT   : ${env.ARMORIQ_PORT}`);
+  console.log(`  [ENV]   Nexus_PORT   : ${env.Nexus_PORT}`);
   console.log(`  [ENV]   MONGO_URI      : ${env.MONGO_URI ? env.MONGO_URI.replace(/:([^:@]+)@/, ':****@') : 'NOT SET'}`);
   console.log(`  [ENV]   DETECTION_URL  : ${env.DETECTION_URL  || env.DETECTION_ENGINE_URL || 'http://localhost:8002 (default)'}`);
-  console.log(`  [ENV]   ARMORIQ_URL    : ${env.ARMORIQ_URL    || 'http://localhost:8004 (default)'}`);
-  console.log(`  [ENV]   GEMINI_API_KEY : ${env.GEMINI_API_KEY ? '✓ set (hidden)' : '⚠ not set — ArmorIQ AI features may be limited'}`);
+  console.log(`  [ENV]   Nexus_URL    : ${env.Nexus_URL    || 'http://localhost:8004 (default)'}`);
+  console.log(`  [ENV]   GEMINI_API_KEY : ${env.GEMINI_API_KEY ? '✓ set (hidden)' : '⚠ not set — Nexus AI features may be limited'}`);
   console.log('');
 
   if (warnings.length > 0) {

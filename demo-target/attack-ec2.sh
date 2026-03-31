@@ -173,7 +173,7 @@ sleep 1
 
 # =============================================================================
 sep
-echo -e "${BOLD}TEST 8 — ArmorIQ Direct Triggers (bypasses middleware — guaranteed logged)${NC}"
+echo -e "${BOLD}TEST 8 — Nexus Direct Triggers (bypasses middleware — guaranteed logged)${NC}"
 echo -e "  These hit the EC2 gateway directly, no demo-target needed."
 echo ""
 
@@ -186,7 +186,7 @@ for ATTACK_TYPE in "sqli" "xss" "traversal" "command_injection" "ssrf" "brute_fo
     SEV="critical"; CONF="0.98"
   fi
 
-  curl -s -X POST "$GATEWAY/api/armoriq/trigger" \
+  curl -s -X POST "$GATEWAY/api/Nexus/trigger" \
     -H "Content-Type: application/json" \
     -d "{\"ip\":\"$IP\",\"attackType\":\"$ATTACK_TYPE\",\"severity\":\"$SEV\",\"confidence\":$CONF,\"status\":\"attempt\"}" > /dev/null
 

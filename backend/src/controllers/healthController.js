@@ -46,7 +46,7 @@ const getHealth = (req, res) => {
     services: {
       detection: process.env.DETECTION_URL || process.env.DETECTION_ENGINE_URL || 'http://localhost:8002',
       pcap:      process.env.PCAP_URL || process.env.PCAP_SERVICE_URL || 'http://localhost:8003',
-      Nexus:   process.env.Nexus_URL || 'http://localhost:8004'
+      nexus:     process.env.NEXUS_URL || 'http://localhost:8004'
     },
     memory: {
       heapUsedMB:  Math.round(process.memoryUsage().heapUsed / 1024 / 1024),

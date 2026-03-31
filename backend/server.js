@@ -93,6 +93,8 @@ app.use('/api/pcap',           require('./src/routes/pcap'));
 app.use('/api/actions',        require('./src/routes/actions'));
 app.use('/api/audit',          require('./src/routes/audit'));
 app.use('/api/armoriq',        require('./src/routes/armoriq'));
+// ── Gemini AI routes (Co-Pilot + Incident Reports) ─────────────────────────────
+app.use('/api/gemini',         require('./src/routes/gemini'));
 
 // 404 Handler
 app.use((req, res) => {
@@ -118,6 +120,7 @@ if (process.env.NODE_ENV !== 'test') {
       logger.info(`[SERVER]   Detection      : ${process.env.DETECTION_URL || process.env.DETECTION_ENGINE_URL || 'http://localhost:8002'}`);
       logger.info(`[SERVER]   ArmorIQ        : ${process.env.ARMORIQ_URL || 'http://localhost:8004'}`);
       logger.info(`[SERVER]   PCAP           : ${process.env.PCAP_URL || process.env.PCAP_SERVICE_URL || 'http://localhost:8003'}`);
+      logger.info(`[SERVER]   Gemini AI      : ${process.env.GEMINI_API_KEY ? 'configured ✓' : 'NOT CONFIGURED (set GEMINI_API_KEY)'}`);
     });
   });
 }

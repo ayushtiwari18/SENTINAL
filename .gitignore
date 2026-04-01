@@ -1,0 +1,145 @@
+# =============================================================================
+# SENTINAL — .gitignore
+# =============================================================================
+# Rules are grouped by category.
+# Anything marked "NEVER commit" contains secrets or runtime state.
+# =============================================================================
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SECRETS & ENVIRONMENT — NEVER COMMIT
+# ─────────────────────────────────────────────────────────────────────────────
+.env
+.env.local
+.env.production
+.env.staging
+.env.development
+# Allow the template — it has no real secrets
+!.env.example
+# Allow the backup folder (contains .env.example-style files only)
+!.env.backup/
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# NODE.JS
+# ─────────────────────────────────────────────────────────────────────────────
+node_modules/
+dist/
+build/
+.npm/
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PYTHON
+# ─────────────────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+# Virtual environments
+venv/
+.venv/
+env/
+.env/
+ENV/
+pip-wheel-metadata/
+.pip/
+# Packaging
+*.egg-info/
+*.egg
+PIPFILE.lock
+dist/
+# Type stubs
+*.pyi
+# Testing
+.pytest_cache/
+.tox/
+# MyPy
+.mypy_cache/
+.dmypy.json
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# LOGS
+# ─────────────────────────────────────────────────────────────────────────────
+# Root logs/ directory (written by PM2 via ecosystem.config.js)
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+# Per-service log directories
+backend/logs/
+services/*/logs/
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PM2 RUNTIME FILES
+# ─────────────────────────────────────────────────────────────────────────────
+# ecosystem.config.local.js — developer-local overrides (not needed in repo)
+ecosystem.config.local.js
+# PM2 dumps (created by `pm2 save`)
+.pm2/
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# UPLOADED FILES (PCAP, temp uploads)
+# ─────────────────────────────────────────────────────────────────────────────
+uploads/
+*.pcap
+*.pcapng
+# Multer temp uploads (written to /tmp by default, but guard any local paths)
+tmp/
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# TEST COVERAGE
+# ─────────────────────────────────────────────────────────────────────────────
+coverage/
+.coverage
+.coverage.*
+htmlcov/
+junit.xml
+coverage.xml
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# OS & EDITOR
+# ─────────────────────────────────────────────────────────────────────────────
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+.Spotlight-V100
+.Trashes
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+# Linux
+*~
+# Editors
+.idea/
+.vscode/
+*.suo
+*.user
+*.sublime-project
+*.sublime-workspace
+# Temp / swap
+*.tmp
+*.bak
+*.swp
+*.swo
+*.orig
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# DOCKER (future)
+# ─────────────────────────────────────────────────────────────────────────────
+.docker/
+docker-compose.override.yml

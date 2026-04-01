@@ -1,0 +1,8 @@
+MongoDB: sentinel (database)
+│
+├── systemlogs       ← Collection for SystemLog model
+├── attackevents     ← Collection for AttackEvent model
+├── alerts           ← Collection for Alert model
+└── servicestatuses  ← Collection for ServiceStatus model
+
+Each model is independent. AttackEvent references SystemLog via requestId. Alert references AttackEvent via attackId. This is your referential integrity chain.

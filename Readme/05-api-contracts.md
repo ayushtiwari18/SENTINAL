@@ -59,7 +59,7 @@ POST /respond
 Body: { attackId, ip, attackType, severity, status, confidence }
 
 GET  /health
-Response: { openclaw_loaded: bool, enforcement: 'PolicyGuard-v1' }
+Response: { policyguard_loaded: bool, enforcement: 'PolicyGuard-v1' }
 ```
 
 ---

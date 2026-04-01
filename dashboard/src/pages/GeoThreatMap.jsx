@@ -1,26 +1,32 @@
 /**
  * SENTINAL — Geo-IP Threat Intelligence Map
  * ==========================================
- * Renders a world heatmap of attack origins using Leaflet + react-leaflet.
- * Data fetched from GET /api/geo/heatmap (Node.js → MongoDB aggregation).
- * Stats panel from GET /api/geo/stats.
- *
- * Dependencies (already in package.json after install):
- *   npm install leaflet react-leaflet
+ * react-leaflet v4 + leaflet v1.9  (React 18 compatible)
+ * Data from GET /api/geo/heatmap and GET /api/geo/stats
  */
 
 import React, { useEffect, useState, useCallback } from 'react';
+import { MapContainer, TileLayer, CircleMarker, Popup, Tooltip } from 'react-leaflet';
+import 'leaflet/dist/leaflet.css';
+import L from 'leaflet';
 import axios from 'axios';
+
+// Fix Leaflet default icon URLs broken by Vite asset hashing
+delete L.Icon.Default.prototype._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
+  iconUrl:       'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+  shadowUrl:     'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+});
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
-// ── Severity colour scale ────────────────────────────────────────────────────
 function countToColor(count) {
-  if (count >= 100) return '#ef4444';   // red-500
-  if (count >= 50)  return '#f97316';   // orange-500
-  if (count >= 20)  return '#eab308';   // yellow-500
-  if (count >= 5)   return '#22c55e';   // green-500
-  return '#3b82f6';                      // blue-500
+  if (count >= 100) return '#ef4444';
+  if (count >= 50)  return '#f97316';
+  if (count >= 20)  return '#eab308';
+  if (count >= 5)   return '#22c55e';
+  return '#3b82f6';
 }
 
 function countToRadius(count) {
@@ -32,29 +38,10 @@ function countToRadius(count) {
 }
 
 export default function GeoThreatMap() {
-  const [heatmap,   setHeatmap]   = useState([]);
-  const [stats,     setStats]     = useState(null);
-  const [loading,   setLoading]   = useState(true);
-  const [error,     setError]     = useState(null);
-  const [selected,  setSelected]  = useState(null);  // selected country dot
-  const [leafletLoaded, setLeafletLoaded] = useState(false);
-
-  // ── Dynamic Leaflet import (avoids SSR issues) ─────────────────────────────
-  useEffect(() => {
-    Promise.all([
-      import('leaflet'),
-      import('react-leaflet'),
-    ]).then(([L]) => {
-      // Fix default marker icons
-      delete L.default.Icon.Default.prototype._getIconUrl;
-      L.default.Icon.Default.mergeOptions({
-        iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
-        iconUrl:       'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
-        shadowUrl:     'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
-      });
-      setLeafletLoaded(true);
-    });
-  }, []);
+  const [heatmap,  setHeatmap]  = useState([]);
+  const [stats,    setStats]    = useState(null);
+  const [loading,  setLoading]  = useState(true);
+  const [error,    setError]    = useState(null);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -75,13 +62,17 @@ export default function GeoThreatMap() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  // ── Render ──────────────────────────────────────────────────────────────────
-  if (!leafletLoaded || loading) {
+  if (loading) {
     return (
-      <div className="flex items-center justify-center h-96 text-gray-400">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-teal-500 mx-auto mb-4" />
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '24rem', color: '#9ca3af' }}>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{
+            width: '3rem', height: '3rem', borderRadius: '50%',
+            border: '3px solid #14b8a6', borderTopColor: 'transparent',
+            animation: 'spin 0.8s linear infinite', margin: '0 auto 1rem'
+          }} />
           <p>Loading Geo-IP Intelligence...</p>
+          <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
         </div>
       </div>
     );
@@ -89,167 +80,168 @@ export default function GeoThreatMap() {
 
   if (error) {
     return (
-      <div className="p-6 text-red-400 bg-red-900/20 rounded-lg">
-        <p className="font-semibold">Failed to load geo data</p>
-        <p className="text-sm mt-1">{error}</p>
-        <button onClick={fetchData} className="mt-3 px-4 py-2 bg-red-600 rounded text-white text-sm hover:bg-red-700">
+      <div style={{ padding: '1.5rem', color: '#f87171', background: 'rgba(239,68,68,0.1)', borderRadius: '0.5rem', margin: '1.5rem' }}>
+        <p style={{ fontWeight: 600 }}>Failed to load geo data</p>
+        <p style={{ fontSize: '0.875rem', marginTop: '0.25rem' }}>{error}</p>
+        <button
+          onClick={fetchData}
+          style={{ marginTop: '0.75rem', padding: '0.5rem 1rem', background: '#dc2626', borderRadius: '0.375rem', color: '#fff', border: 'none', cursor: 'pointer', fontSize: '0.875rem' }}
+        >
           Retry
         </button>
       </div>
     );
   }
 
-  // ── Lazy-loaded Leaflet components ─────────────────────────────────────────
-  // We use a dynamic render trick — import() resolved, so we can require inline
-  const { MapContainer, TileLayer, CircleMarker, Popup, Tooltip } = require('react-leaflet');
+  const flags = stats?.threat_flags || {};
 
-  const topFlags = stats?.threat_flags || {};
+  const statCards = [
+    { label: 'Total Tracked',   value: flags.total            || 0, color: '#2dd4bf' },
+    { label: 'TOR Exits',       value: flags.tor_attacks      || 0, color: '#a78bfa' },
+    { label: 'Proxies',         value: flags.proxy_attacks    || 0, color: '#fbbf24' },
+    { label: 'High Abuse IPs',  value: flags.high_abuse       || 0, color: '#f87171' },
+    { label: 'Countries',       value: flags.unique_countries || 0, color: '#60a5fa' },
+  ];
+
+  const legend = [
+    { color: '#3b82f6', label: '1–4'   },
+    { color: '#22c55e', label: '5–19'  },
+    { color: '#eab308', label: '20–49' },
+    { color: '#f97316', label: '50–99' },
+    { color: '#ef4444', label: '100+'  },
+  ];
 
   return (
-    <div className="p-6 space-y-6">
-      {/* ── Header ────────────────────────────────────────────────────────── */}
-      <div className="flex items-center justify-between">
+    <div style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div>
-          <h1 className="text-2xl font-bold text-white">🌍 Geo-IP Threat Map</h1>
-          <p className="text-gray-400 text-sm mt-1">
+          <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: '#fff', margin: 0 }}>
+            🌍 Geo-IP Threat Map
+          </h1>
+          <p style={{ color: '#9ca3af', fontSize: '0.875rem', margin: '0.25rem 0 0' }}>
             Real-time geographic distribution of attack origins
           </p>
         </div>
         <button
           onClick={fetchData}
-          className="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-sm font-medium transition-colors"
+          style={{ padding: '0.5rem 1rem', background: '#0d9488', border: 'none', borderRadius: '0.5rem', color: '#fff', cursor: 'pointer', fontSize: '0.875rem', fontWeight: 500 }}
         >
           ↻ Refresh
         </button>
       </div>
 
-      {/* ── Stats Cards ───────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-        {[
-          { label: 'Total Tracked',   value: topFlags.total           || 0,    color: 'text-teal-400'   },
-          { label: 'TOR Exits',       value: topFlags.tor_attacks     || 0,    color: 'text-purple-400' },
-          { label: 'Proxies',         value: topFlags.proxy_attacks   || 0,    color: 'text-yellow-400' },
-          { label: 'High Abuse IPs',  value: topFlags.high_abuse      || 0,    color: 'text-red-400'    },
-          { label: 'Countries',       value: topFlags.unique_countries || 0,   color: 'text-blue-400'   },
-        ].map((card) => (
-          <div key={card.label} className="bg-gray-800 rounded-xl p-4 border border-gray-700">
-            <p className="text-gray-400 text-xs uppercase tracking-wider">{card.label}</p>
-            <p className={`text-3xl font-bold mt-1 ${card.color}`}>{card.value.toLocaleString()}</p>
+      {/* KPI Cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '1rem' }}>
+        {statCards.map(card => (
+          <div key={card.label} style={{ background: '#1f2937', borderRadius: '0.75rem', padding: '1rem', border: '1px solid #374151' }}>
+            <p style={{ color: '#9ca3af', fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.05em', margin: 0 }}>{card.label}</p>
+            <p style={{ color: card.color, fontSize: '1.75rem', fontWeight: 700, margin: '0.25rem 0 0' }}>
+              {card.value.toLocaleString()}
+            </p>
           </div>
         ))}
       </div>
 
-      {/* ── Map ────────────────────────────────────────────────────────────── */}
-      <div className="bg-gray-800 rounded-xl border border-gray-700 overflow-hidden" style={{ height: '480px' }}>
-        <link
-          rel="stylesheet"
-          href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-          crossOrigin=""
-        />
+      {/* Map */}
+      <div style={{ background: '#1f2937', borderRadius: '0.75rem', border: '1px solid #374151', overflow: 'hidden', height: '480px' }}>
         <MapContainer
           center={[20, 0]}
           zoom={2}
-          style={{ height: '100%', width: '100%', background: '#1a1a2e' }}
+          style={{ height: '100%', width: '100%' }}
           scrollWheelZoom
         >
           <TileLayer
-            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+            attribution='&copy; <a href="https://carto.com">CARTO</a>'
             url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
           />
 
-          {heatmap.map((point) => (
+          {heatmap.map(point =>
             point.lat && point.lng ? (
               <CircleMarker
                 key={point.country_code}
                 center={[point.lat, point.lng]}
                 radius={countToRadius(point.count)}
-                fillColor={countToColor(point.count)}
-                color={countToColor(point.count)}
-                weight={1}
-                opacity={0.9}
-                fillOpacity={0.7}
-                eventHandlers={{ click: () => setSelected(point) }}
+                pathOptions={{
+                  fillColor:   countToColor(point.count),
+                  color:       countToColor(point.count),
+                  weight:      1,
+                  opacity:     0.9,
+                  fillOpacity: 0.7,
+                }}
               >
                 <Tooltip direction="top" offset={[0, -8]}>
-                  <div className="text-xs">
+                  <div style={{ fontSize: '0.75rem', lineHeight: 1.5 }}>
                     <strong>{point.country}</strong> ({point.country_code})<br />
-                    Attacks: {point.count} | Critical: {point.critical}<br />
-                    TOR: {point.tor_count} | Proxy: {point.proxy_count}
+                    Attacks: {point.count} &nbsp;|&nbsp; Critical: {point.critical}<br />
+                    TOR: {point.tor_count} &nbsp;|&nbsp; Proxy: {point.proxy_count}
                   </div>
                 </Tooltip>
                 <Popup>
-                  <div className="text-sm space-y-1 min-w-[180px]">
-                    <p className="font-bold text-base">{point.country}</p>
-                    <p>Code: <span className="font-mono">{point.country_code}</span></p>
-                    <hr />
-                    <p>Total Attacks: <strong>{point.count}</strong></p>
-                    <p>Critical: <span className="text-red-600">{point.critical}</span></p>
-                    <p>High: <span className="text-orange-500">{point.high}</span></p>
-                    <p>TOR Exits: {point.tor_count}</p>
-                    <p>Proxies: {point.proxy_count}</p>
-                    <p>Avg Abuse Score: {point.avg_abuse}%</p>
+                  <div style={{ fontSize: '0.875rem', minWidth: '180px', lineHeight: 1.7 }}>
+                    <p style={{ fontWeight: 700, fontSize: '1rem', margin: '0 0 4px' }}>{point.country}</p>
+                    <p style={{ margin: 0 }}>Code: <code>{point.country_code}</code></p>
+                    <hr style={{ margin: '6px 0' }} />
+                    <p style={{ margin: 0 }}>Total Attacks: <strong>{point.count}</strong></p>
+                    <p style={{ margin: 0, color: '#dc2626' }}>Critical: {point.critical}</p>
+                    <p style={{ margin: 0, color: '#ea580c' }}>High: {point.high}</p>
+                    <p style={{ margin: 0 }}>TOR Exits: {point.tor_count}</p>
+                    <p style={{ margin: 0 }}>Proxies: {point.proxy_count}</p>
+                    <p style={{ margin: 0 }}>Avg Abuse Score: {point.avg_abuse}%</p>
                   </div>
                 </Popup>
               </CircleMarker>
             ) : null
-          ))}
+          )}
         </MapContainer>
       </div>
 
-      {/* ── Legend ─────────────────────────────────────────────────────────── */}
-      <div className="flex items-center gap-6 text-sm text-gray-400">
-        <span className="font-medium text-gray-300">Attack Volume:</span>
-        {[
-          { color: '#3b82f6', label: '1–4'   },
-          { color: '#22c55e', label: '5–19'  },
-          { color: '#eab308', label: '20–49' },
-          { color: '#f97316', label: '50–99' },
-          { color: '#ef4444', label: '100+'  },
-        ].map(l => (
-          <span key={l.label} className="flex items-center gap-1">
-            <span className="w-3 h-3 rounded-full inline-block" style={{ background: l.color }} />
+      {/* Legend */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', fontSize: '0.875rem', color: '#9ca3af', flexWrap: 'wrap' }}>
+        <span style={{ color: '#d1d5db', fontWeight: 500 }}>Attack Volume:</span>
+        {legend.map(l => (
+          <span key={l.label} style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+            <span style={{ width: '12px', height: '12px', borderRadius: '50%', background: l.color, display: 'inline-block' }} />
             {l.label}
           </span>
         ))}
       </div>
 
-      {/* ── Top Countries Table ─────────────────────────────────────────────── */}
+      {/* Top Countries Table */}
       {stats?.top_countries?.length > 0 && (
-        <div className="bg-gray-800 rounded-xl border border-gray-700">
-          <div className="p-4 border-b border-gray-700">
-            <h2 className="text-white font-semibold">🏴 Top Attacking Countries</h2>
+        <div style={{ background: '#1f2937', borderRadius: '0.75rem', border: '1px solid #374151', overflow: 'hidden' }}>
+          <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid #374151' }}>
+            <h2 style={{ color: '#fff', fontWeight: 600, margin: 0, fontSize: '1rem' }}>🏴 Top Attacking Countries</h2>
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
               <thead>
-                <tr className="text-gray-400 text-left">
-                  <th className="px-4 py-3">Rank</th>
-                  <th className="px-4 py-3">Country</th>
-                  <th className="px-4 py-3">Code</th>
-                  <th className="px-4 py-3">Attacks</th>
-                  <th className="px-4 py-3">Share</th>
+                <tr style={{ color: '#9ca3af', textAlign: 'left' }}>
+                  {['Rank', 'Country', 'Code', 'Attacks', 'Share'].map(h => (
+                    <th key={h} style={{ padding: '0.75rem 1rem', fontWeight: 500 }}>{h}</th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
                 {stats.top_countries.map((c, i) => {
-                  const share = topFlags.total ? Math.round((c.count / topFlags.total) * 100) : 0;
+                  const share = flags.total ? Math.round((c.count / flags.total) * 100) : 0;
                   return (
-                    <tr key={c.country_code} className="border-t border-gray-700 hover:bg-gray-750 transition-colors">
-                      <td className="px-4 py-3 text-gray-400">#{i + 1}</td>
-                      <td className="px-4 py-3 text-white font-medium">{c.country}</td>
-                      <td className="px-4 py-3">
-                        <span className="font-mono bg-gray-700 px-2 py-0.5 rounded text-xs">{c.country_code}</span>
+                    <tr key={c.country_code} style={{ borderTop: '1px solid #374151' }}>
+                      <td style={{ padding: '0.75rem 1rem', color: '#9ca3af' }}>#{i + 1}</td>
+                      <td style={{ padding: '0.75rem 1rem', color: '#fff', fontWeight: 500 }}>{c.country}</td>
+                      <td style={{ padding: '0.75rem 1rem' }}>
+                        <code style={{ background: '#374151', padding: '2px 6px', borderRadius: '4px', fontSize: '0.75rem' }}>
+                          {c.country_code}
+                        </code>
                       </td>
-                      <td className="px-4 py-3 text-white">{c.count.toLocaleString()}</td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-2">
-                          <div className="flex-1 bg-gray-700 rounded-full h-1.5">
-                            <div
-                              className="h-1.5 rounded-full bg-teal-500"
-                              style={{ width: `${share}%` }}
-                            />
+                      <td style={{ padding: '0.75rem 1rem', color: '#fff' }}>{c.count.toLocaleString()}</td>
+                      <td style={{ padding: '0.75rem 1rem' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          <div style={{ flex: 1, background: '#374151', borderRadius: '9999px', height: '6px' }}>
+                            <div style={{ width: `${share}%`, height: '6px', borderRadius: '9999px', background: '#14b8a6' }} />
                           </div>
-                          <span className="text-gray-400 text-xs w-8">{share}%</span>
+                          <span style={{ color: '#9ca3af', fontSize: '0.75rem', width: '2.5rem' }}>{share}%</span>
                         </div>
                       </td>
                     </tr>

@@ -1,448 +1,214 @@
-# SENTINAL 🛡️
+<div align="center">
 
-> Real-time web application security monitoring platform.  
-> Drop-in Express middleware → instant attack detection, forensics, and live dashboard.
+# 🛡️ SENTINAL
 
-[![Node.js](https://img.shields.io/badge/Node.js-Express-green)](https://nodejs.org)
-[![Python](https://img.shields.io/badge/Python-FastAPI-blue)](https://fastapi.tiangolo.com)
-[![React](https://img.shields.io/badge/React-Vite-61dafb)](https://vitejs.dev)
-[![MongoDB](https://img.shields.io/badge/Database-MongoDB_Atlas-47A248)](https://www.mongodb.com/atlas)
-[![Postman Collection](https://img.shields.io/badge/Postman-Run%20Collection-FF6C37?logo=postman&logoColor=white)](https://raw.githubusercontent.com/ayushtiwari18/SENTINAL/main/SENTINAL_Postman_Collection.json)
+**AI-Powered Web Application Firewall & Intrusion Detection System**
 
----
+[![Live Demo](https://img.shields.io/badge/Live%20Demo-98.92.84.165%3A5173-00d4aa?style=for-the-badge)](http://98.92.84.165:5173/dashboard)
+[![Built for HackByte 4.0](https://img.shields.io/badge/HackByte-4.0-ff6b35?style=for-the-badge)](https://hackbyte.in)
+[![Node.js](https://img.shields.io/badge/Node.js-18+-339933?style=for-the-badge&logo=node.js)](https://nodejs.org)
+[![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=for-the-badge&logo=python)](https://python.org)
+[![React](https://img.shields.io/badge/React-18-61DAFB?style=for-the-badge&logo=react)](https://react.dev)
+[![MongoDB](https://img.shields.io/badge/MongoDB-Atlas-47A248?style=for-the-badge&logo=mongodb)](https://mongodb.com)
 
-## 🚀 Test the API with Postman
+*Real-time attack detection → AI-powered response → Human-in-the-loop enforcement*
 
-**Import the full collection in one click:**
-
-1. Open Postman → **Import**
-2. Paste this URL:
-```
-https://raw.githubusercontent.com/ayushtiwari18/SENTINAL/main/SENTINAL_Postman_Collection.json
-```
-3. Set up the `SENTINAL Production` environment with your EC2 IP:
-
-| Variable | Value |
-|---|---|
-| `base` | `http://<YOUR_EC2_IP>:3000` |
-| `detection` | `http://<YOUR_EC2_IP>:8002` |
-| `pcap` | `http://<YOUR_EC2_IP>:8003` |
-| `Nexus` | `http://<YOUR_EC2_IP>:8004` | (sentinal-response-engine)
-
-> The collection includes 40+ requests across 8 folders: health checks, attack simulations, Nexus enforcement tests, full pipeline triggers, human approval workflow, and an end-to-end demo sequence.
+</div>
 
 ---
 
-## Overview
+## 🎯 What is SENTINAL?
 
-SENTINAL is a microservices-based security layer that wraps any Express.js application. It captures HTTP metadata, runs it through a multi-layer detection engine (rule-based + adversarial decoder), surfaces threats in a live React dashboard, and triggers autonomous remediation via the **Nexus** agent.
+SENTINAL is a **production-grade, AI-augmented security platform** that sits in front of your web application and provides:
 
----
-
-## Architecture
-
-```
-User Traffic
-    │
-    ▼
-┌─────────────────────────────────────────────────────────┐
-│  Gateway API          Node.js + Express + Socket.io      │  :3000
-│  backend/server.js                                       │
-└──────────────┬───────────────────┬──────────────────────┘
-               │                   │
-               ▼                   ▼
-  ┌────────────────────┐  ┌──────────────────────┐
-  │  Detection Engine  │  │   PCAP Processor     │
-  │  Python + FastAPI  │  │  Python + Scapy      │  :8003
-  │  :8002             │  └──────────────────────┘
-  └────────────────────┘
-               │
-               ▼
-  ┌────────────────────┐    ┌──────────────────────┐
-  │  MongoDB Atlas     │    │  SENTINAL Response   │
-  │  (Data Layer)      │    │  Engine (FastAPI)    │  :8004
-  └────────────────────┘    └──────────────────────┘
-               │
-               ▼
-  ┌────────────────────┐
-  │  Dashboard         │
-  │  React + Vite      │  :5173
-  └────────────────────┘
-```
-
-### Service Port Map
-
-| Service | Tech | Port |
-|---|---|---|
-| Gateway API | Node.js + Express + Socket.io | **3000** |
-| Detection Engine | Python + FastAPI | **8002** |
-| PCAP Processor | Python + FastAPI + Scapy | **8003** |
-| SENTINAL Response Engine (Nexus) | Python + FastAPI | **8004** |
-| React Dashboard | React + Vite | **5173** |
-| Database | MongoDB Atlas | — |
+- 🔍 **Real-time traffic inspection** — every HTTP request scanned for SQLi, XSS, path traversal, command injection, brute force, and more
+- 🤖 **AI threat scoring** — ML-based confidence scoring + Gemini AI forensic analysis
+- ⚡ **Automated response** — low-risk threats handled autonomously; high-risk actions require human approval
+- 🧠 **Nexus Policy Engine** — Python-based agent that enforces `rate_limit_ip`, `permanent_ban_ip`, `shutdown_endpoint` policies
+- 👁️ **Live dashboard** — real-time WebSocket-powered React UI showing attacks, blocklist, audit logs, AI copilot
+- 🚫 **IP Blocklist** — manual and automated blocking with TTL expiry, visible and manageable from the dashboard
 
 ---
 
-## Prerequisites
+## 🏗️ Architecture Overview
 
-- **Node.js** ≥ 18 — [nodejs.org](https://nodejs.org)
-- **Python** ≥ 3.10 — [python.org](https://python.org)
-- **PM2** — `npm install -g pm2`
-- **MongoDB Atlas** free cluster — [mongodb.com/atlas](https://www.mongodb.com/cloud/atlas/register)
-- **Google Gemini API Key** *(optional — for Nexus AI decisions)* — [aistudio.google.com](https://aistudio.google.com/app/apikey)
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        INCOMING TRAFFIC                         │
+└──────────────────────────┬──────────────────────────────────────┘
+                           │
+              ┌────────────▼────────────┐
+              │   Node.js Gateway :3000  │  ← Express + Socket.IO
+              │   (Middleware Layer)     │  ← BlockedIP Check (MongoDB)
+              └────────────┬────────────┘
+                           │
+           ┌───────────────┼───────────────┐
+           │               │               │
+  ┌────────▼───────┐  ┌───▼────┐  ┌──────▼───────┐
+  │ Detection Eng. │  │MongoDB │  │  Nexus Engine │
+  │  Python :8002  │  │ Atlas  │  │  Python :8004 │
+  │  (ML Scoring)  │  │        │  │ (Policy Guard)│
+  └────────────────┘  └───┬────┘  └──────────────┘
+                           │
+              ┌────────────▼────────────┐
+              │   React Dashboard :5173  │
+              │   (Vite + WebSocket)     │
+              └─────────────────────────┘
+```
+
+> 📖 Full architecture details → [`Readme/ARCHITECTURE.md`](./Readme/ARCHITECTURE.md)
 
 ---
 
-## Quick Start
-
-### 1. Clone the repository
-
-```bash
-git clone https://github.com/ayushtiwari18/SENTINAL.git
-cd SENTINAL
-```
-
-### 2. Create your `.env` file
-
-All 4 services read from **one single `.env` file at the project root**.
-
-```bash
-cp .env.example .env
-```
-
-Then open `.env` and fill in your values. The only fields you **must** change:
-
-```bash
-# Required — system will not start without these
-MONGO_URI=mongodb+srv://youruser:yourpassword@cluster0.xxxxx.mongodb.net/sentinel
-JWT_SECRET=generate_a_long_random_string_here
-
-# Optional but recommended for AI features
-GEMINI_API_KEY=your_gemini_api_key_here
-```
-
-> **Generate a secure JWT secret:**
-> ```bash
-> node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-> ```
-
-### 3. Validate your environment
-
-Before starting anything, check that all required variables are set:
-
-```bash
-chmod +x scripts/validate-env.sh
-./scripts/validate-env.sh --env-only
-```
-
-You should see:
-```
-  ✓  MONGO_URI  =  mongodb+srv://user:****@cluster...
-  ✓  JWT_SECRET length is 64 chars (good)
-  ...
-  ALL CHECKS PASSED — safe to deploy.
-```
-
-### 4. Start all services with one command
-
-```bash
-chmod +x start.sh stop.sh status.sh
-./start.sh
-```
-
-This will:
-1. Check `node`, `python3`, `pm2` are installed
-2. Verify `.env` exists
-3. Install Node dependencies if needed
-4. Start all 4 services via PM2
-5. Auto-run health checks after 6 seconds
-
-### 5. Start the Dashboard
-
-```bash
-cd dashboard
-npm install
-npm run dev
-# Open http://localhost:5173
-```
-
----
-
-## Service Management
-
-### Start / Stop / Status
-
-```bash
-./start.sh          # start all services (production)
-./start.sh --dev    # start all services (development mode)
-./stop.sh           # stop all (keep in PM2 list)
-./stop.sh --delete  # stop + remove from PM2
-./status.sh         # check all health endpoints
-```
-
-### PM2 Commands
-
-```bash
-pm2 list                          # show all processes
-pm2 logs                          # tail all logs live
-pm2 logs sentinal-gateway         # tail one service
-pm2 monit                         # live CPU + memory dashboard
-pm2 restart ecosystem.config.js   # restart all
-pm2 reload ecosystem.config.js    # zero-downtime reload
-pm2 save                          # save process list
-pm2 startup                       # auto-start on server reboot
-```
-
-### Auto-start on Server Reboot
-
-```bash
-pm2 save
-pm2 startup    # follow the printed command (requires sudo)
-```
-
----
-
-## Manual Setup (without PM2)
-
-If you prefer to run services manually in separate terminals:
-
-**Terminal 1 — Gateway**
-```bash
-cd backend
-npm install
-node server.js
-```
-
-**Terminal 2 — Detection Engine**
-```bash
-cd services/detection-engine
-pip install -r requirements.txt
-uvicorn app.main:app --host 0.0.0.0 --port 8002
-```
-
-**Terminal 3 — PCAP Processor**
-```bash
-cd services/pcap-processor
-pip install -r requirements.txt
-uvicorn main:app --host 0.0.0.0 --port 8003
-```
-
-**Terminal 4 — SENTINAL Response Engine (Nexus)**
-```bash
-cd services/sentinal-response-engine
-pip install -r requirements.txt
-uvicorn main:app --host 0.0.0.0 --port 8004
-```
-
-> Each Python service auto-reads the root `.env` file via `python-dotenv`.
-
----
-
-## Health Checks
-
-Every service exposes a `/health` endpoint. Check them after starting:
-
-```bash
-./status.sh
-
-# Or manually:
-curl http://localhost:3000/health    # Gateway
-curl http://localhost:8002/health    # Detection Engine
-curl http://localhost:8003/health    # PCAP Processor
-curl http://localhost:8004/health    # SENTINAL Response Engine (Nexus)
-```
-
-All return the same standard shape:
-```json
-{
-  "status":  "ok",
-  "service": "gateway",
-  "uptime":  143
-}
-```
-
-> The full `/api/health` endpoint on the gateway also includes DB status, memory usage, and service URLs.
-
----
-
-## Seed Demo Data
-
-```bash
-node backend/scripts/seed.js
-# Creates: 80 system logs, 50 attack events, proportional alerts
-```
-
----
-
-## Repository Layout
+## 📁 Repository Structure
 
 ```
 SENTINAL/
-├── .env.example                    ← copy to .env and fill in values
-├── .env                            ← YOUR secrets (never commit)
-├── ecosystem.config.js             ← PM2 process config (all 4 services)
-├── start.sh                        ← start all services
-├── stop.sh                         ← stop all services
-├── status.sh                       ← check all health endpoints
-├── SENTINAL_Postman_Collection.json ← Postman collection (import this)
+├── README.md                    # You are here
+├── .env.example                 # Environment template
+├── ecosystem.config.js          # PM2 process config
+├── deploy.sh                    # One-command cloud deploy
+├── start.sh / stop.sh           # Local start/stop scripts
 │
-├── config/
-│   └── envValidator.js             ← startup env guard (exits if vars missing)
+├── Readme/                      # 📚 All documentation
+│   ├── ARCHITECTURE.md          # System design + data flow
+│   ├── API_REFERENCE.md         # Every API endpoint documented
+│   ├── LOCAL_SETUP.md           # Step-by-step local setup
+│   └── CODEBASE_GUIDE.md        # How the codebase is organized
 │
-├── backend/                        ← Gateway API (Node.js)
-│   ├── server.js
-│   ├── package.json
+├── backend/                     # Node.js Gateway (Express)
 │   └── src/
-│       ├── config/                 ← DB connection
-│       ├── controllers/            ← Route handlers
-│       ├── middleware/             ← Rate limiter, auth
-│       ├── models/                 ← Mongoose schemas
-│       ├── routes/                 ← API route definitions
-│       ├── services/               ← Business logic, service connectors
-│       ├── sockets/                ← Socket.io event handlers
-│       ├── tests/                  ← Unit & integration tests
-│       └── utils/                  ← Logger, helpers
+│       ├── controllers/         # Route handlers
+│       ├── middleware/          # BlockedIP check, request logger
+│       ├── models/              # MongoDB schemas
+│       ├── routes/              # API route definitions
+│       ├── services/            # attackService, geminiService
+│       ├── sockets/             # Socket.IO broadcast
+│       └── utils/               # logger, eventEmitter
 │
 ├── services/
-│   ├── detection-engine/           ← Python FastAPI — rule-based + adversarial detection
-│   ├── sentinal-response-engine/   ← Python FastAPI — Nexus policy enforcement
-│   ├── pcap-processor/             ← Python FastAPI + Scapy — PCAP forensics
-│   └── middleware/                 ← Express middleware package source
+│   ├── detection-engine/        # Python FastAPI — ML attack scoring
+│   ├── nexus/                   # Python FastAPI — Policy Guard agent
+│   └── pcap-processor/          # Python FastAPI — PCAP file analysis
 │
-├── dashboard/                      ← React + Vite frontend
+├── dashboard/                   # React + Vite frontend
 │   └── src/
-│       ├── components/
-│       ├── pages/
-│       ├── hooks/
-│       └── services/               ← API + Socket.io clients
+│       ├── pages/               # Route-level components
+│       ├── components/          # Shared UI components
+│       ├── hooks/               # useSocket, custom hooks
+│       └── services/api.js      # All API calls
 │
-├── scripts/
-│   ├── validate-env.sh             ← pre-deploy env + health validator
-│   ├── simulate_attack.sh          ← attack simulation (demo)
-│   └── simulate_attack.py
-│
-├── demo-target/                    ← Sample vulnerable app for demos
-└── logs/                           ← PM2 log output (git-ignored)
+├── demo-target/                 # Vulnerable Express app (for demos)
+├── postman/                     # Postman collection for API testing
+├── config/                      # PM2 / Nginx configs
+└── scripts/                     # Utility scripts
 ```
 
 ---
 
-## API Reference (Gateway — port 3000)
+## ⚡ Quick Start
 
-| Method | Endpoint | Description |
+### Cloud Deploy (Ubuntu VPS)
+```bash
+git clone https://github.com/ayushtiwari18/SENTINAL.git
+cd SENTINAL
+cp .env.example .env
+nano .env   # fill in MONGODB_URI, GEMINI_API_KEY
+bash deploy.sh
+```
+
+### Local Development
+```bash
+git clone https://github.com/ayushtiwari18/SENTINAL.git
+cd SENTINAL && cp .env.example .env
+# See Readme/LOCAL_SETUP.md for full steps
+```
+
+> 📖 Full setup guide → [`Readme/LOCAL_SETUP.md`](./Readme/LOCAL_SETUP.md)
+
+---
+
+## 🔌 Services & Ports
+
+| Service | Tech | Port | Purpose |
+|---|---|---|---|
+| **Gateway** | Node.js / Express | `3000` | Main API, middleware, WebSocket |
+| **Detection Engine** | Python / FastAPI | `8002` | ML-based attack classification |
+| **PCAP Processor** | Python / FastAPI | `8003` | Network capture file analysis |
+| **Nexus Engine** | Python / FastAPI | `8004` | Policy enforcement agent |
+| **Dashboard** | React / Vite | `5173` | Web UI |
+
+---
+
+## 🔐 Attack Types Detected
+
+| Attack | Detection Method | Auto-Response |
 |---|---|---|
-| GET | `/health` | Liveness probe (no DB required — for AWS ALB) |
-| GET | `/api/health` | Full health: DB status + memory + service URLs |
-| POST | `/api/logs/ingest` | Ingest HTTP request metadata |
-| GET | `/api/attacks/recent` | Last 20 attack events |
-| GET | `/api/attacks/search?q=` | Full-text search attacks |
-| GET | `/api/attacks/:id/forensics` | Full forensic report for an attack |
-| POST | `/api/nexus/trigger` | Manually trigger full Nexus pipeline (returns 201) |
-| GET | `/api/stats` | Aggregate platform stats |
-| GET | `/api/service-status` | Health of all microservices |
-| GET | `/api/alerts` | Alert feed |
-| PATCH | `/api/alerts/:id/read` | Mark an alert as read |
-| POST | `/api/pcap/upload` | Upload `.pcap` / `.pcapng` for analysis |
-| GET | `/api/audit` | Audit log of Nexus decisions |
-| GET | `/api/actions/pending` | Pending human-approval actions |
-| POST | `/api/actions/:id/approve` | Approve a blocked action (HUMAN_OVERRIDE) |
-| POST | `/api/actions/:id/reject` | Reject a blocked action |
-
-### Socket.io Events (port 3000)
-
-| Event | Trigger |
-|---|---|
-| `attack:new` | New attack detected |
-| `alert:new` | New high/critical alert created |
-| `service:status` | Microservice health change |
-| `stats:update` | Aggregate stats changed |
+| SQL Injection | Pattern + ML scoring | `rate_limit_ip` |
+| XSS | Pattern + ML scoring | `rate_limit_ip` |
+| Path Traversal | Pattern matching | `rate_limit_ip` |
+| Command Injection | Pattern + ML | `permanent_ban_ip` |
+| Brute Force | Rate analysis | `rate_limit_ip` |
+| SSRF | Pattern matching | `rate_limit_ip` |
+| XXE | XML inspection | `rate_limit_ip` |
+| Webshell Upload | File analysis | `permanent_ban_ip` |
 
 ---
 
-## Data Models
+## 📊 Dashboard Pages
 
-### AttackEvent
-
-| Field | Values |
-|---|---|
-| `attackType` | `sqli` \| `xss` \| `traversal` \| `command_injection` \| `ssrf` \| `lfi_rfi` \| `brute_force` \| `hpp` \| `xxe` \| `webshell` \| `recon` \| `ddos` \| `unknown` |
-| `severity` | `low` \| `medium` \| `high` \| `critical` |
-| `status` | `attempt` \| `successful` \| `blocked` |
-| `detectedBy` | `rule` \| `ml` \| `both` |
-| `confidence` | `0.0 – 1.0` |
-
-### Alert
-
-| Field | Values |
-|---|---|
-| `type` | `attack_detected` \| `service_down` \| `rate_limit` \| `anomaly` |
-| `severity` | `low` \| `medium` \| `high` \| `critical` |
-
----
-
-## Environment Variables Reference
-
-See [`.env.example`](.env.example) for the full annotated list.
-
-| Variable | Required | Description |
+| Route | Page | Description |
 |---|---|---|
-| `MONGO_URI` | ✅ | MongoDB Atlas connection string |
-| `GATEWAY_PORT` | ✅ | Express Gateway port (default: 3000) |
-| `DETECTION_PORT` | ✅ | Detection Engine port (default: 8002) |
-| `PCAP_PORT` | ✅ | PCAP Processor port (default: 8003) |
-| `Nexus_PORT` | ✅ | SENTINAL Response Engine port (default: 8004) |
-| `JWT_SECRET` | ✅ | JWT signing secret (min 32 chars) |
-| `DETECTION_URL` | ✅ | Internal URL of Detection Engine |
-| `PCAP_URL` | ✅ | Internal URL of PCAP Processor |
-| `Nexus_URL` | ✅ | Internal URL of SENTINAL Response Engine |
-| `GATEWAY_URL` | ✅ | Gateway URL (used by Nexus to call back) |
-| `GEMINI_API_KEY` | ⚠️ | Google Gemini key for Nexus AI decisions |
-| `NODE_ENV` | ⚠️ | `development` \| `production` \| `test` |
-| `LOG_LEVEL` | ⚠️ | `error` \| `warn` \| `info` \| `debug` |
-
-> **The system will refuse to start** if any ✅ variable is missing, printing a clear error message with the exact fix. See [`config/envValidator.js`](config/envValidator.js).
+| `/dashboard` | Dashboard | Live stats, attack feed, risk score |
+| `/attacks` | Attacks | All detected attacks with forensics |
+| `/alerts` | Alerts | High/critical severity notifications |
+| `/action-queue` | Nexus Queue | Approve/reject AI-proposed actions |
+| `/blocklist` | IP Blocklist | View, add, remove blocked IPs |
+| `/audit` | Audit Log | Full action history trail |
+| `/pcap` | PCAP Analyzer | Upload & analyze network captures |
+| `/copilot` | AI Copilot | Gemini AI security assistant |
+| `/correlation` | Correlation | AI cross-attack pattern analysis |
+| `/simulate` | Simulate | Trigger test attacks for demo |
+| `/services` | Services | Health status of all services |
 
 ---
 
-## Troubleshooting
+## 📬 API Testing
 
-**Gateway won’t start — "Missing Environment Variables"**
-```bash
-./scripts/validate-env.sh --env-only
-# Shows exactly which variables are missing
+Import the Postman collection to test all endpoints:
+
+```
+postman/SENTINAL_API.postman_collection.json
 ```
 
-**Services start but detection isn’t working**
-```bash
-./status.sh
-# Check which service is returning non-200
-pm2 logs sentinal-detection   # see Python error
-```
-
-**Port already in use**
-```bash
-lsof -i :8002        # find what’s using the port
-# Change DETECTION_PORT in .env, then ./stop.sh && ./start.sh
-```
-
-**PM2 processes keep restarting**
-```bash
-pm2 logs             # see crash reason
-pm2 monit            # live monitor
-```
+> 📖 Full API docs → [`Readme/API_REFERENCE.md`](./Readme/API_REFERENCE.md)
 
 ---
 
-## Contributing
+## 🛠️ Tech Stack
 
-1. Fork the repo
-2. Create a feature branch: `git checkout -b feat/your-feature`
-3. Commit your changes: `git commit -m 'feat: add your feature'`
-4. Validate before pushing: `./scripts/validate-env.sh --env-only`
-5. Push and open a Pull Request
+**Backend:** Node.js 18, Express 4, Socket.IO, Mongoose, Axios  
+**AI Services:** Python 3.11, FastAPI, scikit-learn, Google Gemini 1.5 Pro  
+**Frontend:** React 18, Vite, React Router v6, Axios  
+**Database:** MongoDB Atlas (hosted) or local MongoDB 7  
+**Process Manager:** PM2  
+**Deployment:** Ubuntu 22.04 LTS, Nginx (optional)
 
 ---
 
-## License
+## 📖 Documentation
 
-MIT © [Ayush Tiwari](https://ayusht.netlify.app/)
+| Doc | Description |
+|---|---|
+| [`Readme/ARCHITECTURE.md`](./Readme/ARCHITECTURE.md) | Full system design, data flow diagrams, MongoDB schemas |
+| [`Readme/API_REFERENCE.md`](./Readme/API_REFERENCE.md) | Every endpoint, request/response format |
+| [`Readme/LOCAL_SETUP.md`](./Readme/LOCAL_SETUP.md) | Step-by-step local development setup |
+| [`Readme/CODEBASE_GUIDE.md`](./Readme/CODEBASE_GUIDE.md) | How the code is organized, key files explained |
+
+---
+
+<div align="center">
+
+Built with ❤️ for **HackByte 4.0** · [Live Demo](http://98.92.84.165:5173/dashboard) · [GitHub](https://github.com/ayushtiwari18/SENTINAL)
+
+</div>

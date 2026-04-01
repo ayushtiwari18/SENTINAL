@@ -1,0 +1,210 @@
+{
+  "info": {
+    "name": "SENTINAL API",
+    "description": "Complete API collection for SENTINAL — AI-Powered WAF & IDS\n\nSet the `base_url` variable to your server (default: http://localhost:3000)",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "base_url", "value": "http://localhost:3000", "type": "string" },
+    { "key": "attack_id", "value": "", "type": "string" },
+    { "key": "action_id", "value": "", "type": "string" },
+    { "key": "alert_id", "value": "", "type": "string" },
+    { "key": "blocked_ip", "value": "203.0.113.99", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "Gateway Health",
+          "request": { "method": "GET", "url": "{{base_url}}/health" }
+        },
+        {
+          "name": "Service Status",
+          "request": { "method": "GET", "url": "{{base_url}}/api/service-status" }
+        }
+      ]
+    },
+    {
+      "name": "Stats",
+      "item": [
+        {
+          "name": "Dashboard Stats",
+          "request": { "method": "GET", "url": "{{base_url}}/api/stats" }
+        }
+      ]
+    },
+    {
+      "name": "Attacks",
+      "item": [
+        {
+          "name": "Recent Attacks",
+          "request": { "method": "GET", "url": "{{base_url}}/api/attacks/recent?limit=50" }
+        },
+        {
+          "name": "Attack Forensics",
+          "request": { "method": "GET", "url": "{{base_url}}/api/attacks/{{attack_id}}/forensics" }
+        }
+      ]
+    },
+    {
+      "name": "Alerts",
+      "item": [
+        {
+          "name": "Get Alerts",
+          "request": { "method": "GET", "url": "{{base_url}}/api/alerts?limit=50" }
+        },
+        {
+          "name": "Mark Alert Read",
+          "request": { "method": "PATCH", "url": "{{base_url}}/api/alerts/{{alert_id}}/read" }
+        }
+      ]
+    },
+    {
+      "name": "Blocklist",
+      "item": [
+        {
+          "name": "Get All Blocked IPs",
+          "request": { "method": "GET", "url": "{{base_url}}/api/blocklist" }
+        },
+        {
+          "name": "Check IP Status",
+          "request": { "method": "GET", "url": "{{base_url}}/api/blocklist/check/{{blocked_ip}}" }
+        },
+        {
+          "name": "Block IP (Manual)",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/blocklist",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ip\": \"{{blocked_ip}}\",\n  \"reason\": \"Test manual block\",\n  \"durationMinutes\": 60,\n  \"blockedBy\": \"human-dashboard\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Unblock IP",
+          "request": { "method": "DELETE", "url": "{{base_url}}/api/blocklist/{{blocked_ip}}" }
+        }
+      ]
+    },
+    {
+      "name": "Action Queue (Nexus)",
+      "item": [
+        {
+          "name": "Get Pending Actions",
+          "request": { "method": "GET", "url": "{{base_url}}/api/actions/pending" }
+        },
+        {
+          "name": "Approve Action",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/actions/{{action_id}}/approve",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"approvedBy\": \"human\"\n}" }
+          }
+        },
+        {
+          "name": "Reject Action",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/actions/{{action_id}}/reject",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"rejectedBy\": \"human\"\n}" }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Audit Log",
+      "item": [
+        {
+          "name": "Get Audit Log",
+          "request": { "method": "GET", "url": "{{base_url}}/api/audit?limit=50" }
+        }
+      ]
+    },
+    {
+      "name": "Logs",
+      "item": [
+        {
+          "name": "Recent Logs",
+          "request": { "method": "GET", "url": "{{base_url}}/api/logs/recent?limit=50" }
+        }
+      ]
+    },
+    {
+      "name": "PCAP",
+      "item": [
+        {
+          "name": "Upload PCAP File",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/pcap/upload",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "pcap", "type": "file", "src": "" },
+                { "key": "projectId", "value": "my-project", "type": "text" }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Gemini AI",
+      "item": [
+        {
+          "name": "Security Copilot Chat",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/gemini/chat",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"message\": \"What are the most attacked IPs today?\",\n  \"history\": []\n}" }
+          }
+        },
+        {
+          "name": "Generate Forensic Report",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/gemini/report/{{attack_id}}",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"reportType\": \"technical\"\n}" }
+          }
+        },
+        {
+          "name": "Run Threat Correlation",
+          "request": { "method": "POST", "url": "{{base_url}}/api/gemini/correlate" }
+        },
+        {
+          "name": "Mutate Payload",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/gemini/mutate",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"payload\": \"' OR 1=1--\",\n  \"attackType\": \"sqli\"\n}" }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Nexus Demo",
+      "item": [
+        {
+          "name": "Trigger Simulated Attack",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/nexus/trigger",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ip\": \"203.0.113.99\",\n  \"attackType\": \"brute_force\",\n  \"severity\": \"critical\",\n  \"confidence\": 0.97,\n  \"status\": \"successful\"\n}"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

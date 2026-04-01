@@ -5,12 +5,13 @@ Only called AFTER policy_engine returns ALLOW.
 Executes the allowed action by calling Gateway API endpoints.
 All calls are fire-safe: exceptions are caught and logged, never re-raised.
 
-Phase 4 upgrade: rate_limit_ip now writes a real entry to blocklist.txt
-on disk — a provable real-world side effect that is observable (cat the file)
-and reversible (delete the line or the file).
+Phase 5 upgrade: rate_limit_ip now ALSO POSTs to Gateway /api/blocklist so
+the block is stored in MongoDB and enforced in real-time by the SENTINAL
+Express middleware (services/middleware/src/adapters/express.js).
 
-Fix: replaced raise_for_status() with explicit status check in _send_alert
-so HTTP errors are clearly logged rather than silently swallowed.
+Flow:
+  1. Write to blocklist.txt  (backwards-compat, observable via cat)
+  2. POST to Gateway /api/blocklist  (real enforcement via MongoDB)
 """
 
 import httpx
@@ -23,6 +24,9 @@ logger = logging.getLogger("nexus.executor")
 
 GATEWAY_URL    = os.getenv("GATEWAY_URL", "http://localhost:3000")
 BLOCKLIST_PATH = Path(__file__).parent / "blocklist.txt"
+
+# How long to block a rate-limited IP (in minutes). 0 = permanent.
+BLOCK_DURATION_MINUTES = int(os.getenv("BLOCK_DURATION_MINUTES", "60"))
 
 
 async def execute(action: str, intent_data: dict, attack_context: dict) -> bool:
@@ -40,7 +44,7 @@ async def execute(action: str, intent_data: dict, attack_context: dict) -> bool:
             return True
 
         elif action == "rate_limit_ip":
-            return _write_blocklist(intent_data, attack_context)
+            return await _block_ip(intent_data, attack_context)
 
         elif action == "flag_for_review":
             logger.info(f"[EXECUTOR] flag_for_review set for ip={intent_data.get('target')}")
@@ -59,22 +63,23 @@ async def execute(action: str, intent_data: dict, attack_context: dict) -> bool:
         return False
 
 
-def _write_blocklist(intent_data: dict, attack_context: dict) -> bool:
+async def _block_ip(intent_data: dict, attack_context: dict) -> bool:
     """
-    Write the rate-limited IP to blocklist.txt with a timestamp.
-    Format: <ip>\t<timestamp>\t<attack_type>\t<attackId>
-    This is a REAL side effect: the file is written to disk and can be
-    read by any process (nginx, iptables script, etc.).
-    Observable with: cat services/sentinal-response-engine/blocklist.txt
-    Reversible: delete the line or rm the file.
+    Block an IP by:
+      1. Writing to blocklist.txt on disk (backwards-compat, observable)
+      2. POSTing to Gateway /api/blocklist (MongoDB, enforced by middleware)
+
+    Both steps are attempted independently. Failure of one does not prevent
+    the other. Returns True if MongoDB write succeeded (primary enforcement).
     """
     ip          = intent_data.get("target", attack_context.get("ip", "unknown"))
     attack_type = attack_context.get("attackType", "unknown")
     attack_id   = attack_context.get("attackId", "unknown")
+    reason      = intent_data.get("reason", f"rate_limit_ip triggered for {attack_type}")
     timestamp   = datetime.utcnow().isoformat() + "Z"
 
+    # ── Step 1: Write to blocklist.txt (backwards-compat) ───────────────────────
     entry = f"{ip}\t{timestamp}\t{attack_type}\t{attack_id}\n"
-
     try:
         with open(BLOCKLIST_PATH, "a") as fh:
             fh.write(entry)
@@ -82,9 +87,39 @@ def _write_blocklist(intent_data: dict, attack_context: dict) -> bool:
             f"[EXECUTOR] rate_limit_ip: {ip} written to blocklist.txt "
             f"(attack={attack_type} id={attack_id})"
         )
-        return True
     except Exception as e:
-        logger.error(f"[EXECUTOR] blocklist write failed for ip={ip}: {e}")
+        logger.warning(f"[EXECUTOR] blocklist.txt write failed for ip={ip}: {e}")
+
+    # ── Step 2: POST to Gateway MongoDB via /api/blocklist ────────────────────
+    try:
+        payload = {
+            "ip":              ip,
+            "reason":          reason,
+            "attackType":      attack_type,
+            "attackId":        attack_id,
+            "durationMinutes": BLOCK_DURATION_MINUTES if BLOCK_DURATION_MINUTES > 0 else None,
+            "blockedBy":       "sentinal-response-engine",
+        }
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.post(
+                f"{GATEWAY_URL}/api/blocklist",
+                json=payload,
+                headers={"Content-Type": "application/json"},
+            )
+        if resp.status_code in (200, 201):
+            logger.info(
+                f"[EXECUTOR] rate_limit_ip: {ip} saved to MongoDB blocklist "
+                f"(duration={BLOCK_DURATION_MINUTES}min attack={attack_type})"
+            )
+            return True
+        else:
+            logger.warning(
+                f"[EXECUTOR] Gateway /api/blocklist returned HTTP {resp.status_code} for ip={ip}: {resp.text}"
+            )
+            return False
+
+    except Exception as e:
+        logger.error(f"[EXECUTOR] MongoDB blocklist POST failed for ip={ip}: {e}")
         return False
 
 

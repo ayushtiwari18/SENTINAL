@@ -1,9 +1,9 @@
 /**
  * geminiService.js — SENTINAL Gemini AI integration
  *
- * Verified free-tier model chain (March 2026):
- *   1. gemini-2.5-flash-lite  — 15 RPM, 1000 RPD — lightest quota, try first
- *   2. gemini-2.5-flash        — 10 RPM,  250 RPD — fallback if lite exhausted
+ * Verified free-tier model chain (April 2026):
+ *   1. gemini-2.0-flash   — stable GA, 15 RPM, 1500 RPD — primary
+ *   2. gemini-1.5-flash   — stable GA, 15 RPM,  500 RPD — fallback if 2.0 exhausted
  *
  * Capabilities:
  *   1. chat()           — Security Co-Pilot Q&A grounded in live attack telemetry (+ history + suggestions + citations)
@@ -17,9 +17,12 @@ const { GoogleGenerativeAI } = require('@google/generative-ai');
 const logger = require('../utils/logger');
 
 // ── Verified model chain ────────────────────────────────────────────────────────────────────
+// FIX 1: gemini-2.5-flash-lite and gemini-2.5-flash do not exist as stable GA models.
+// They returned 404 which caused generateWithFallback() to throw immediately,
+// breaking all AI features. Using correct stable free-tier models below.
 const MODEL_CHAIN = [
-  'gemini-2.5-flash-lite',
-  'gemini-2.5-flash',
+  'gemini-2.0-flash',   // primary  — stable GA, highest free quota
+  'gemini-1.5-flash',   // fallback — stable GA, broad availability
 ];
 
 let _genAI  = null;
@@ -152,6 +155,8 @@ GUIDELINES FOR ANSWERING:
 `;
 
 // ── Core: generate with model fallback + one retry per model on 429 ─────────────────
+// FIX 1 (continued): 404 errors now continue to the next model instead of throwing,
+// so if a model name becomes unavailable it gracefully falls back.
 async function generateWithFallback(prompt) {
   const models = getModels();
   if (!models) return null;
@@ -170,8 +175,9 @@ async function generateWithFallback(prompt) {
         const is404 = msg.includes('404');
 
         if (is404) {
-          logger.error(`[GeminiService] 404: model ${modelName} not found. Check MODEL_CHAIN.`);
-          throw err;
+          // Model not found — log and try next model instead of throwing
+          logger.warn(`[GeminiService] 404: model ${modelName} not found — trying next model in chain.`);
+          break; // break inner attempt loop, continue to next model
         }
         if (is429 && attempt === 1) {
           const delay = getRetryDelay(msg);
@@ -212,7 +218,10 @@ async function* generateStreamWithFallback(prompt) {
       const msg   = err.message || '';
       const is429 = msg.includes('429');
       const is404 = msg.includes('404');
-      if (is404) throw err;
+      if (is404) {
+        logger.warn(`[GeminiService] 404: model ${modelName} not found on stream — trying next model.`);
+        continue;
+      }
       if (is429) {
         logger.warn(`[GeminiService] ${modelName} rate-limited on stream — trying next model`);
         continue;
@@ -238,12 +247,16 @@ function safeParseJSON(text) {
  * buildAttackContext — builds numbered telemetry lines for the prompt.
  * Returns { context: string, indexedIds: string[] } so callers can map
  * Gemini's SOURCES: [1,3] back to real MongoDB _id values.
+ *
+ * FIX 3: slice limit raised from 40 → 50 to match the 50-event MongoDB
+ * fetch in the /chat route. Previously events 41-50 were fetched but
+ * silently dropped, causing Copilot to miss the most recent data.
  */
 function buildAttackContext(attacks) {
   if (!attacks || !attacks.length) return { context: 'No recent attack data available.', indexedIds: [] };
   const indexedIds = [];
   const lines = attacks
-    .slice(0, 40)
+    .slice(0, 50) // FIX 3: was 40, now matches the 50-event DB fetch limit
     .map((a, i) => {
       indexedIds.push(a._id ? String(a._id) : null);
       return (
@@ -355,9 +368,21 @@ async function* chatStream(question, recentAttacks, history = []) {
 
   try {
     let fullText = '';
+    let metadataStarted = false;
+
     for await (const chunk of generateStreamWithFallback(prompt)) {
       fullText += chunk;
-      if (!fullText.includes('SUGGESTIONS:') && !fullText.includes('SOURCES:')) {
+
+      // FIX 2: Previously used fullText.includes() which suppressed chunks as soon
+      // as any earlier part of the answer contained the word "SOURCES" or "SUGGESTIONS"
+      // (e.g. "I have no sources to cite"). Now we only suppress once the actual
+      // metadata section has started (i.e. the literal "SUGGESTIONS:" or "SOURCES:"
+      // marker appears at the start of a line in the accumulated buffer).
+      if (!metadataStarted) {
+        metadataStarted = /(?:^|\n)(?:SUGGESTIONS:|SOURCES:)/.test(fullText);
+      }
+
+      if (!metadataStarted) {
         yield { type: 'chunk', text: chunk };
       }
     }
@@ -469,7 +494,7 @@ async function correlate(attacks) {
   const multiTypeIps = topIps.filter(x => x.types.length > 1);
 
   const clusterSummary = topIps.map(x =>
-    `IP ${x.ip}: ${x.count} attacks, types=[${x.types.join(',')}], severity=[${x.severities.join(',')}], status=[${x.statuses.join(',')}]`
+    `IP ${x.ip}: ${x.count} attacks, types=[${x.types.join(',')}], severity=[${x.severities.join(',')}], status=[${x.statuses.join(',')}], firstSeen=${x.firstSeen || 'unknown'}, lastSeen=${x.lastSeen || 'unknown'}`
   ).join('\n');
 
   const staticFallback = {
@@ -492,6 +517,8 @@ async function correlate(attacks) {
 
   if (!getModels()) return { ...staticFallback, errorCode: 'NO_API_KEY' };
 
+  // FIX 4: Added firstSeen/lastSeen to the Gemini JSON schema so campaign cards
+  // render timeline data correctly in the UI instead of showing undefined.
   const prompt =
     `You are SENTINEL AI performing threat intelligence correlation.\n\n` +
     `ATTACK CLUSTER SUMMARY (${attacks.length} events, ${Object.keys(byIp).length} unique IPs):\n` +
@@ -499,7 +526,7 @@ async function correlate(attacks) {
     `Based on this data, identify coordinated attack campaigns, shared attacker infrastructure, and attack chains.\n\n` +
     `Return ONLY a JSON object with EXACTLY these fields:\n` +
     `{\n` +
-    `  "campaigns": [{ "name": string, "sourceIps": string[], "attackTypes": string[], "severity": string, "eventCount": number, "assessment": string }],\n` +
+    `  "campaigns": [{ "name": string, "sourceIps": string[], "attackTypes": string[], "severity": string, "eventCount": number, "firstSeen": string|null, "lastSeen": string|null, "assessment": string }],\n` +
     `  "sharedInfrastructure": [{ "ips": string[], "evidence": string }],\n` +
     `  "attackChains": [{ "sequence": string[], "description": string }],\n` +
     `  "riskScore": number (0-100),\n` +

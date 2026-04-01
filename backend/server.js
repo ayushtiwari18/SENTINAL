@@ -87,7 +87,7 @@ app.use('/api/health',         require('./src/routes/health'));
 app.use('/api/pcap',           require('./src/routes/pcap'));
 app.use('/api/actions',        require('./src/routes/actions'));
 app.use('/api/audit',          require('./src/routes/audit'));
-app.use('/api/nexus',          require('./src/routes/armoriq'));
+app.use('/api/nexus',          require('./src/routes/nexus'));
 app.use('/api/gemini',         require('./src/routes/gemini'));
 app.use('/api/blocklist',      require('./src/routes/blocklist'));   // ← IP block enforcement
 

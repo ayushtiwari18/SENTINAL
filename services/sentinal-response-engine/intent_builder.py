@@ -12,7 +12,7 @@ Fallback chain:
   1. LLM proposes actions via Gemini Flash     (LLM_ENABLED=true, API key set)
   2. _rule_derive_actions()                    (fallback if LLM fails or disabled)
 
-The output of BOTH paths feeds into openclaw_runtime.evaluate() (PolicyGuard)
+The output of BOTH paths feeds into policyguard_runtime.evaluate() (PolicyGuard)
 unchanged — the policy enforcement layer is never bypassed.
 """
 
@@ -187,7 +187,7 @@ def build_intents(ctx: AttackContext) -> list[IntentModel]:
     """
     Build a list of IntentModels from an attack context.
     Uses LLM reasoning when enabled, rule engine as fallback.
-    Either way, all proposed actions pass through PolicyGuard (openclaw_runtime.evaluate()).
+    Either way, all proposed actions pass through PolicyGuard (policyguard_runtime.evaluate()).
     """
     if LLM_ENABLED:
         proposed_actions = _llm_derive_actions(ctx)

@@ -2,8 +2,7 @@
 
 > **Last updated:** 2026-03-31
 
-This folder is the authoritative, split reference for the SENTINAL project.  
-The old `MASTER_REFERENCE.md` in the root is kept for history — **do not edit it**.  
+This folder is the authoritative, split reference for the SENTINAL project.    
 All active edits go into the files below.
 
 ---
@@ -13,7 +12,7 @@ All active edits go into the files below.
 | # | File | Contents |
 |---|------|----------|
 | — | **[INDEX.md](./INDEX.md)** | This file — quick lookup |
-| 01 | **[01-architecture.md](./01-architecture.md)** | System diagram, port registry, 4 request flows, OpenClaw flow, deployment topology |
+| 01 | **[01-architecture.md](./01-architecture.md)** | System diagram, port registry, 4 request flows, PolicyGuard flow, deployment topology |
 | 02 | **[02-repo-structure.md](./02-repo-structure.md)** | Full directory tree (verified), key files, root scripts |
 | 03 | **[03-services.md](./03-services.md)** | Each service: purpose, tech stack, env vars, run commands |
 | 04 | **[04-features.md](./04-features.md)** | Feature breakdown: detection, response, forensics, AI |

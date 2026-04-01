@@ -29,7 +29,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from models import RespondRequest, RespondResponse, AttackContext, ActionResult
 from intent_builder import build_intents
-import openclaw_runtime
+import policyguard_runtime
 from policy_engine import evaluate as _fallback_evaluate
 from executor import execute
 from audit_logger import log_decision
@@ -67,7 +67,7 @@ def _evaluate_with_fallback(intent):
     NEVER raises — always returns a DecisionModel.
     """
     try:
-        return openclaw_runtime.evaluate(intent)
+        return policyguard_runtime.evaluate(intent)
     except Exception as exc:
         logger.error(f"[POLICY_GUARD] Runtime error: {exc} — falling back to policy_engine")
         return _fallback_evaluate(intent)
@@ -76,7 +76,7 @@ def _evaluate_with_fallback(intent):
 @app.get("/health")
 def health():
     """Standard SENTINAL health probe. Used by Gateway serviceHealthService."""
-    policy_guard_ok = openclaw_runtime.is_loaded()
+    policy_guard_ok = policyguard_runtime.is_loaded()
     return {
         "status":             "ok",
         "service":            "sentinal-response-engine",

@@ -69,7 +69,7 @@
             "listen": "test",
             "script": { "exec": [
               "pm.test('Nexus online', () => pm.response.to.have.status(200));",
-              "pm.test('OpenClaw loaded', () => { const b = pm.response.json(); pm.expect(b.openclaw_loaded).to.be.true; });"
+              "pm.test('PolicyGuard loaded', () => { const b = pm.response.json(); pm.expect(b.policyguard_loaded).to.be.true; });"
             ]}
           }]
         }
@@ -380,7 +380,7 @@
 
     {
       "name": "03 — Nexus Agent — Direct Enforcement Tests",
-      "description": "Test Nexus's OpenClaw enforcement engine directly on :8004.\n\nALLOW: medium/low severity → safe actions auto-execute (actionsExecuted array of strings).\nBLOCK: critical/high severity → dangerous actions queued (actionsQueued array of objects with .action field).\n\nNOTE: actionsExecuted = array of action name strings.\nactionsQueued = array of objects: [{ action, status, reason, ... }]",
+      "description": "Test Nexus's policyguard enforcement engine directly on :8004.\n\nALLOW: medium/low severity → safe actions auto-execute (actionsExecuted array of strings).\nBLOCK: critical/high severity → dangerous actions queued (actionsQueued array of objects with .action field).\n\nNOTE: actionsExecuted = array of action name strings.\nactionsQueued = array of objects: [{ action, status, reason, ... }]",
       "item": [
         {
           "name": "[ALLOW] SQLi Medium — Auto-Execute Safe Actions",

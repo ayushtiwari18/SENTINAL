@@ -345,7 +345,7 @@ All automated and manual response actions are logged here.
       "_id": "...",
       "action": "BLOCK_IP",
       "target": "203.0.113.42",
-      "source": "openclaw_runtime",
+      "source": "runtime",
       "timestamp": "..."
     }
   ]

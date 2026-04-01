@@ -117,7 +117,7 @@
 							"script": {
 								"exec": [
 									"pm.test('Nexus online', () => pm.response.to.have.status(200));",
-									"pm.test('OpenClaw loaded', () => { const b = pm.response.json(); pm.expect(b.openclaw_loaded).to.be.true; });"
+									"pm.test('PolicyGuard loaded', () => { const b = pm.response.json(); pm.expect(b.policyguard_loaded).to.be.true; });"
 								],
 								"type": "text/javascript",
 								"id": "3c23ee82-b6a1-4bc8-87c0-27f7f23c8ca6"
@@ -1093,7 +1093,7 @@
 				}
 			],
 			"id": "39541497-9a1b24dc-e6c2-4680-abc4-5197de47a1df",
-			"description": "Test Nexus's OpenClaw enforcement engine directly on :8004.\nALLOW tests: medium/low severity → safe actions auto-execute.\nBLOCK tests: critical/high severity → dangerous actions queued."
+			"description": "Test Nexus's PolicyGuard enforcement engine directly on :8004.\nALLOW tests: medium/low severity → safe actions auto-execute.\nBLOCK tests: critical/high severity → dangerous actions queued."
 		},
 		{
 			"name": "04 — Gateway API — Nexus Trigger (Full Pipeline)",

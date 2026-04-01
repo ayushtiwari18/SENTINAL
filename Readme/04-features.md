@@ -4,14 +4,14 @@
 
 ---
 
-## OpenClaw Enforcement Architecture
+## PolicyGuard Enforcement Architecture
 
 | File | Role |
 |------|------|
 | `main.py` | FastAPI app — `_evaluate_with_fallback()` per intent |
 | `intent_builder.py` | Builds 5–6 `IntentModel` objects per attack |
-| `openclaw_runtime.py` | **PRIMARY** — loads `policy.yaml`, RULE_001→004→DEFAULT |
-| `policy_engine.py` | **FALLBACK** — hardcoded rules, used if openclaw_runtime crashes |
+| `runtime.py` | **PRIMARY** — loads `policy.yaml`, RULE_001→004→DEFAULT |
+| `policy_engine.py` | **FALLBACK** — hardcoded rules, used if runtime crashes |
 | `executor.py` | Fires ALLOW decisions (HTTP 200/201 check, no raise_for_status) |
 | `audit_logger.py` | POSTs every decision to `/api/audit/ingest` |
 | `policy.yaml` | Declarative: allowed_actions, blocked_actions, risk_rules, default:BLOCK |
@@ -65,7 +65,7 @@ brute_force · hpp · xxe · webshell · recon · ddos · unknown
 | Socket.io — 6 events | Live dashboard confirmed |
 | Detection pipeline | sqli/xss/traversal/command_injection classified |
 | PCAP Processor | 10/10 tests pass |
-| Nexus + OpenClaw | 7/7 pytest pass, live enforcement confirmed |
+| Nexus + Autonomous Response | 7/7 pytest pass, live enforcement confirmed |
 | React Dashboard — 14 pages | Live data, all pages functional |
 | SimulateAttack page `/simulate` | One-click attack simulator, live socket feed |
 | Postman Collection | 40+ requests, 8 folders, automated test scripts |

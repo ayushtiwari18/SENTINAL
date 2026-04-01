@@ -2,13 +2,13 @@
 Integration Tests — SENTINAL Response Engine Enforcement Pipeline
 ------------------------------------------------------------------
 Tests the complete enforcement flow:
-  build_intents() → openclaw_runtime.evaluate() → DecisionModel
+  build_intents() → policyguard_runtime.evaluate() → DecisionModel
 
 All 6 required scenarios:
   1. Allowed action (send_alert)
   2. Blocked action (permanent_ban_ip)
   3. Blocked by critical risk level
-  4. Fallback to policy_engine on OpenClaw crash
+  4. Fallback to policy_engine on policyguard crash
   5. Invalid / missing intent fields (validation)
   6. Full /respond endpoint with mixed attack context
 
@@ -31,7 +31,7 @@ from models import (
 )
 from intent_builder import build_intents
 from policy_engine import evaluate as fallback_evaluate
-import openclaw_runtime
+import policyguard_runtime
 
 
 # ---------------------------------------------------------------------------
@@ -113,7 +113,7 @@ def critical_attack_context():
 
 def test_allow_send_alert(low_risk_intent):
     """send_alert with low risk level must be ALLOWED by policy."""
-    decision = openclaw_runtime.evaluate(low_risk_intent)
+    decision = policyguard_runtime.evaluate(low_risk_intent)
     assert decision.decision == "ALLOW", (
         f"Expected ALLOW for send_alert, got {decision.decision}: {decision.reason}"
     )
@@ -128,7 +128,7 @@ def test_allow_send_alert(low_risk_intent):
 
 def test_block_permanent_ban(blocked_action_intent):
     """permanent_ban_ip must always be BLOCKED — it is on the blocked list."""
-    decision = openclaw_runtime.evaluate(blocked_action_intent)
+    decision = policyguard_runtime.evaluate(blocked_action_intent)
     assert decision.decision == "BLOCK", (
         f"Expected BLOCK for permanent_ban_ip, got {decision.decision}"
     )
@@ -141,25 +141,25 @@ def test_block_permanent_ban(blocked_action_intent):
 
 def test_block_critical_risk(critical_risk_intent):
     """Any action with risk_level=critical must be BLOCKED by risk rules."""
-    decision = openclaw_runtime.evaluate(critical_risk_intent)
+    decision = policyguard_runtime.evaluate(critical_risk_intent)
     assert decision.decision == "BLOCK", (
         f"Expected BLOCK for critical risk, got {decision.decision}"
     )
 
 
 # ---------------------------------------------------------------------------
-# Test 4: Fallback to policy_engine when OpenClaw raises
+# Test 4: Fallback to policy_engine when PolicyGuard raises RuntimeError
 # ---------------------------------------------------------------------------
 
-def test_fallback_on_openclaw_crash(low_risk_intent):
+def test_fallback_on_policyguard_crash(low_risk_intent):
     """
-    When openclaw_runtime.evaluate() raises RuntimeError,
+    When policyguard_runtime.evaluate() raises RuntimeError,
     the fallback (policy_engine.evaluate) must be called and
     still return a valid DecisionModel.
     """
-    with patch.object(openclaw_runtime, "evaluate", side_effect=RuntimeError("mock crash")):
+    with patch.object(policyguard_runtime, "evaluate", side_effect=RuntimeError("mock crash")):
         try:
-            result = openclaw_runtime.evaluate(low_risk_intent)
+            result = policyguard_runtime.evaluate(low_risk_intent)
             pytest.fail("Expected RuntimeError was not raised")
         except RuntimeError:
             # Confirm fallback engine still works
@@ -200,7 +200,7 @@ def test_full_pipeline_mixed_decisions(critical_attack_context):
     - BLOCK decisions for dangerous actions (permanent_ban_ip, shutdown_endpoint)
     """
     intents = build_intents(critical_attack_context)
-    decisions = [openclaw_runtime.evaluate(i) for i in intents]
+    decisions = [policyguard_runtime.evaluate(i) for i in intents]
 
     allow_decisions = [d for d in decisions if d.decision == "ALLOW"]
     block_decisions = [d for d in decisions if d.decision == "BLOCK"]

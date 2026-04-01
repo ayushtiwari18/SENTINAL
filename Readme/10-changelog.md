@@ -9,7 +9,7 @@
 | 2026-03-26 | 1.0 | Initial doc + PCAP Processor built |
 | 2026-03-26 | 2.0 | SENTINAL Response Engine + ActionQueue + AuditLog + sentinel-middleware |
 | 2026-03-26 | 3.0 | Pydantic models fix, executor safe HTTP, audit:new socket, Demo Target E2E |
-| 2026-03-26 | 4.0 | openclaw_runtime.py + policy.yaml. 4 redundant docs deleted |
+| 2026-03-26 | 4.0 | runtime.py + policy.yaml. 4 redundant docs deleted                    |
 | 2026-03-27 | 5.0 | MongoDB Atlas Track: Atlas Search, $facet, all 6 collections verified |
 | 2026-03-27 | 6.0 | Production deploy: PM2, env fixes, VITE_API_URL fix, Atlas IP allowlist |
 | 2026-03-27 | 7.0 | Full AWS EC2 deploy guide Parts A–M: .pem, EC2 launch, apt install, venvs, PM2 |

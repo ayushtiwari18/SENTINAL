@@ -32,7 +32,7 @@ from app.classifier import score_request
 from app.explainer import explain
 from app.decoder import decode_and_scan
 from app.features import extract_features
-# ── NEW: OpenClaw webhook router ────────────────────────────────────────────────────
+# ── NEW: PolicyGuard webhook router ────────────────────────────────────────────────────
 from app.webhook_router import router as webhook_router, fire_alert_background
 # ──────────────────────────────────────────────────────────────────────────────
 import json

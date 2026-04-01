@@ -41,7 +41,7 @@
 │  │     :8002        │  │    :8003)    │  │          :8005            │   │
 │  │                  │  │              │  │                           │   │
 │  │ app/             │  │ (pcap files) │  │ main.py                   │   │
-│  │  main.py         │  │              │  │ openclaw_runtime.py       │   │
+│  │  main.py         │  │              │  │ runtime.py                │   │
 │  │  classifier.py   │  └──────────────┘  │ intent_builder.py         │   │
 │  │  rules.py        │                    │ policy_engine.py          │   │
 │  │  features.py     │                    │ executor.py               │   │
@@ -109,7 +109,7 @@ Backend :3000
   ▼
 Sentinal Response Engine :8005
   │  intent_builder.py → build intent from attack context
-  │  openclaw_runtime.py → OpenClaw LLM runtime
+  │  runtime.py → LLM runtime
   │  policy_engine.py + policy.yaml → choose action
   │  executor.py → execute (block IP, alert, quarantine)
   │  audit_logger.py → log action to MongoDB
@@ -162,7 +162,7 @@ Client
 
 ---
 
-## OpenClaw Decision Flow (Response Engine)
+## Decision Flow (Response Engine)
 
 ```
 Attack Event Received

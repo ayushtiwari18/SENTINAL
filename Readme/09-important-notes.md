@@ -9,7 +9,7 @@
 ### Health Check (Always Do This First)
 ```bash
 curl http://localhost:3000/health
-curl http://localhost:8004/health   # must show openclaw_loaded:true
+curl http://localhost:8004/health   # must show policyguard_loaded:true
 ```
 
 ### Option A — Browser Attack Simulator (No Terminal Needed — Recommended for Judges)
@@ -57,7 +57,7 @@ curl -X POST http://localhost:8004/respond -H "Content-Type: application/json" \
 ```
 
 ### Judge Pitch
-> *"SENTINEL detects threats in real time and enforces responses through OpenClaw —
+> *"SENTINEL detects threats in real time and enforces responses through PolicyGuard —
 > reading from policy.yaml. Safe actions like send_alert execute automatically.
 > Dangerous actions like permanent_ban_ip are blocked and queued for human approval.
 > Every decision is logged with the exact policy rule that fired it."*
@@ -74,8 +74,8 @@ curl -X POST http://localhost:8004/respond -H "Content-Type: application/json" \
 - **`attackId` in action_queue/audit_log is a String** — never treat as ObjectId
 - **Always run `npm run build`** in `dashboard/` before restarting `sentinal-dashboard`
 - **`MONGO_URI` env var** — Joi validator will reject `MONGO_URL`. Must be exactly `MONGO_URI`.
-- **`openclaw_runtime.py` default is BLOCK** — fail-safe. Do not change the default.
-- **policy_engine.py is the fallback** — do not remove it even if openclaw_runtime works fine
+- **`runtime.py` default is BLOCK** — fail-safe. Do not change the default.
+- **policy_engine.py is the fallback** — do not remove it even if runtime works fine
 
 ---
 

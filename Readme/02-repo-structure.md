@@ -128,10 +128,10 @@ services/
 ├── Nexus-agent/             ← Nexus AI security agent  :8004
 │   └── blocklist.txt          ← IP/domain blocklist
 │
-├── sentinal-response-engine/  ← OpenClaw autonomous response  :8005
+├── sentinal-response-engine/  ← Autonomous response  :8005
 │   ├── main.py                ← FastAPI app, /respond endpoint
 │   ├── run.py                 ← Uvicorn launcher
-│   ├── openclaw_runtime.py    ← OpenClaw LLM reasoning engine
+│   ├── runtime.py             ← LLM reasoning engine
 │   ├── intent_builder.py      ← Build structured intent from attack context
 │   ├── policy_engine.py       ← Match intent to policy rules
 │   ├── policy.yaml            ← Declarative policy rules (YAML)
@@ -204,6 +204,6 @@ demo-target/
 | `backend/src/services/detectionConnector.js` | Calls detection engine — circuit breaker lives here |
 | `services/detection-engine/app/main.py` | POST /analyze — the ML inference endpoint |
 | `services/sentinal-response-engine/policy.yaml` | Declarative response policy — edit to change behavior |
-| `services/sentinal-response-engine/openclaw_runtime.py` | LLM autonomous response runtime |
+| `services/sentinal-response-engine/runtime.py` | LLM autonomous response runtime |
 | `ecosystem.config.js` | PM2 process definitions — update when adding services |
 | `.env.example` | Source of truth for all required env vars |

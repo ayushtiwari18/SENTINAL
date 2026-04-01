@@ -1,8 +1,8 @@
 """
-SENTINAL Detection Engine — OpenClaw Webhook Router
+SENTINAL Detection Engine — PolicyGuard Webhook Router
 ----------------------------------------------------
 Exposes POST /webhook/alert — called internally by main.py after a confirmed
-threat detection. Fires a structured natural-language alert to the OpenClaw
+threat detection. Fires a structured natural-language alert to the PolicyGuard
 inject endpoint so the LLM (Gemini 2.5 Flash) can reason about the threat
 and route it through PolicyGuard enforcement.
 
@@ -31,9 +31,9 @@ logger = logging.getLogger("detection-engine.webhook")
 # ---------------------------------------------------------------------------
 # Configuration — resolved from environment, safe defaults for local dev
 # ---------------------------------------------------------------------------
-OPENCLAW_INJECT_URL = os.getenv(
-    "OPENCLAW_INJECT_URL",
-    "http://localhost:9000/inject"   # default OpenClaw inject port
+POLICYGUARD_INJECT_URL = os.getenv(
+    "POLICYGUARD_INJECT_URL",
+    "http://localhost:9000/inject"   # default PolicyGuard inject port
 )
 WEBHOOK_TIMEOUT_SEC  = float(os.getenv("WEBHOOK_TIMEOUT_SEC", "4.0"))
 WEBHOOK_MAX_RETRIES  = int(os.getenv("WEBHOOK_MAX_RETRIES", "2"))
@@ -86,14 +86,14 @@ def _build_alert_text(alert: ThreatAlert) -> str:
 # ---------------------------------------------------------------------------
 # Core delivery function — async, non-blocking, retrying
 # ---------------------------------------------------------------------------
-async def _deliver_to_openclaw(alert: ThreatAlert) -> None:
+async def _deliver_to_policyguard(alert: ThreatAlert) -> None:
     """
-    Attempts to POST the alert text to OpenClaw's inject endpoint.
+    Attempts to POST the alert text to PolicyGuard's inject endpoint.
     Retries up to WEBHOOK_MAX_RETRIES times with 1-second backoff.
     Never raises — detection pipeline is never disrupted.
     """
     if not WEBHOOK_ENABLED:
-        logger.info("[WEBHOOK] WEBHOOK_ENABLED=false — skipping OpenClaw delivery")
+        logger.info("[WEBHOOK] WEBHOOK_ENABLED=false — skipping PolicyGuard delivery")
         return
 
     alert_text = _build_alert_text(alert)
@@ -102,17 +102,17 @@ async def _deliver_to_openclaw(alert: ThreatAlert) -> None:
     for attempt in range(1, WEBHOOK_MAX_RETRIES + 1):
         try:
             async with httpx.AsyncClient(timeout=WEBHOOK_TIMEOUT_SEC) as client:
-                resp = await client.post(OPENCLAW_INJECT_URL, json=payload)
+                resp = await client.post(POLICYGUARD_INJECT_URL, json=payload)
                 if resp.status_code in (200, 201, 202):
                     logger.info(
-                        f"[WEBHOOK] Alert delivered to OpenClaw (attempt {attempt}) "
+                        f"[WEBHOOK] Alert delivered to PolicyGuard (attempt {attempt}) "
                         f"logId={alert.logId} threat={alert.threat_type} "
                         f"severity={alert.severity} → HTTP {resp.status_code}"
                     )
                     return
                 else:
                     logger.warning(
-                        f"[WEBHOOK] OpenClaw returned HTTP {resp.status_code} "
+                        f"[WEBHOOK] PolicyGuard returned HTTP {resp.status_code} "
                         f"(attempt {attempt}/{WEBHOOK_MAX_RETRIES}) "
                         f"logId={alert.logId}"
                     )
@@ -120,11 +120,11 @@ async def _deliver_to_openclaw(alert: ThreatAlert) -> None:
             logger.warning(
                 f"[WEBHOOK] Timeout after {WEBHOOK_TIMEOUT_SEC}s "
                 f"(attempt {attempt}/{WEBHOOK_MAX_RETRIES}) "
-                f"logId={alert.logId} url={OPENCLAW_INJECT_URL}"
+                f"logId={alert.logId} url={POLICYGUARD_INJECT_URL}"
             )
         except httpx.ConnectError:
             logger.warning(
-                f"[WEBHOOK] OpenClaw unreachable at {OPENCLAW_INJECT_URL} "
+                f"[WEBHOOK] PolicyGuard unreachable at {POLICYGUARD_INJECT_URL} "
                 f"(attempt {attempt}/{WEBHOOK_MAX_RETRIES}) — "
                 f"detection continues normally"
             )
@@ -141,7 +141,7 @@ async def _deliver_to_openclaw(alert: ThreatAlert) -> None:
         f"[WEBHOOK] All {WEBHOOK_MAX_RETRIES} delivery attempts failed for "
         f"logId={alert.logId} threat={alert.threat_type}. "
         f"Detection result was still returned to caller. "
-        f"OpenClaw response path is degraded."
+        f"PolicyGuard response path is degraded."
     )
 
 
@@ -153,7 +153,7 @@ async def _deliver_to_openclaw(alert: ThreatAlert) -> None:
 @router.post("/webhook/alert", status_code=202)
 async def webhook_alert(alert: ThreatAlert):
     """
-    Receives a confirmed threat detection and fires it to OpenClaw.
+    Receives a confirmed threat detection and fires it to PolicyGuard.
     Returns 202 Accepted immediately — delivery is async.
     The response to the original /analyze caller is never delayed.
     """
@@ -162,14 +162,14 @@ async def webhook_alert(alert: ThreatAlert):
         f"type={alert.threat_type} severity={alert.severity} "
         f"ip={alert.ip} logId={alert.logId}"
     )
-    # Fire-and-forget: OpenClaw delivery does not block response
-    asyncio.create_task(_deliver_to_openclaw(alert))
+    # Fire-and-forget: PolicyGuard delivery does not block response
+    asyncio.create_task(_deliver_to_policyguard(alert))
     return {
         "accepted":    True,
         "logId":       alert.logId,
         "threat_type": alert.threat_type,
         "severity":    alert.severity,
-        "message":     "Alert queued for OpenClaw delivery"
+        "message":     "Alert queued for PolicyGuard delivery"
     }
 
 
@@ -191,7 +191,7 @@ def fire_alert_background(app_state, alert_data: dict) -> None:
     try:
         loop = asyncio.get_event_loop()
         if loop.is_running():
-            asyncio.create_task(_deliver_to_openclaw(alert))
+            asyncio.create_task(_deliver_to_policyguard(alert))
         else:
             logger.warning("[WEBHOOK] No running event loop — skipping async delivery")
     except Exception as exc:

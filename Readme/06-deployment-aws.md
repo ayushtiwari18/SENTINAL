@@ -131,9 +131,9 @@ curl http://localhost:8002/health
 curl http://localhost:8003/health
 curl http://localhost:8004/health
 
-# Nexus openclaw check
+# Nexus policyguard check
 curl http://localhost:8004/health
-# Must return: { "openclaw_loaded": true, "enforcement": "PolicyGuard-v1" }
+# Must return: { "policyguard_loaded": true, "enforcement": "PolicyGuard-v1" }
 ```
 
 ```

@@ -3,14 +3,14 @@ LLM Reasoning + Policy Enforcement Tests
 -----------------------------------------
 Proves the complete agent chain:
   1. LLM proposes an action
-  2. Policy (openclaw_runtime) intercepts it
+  2. Policy (policyguard_runtime) intercepts it
   3. Policy blocks or allows it
   4. Execution occurs only if allowed
   5. Audit log records everything
 
 Required tests:
   - test_agent_reasoning          : LLM/rule engine proposes actions
-  - test_policy_interception      : openclaw_runtime intercepts every intent
+  - test_policy_interception      : policyguard_runtime intercepts every intent
   - test_blocked_action           : permanent_ban_ip is BLOCKED
   - test_allowed_action_execution : rate_limit_ip is ALLOWED → blocklist.txt written
   - test_llm_reasoning_field      : llm_reasoning field is set on IntentModel
@@ -33,7 +33,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from models import AttackContext, ProposedAction, IntentModel, DecisionModel
 from intent_builder import build_intents, _rule_derive_actions, _llm_derive_actions
 from executor import execute, BLOCKLIST_PATH
-import openclaw_runtime
+import policyguard_runtime
 
 
 # ---------------------------------------------------------------------------
@@ -88,19 +88,19 @@ def test_agent_reasoning(critical_ctx):
 
 
 # ---------------------------------------------------------------------------
-# Test 2 — Policy interception: openclaw_runtime evaluates EVERY intent
+# Test 2 — Policy interception: policyguard_runtime evaluates EVERY intent
 # ---------------------------------------------------------------------------
 
 def test_policy_interception(critical_ctx):
     """
-    Every intent built from an attack must pass through openclaw_runtime.
+    Every intent built from an attack must pass through policyguard_runtime.
     Verify that a DecisionModel is returned for each intent with correct fields.
     """
     with patch("intent_builder.LLM_ENABLED", False):
         intents = build_intents(critical_ctx)
 
     for intent in intents:
-        decision = openclaw_runtime.evaluate(intent)
+        decision = policyguard_runtime.evaluate(intent)
         assert isinstance(decision, DecisionModel)
         assert decision.decision in ("ALLOW", "BLOCK")
         assert decision.intent_id == intent.intent_id
@@ -116,7 +116,7 @@ def test_policy_interception(critical_ctx):
 def test_blocked_action(critical_ctx):
     """
     permanent_ban_ip is on the blocked_actions list in policy.yaml.
-    openclaw_runtime must return BLOCK with RULE_001.
+    policyguard_runtime must return BLOCK with RULE_001.
     This proves PolicyGuard enforcement is working.
     """
     intent = IntentModel(
@@ -129,7 +129,7 @@ def test_blocked_action(critical_ctx):
         ),
         llm_reasoning="llm",
     )
-    decision = openclaw_runtime.evaluate(intent)
+    decision = policyguard_runtime.evaluate(intent)
     assert decision.decision == "BLOCK", (
         f"permanent_ban_ip must be BLOCKED, got {decision.decision}: {decision.reason}"
     )
@@ -162,7 +162,7 @@ def test_allowed_action_execution(critical_ctx, tmp_path, monkeypatch):
     )
 
     # 1. Policy must ALLOW it
-    decision = openclaw_runtime.evaluate(intent)
+    decision = policyguard_runtime.evaluate(intent)
     assert decision.decision == "ALLOW", (
         f"rate_limit_ip must be ALLOWED, got {decision.decision}"
     )
@@ -248,7 +248,7 @@ def test_demo_scenario(critical_ctx):
     )
 
     # Policy MUST block it
-    decision = openclaw_runtime.evaluate(shutdown_intent)
+    decision = PolicyGuard_runtime.evaluate(shutdown_intent)
     assert decision.decision == "BLOCK", (
         "DEMO FAILED: shutdown_endpoint must be BLOCKED by PolicyGuard"
     )

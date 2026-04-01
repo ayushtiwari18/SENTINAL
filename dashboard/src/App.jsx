@@ -17,6 +17,7 @@ import SimulateAttack  from './pages/SimulateAttack';
 import ExplorePage     from './pages/ExplorePage';
 import CopilotPage     from './pages/CopilotPage';
 import CorrelationPage from './pages/CorrelationPage';
+import Blocklist       from './pages/Blocklist';
 import NotFound        from './pages/NotFound';
 
 export default function App() {
@@ -38,6 +39,7 @@ export default function App() {
           <Route path="/action-queue"  element={<ActionQueuePage />} />
           <Route path="/audit"         element={<AuditLog />} />
           <Route path="/simulate"      element={<SimulateAttack />} />
+          <Route path="/blocklist"     element={<Blocklist />} />
           {/* Gemini AI features */}
           <Route path="/copilot"       element={<CopilotPage />} />
           <Route path="/correlation"   element={<CorrelationPage />} />

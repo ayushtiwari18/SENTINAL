@@ -33,6 +33,12 @@ export const approveAction     = (id) => api.post(`/api/actions/${id}/approve`, 
 export const rejectAction      = (id) => api.post(`/api/actions/${id}/reject`,  { rejectedBy: 'human' }).then(unwrapSafe);
 export const getAuditLog       = (n = 50) => api.get(`/api/audit?limit=${n}`).then(unwrap);
 
+// ── Blocklist API calls ───────────────────────────────────────────────────
+export const getBlocklist  = ()          => api.get('/api/blocklist').then(unwrapSafe);
+export const checkBlockedIP = (ip)       => api.get(`/api/blocklist/check/${encodeURIComponent(ip)}`).then(unwrapSafe);
+export const blockIP       = (payload)   => api.post('/api/blocklist', payload).then(unwrapSafe);
+export const unblockIP     = (ip)        => api.delete(`/api/blocklist/${encodeURIComponent(ip)}`).then(unwrapSafe);
+
 // ── Gemini AI API calls ────────────────────────────────────────────────────
 
 // Single-shot chat (POST) — supports conversation history

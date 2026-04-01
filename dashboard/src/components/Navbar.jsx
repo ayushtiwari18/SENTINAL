@@ -1,32 +1,30 @@
 /**
- * Navbar — live badge counters for Alerts (unread) and Action Queue (pending)
+ * Navbar — live badge counters for Alerts (unread), Action Queue (pending),
+ * and Blocklist (active blocked IPs).
  *
  * FIX 1: NavLink children wrapped in explicit <span> to prevent
  *         "Functions are not valid as a React child" warning.
- *         When NavLink receives a function-style `style` prop AND conditional
- *         children, React Router can misinterpret children as a render function.
- *         Wrapping in a plain <span> makes the children unambiguously JSX.
  *
  * FIX 2: Removed all @media queries from inline style objects.
- *         CSS media queries are NOT valid in React inline styles — browser ignores
- *         them and React throws "Unsupported style property @media..." warning.
+ *         CSS media queries are NOT valid in React inline styles.
  */
 import { useEffect, useState, useCallback } from 'react';
 import { NavLink } from 'react-router-dom';
 import { useSocket } from '../hooks/useSocket';
-import { getAlerts, getPendingActions } from '../services/api';
+import { getAlerts, getPendingActions, getBlocklist } from '../services/api';
 
 const BASE_LINKS = [
   { to: '/dashboard',    label: 'Dashboard' },
-  { to: '/explore',      label: '🧭 Explore',   badge: null, highlight: true },
+  { to: '/explore',      label: '🧭 Explore',    badge: null,        highlight: true },
   { to: '/attacks',      label: 'Attacks' },
-  { to: '/alerts',       label: 'Alerts',        badge: 'alerts' },
+  { to: '/alerts',       label: 'Alerts',         badge: 'alerts' },
   { to: '/logs',         label: 'Logs' },
   { to: '/pcap',         label: 'PCAP' },
-  { to: '/action-queue', label: 'Actions',        badge: 'queue' },
+  { to: '/action-queue', label: 'Actions',         badge: 'queue' },
   { to: '/audit',        label: 'Audit' },
+  { to: '/blocklist',    label: '🚫 Blocklist',    badge: 'blocklist', highlight: false },
   { to: '/services',     label: 'Services' },
-  { to: '/simulate',     label: '⚔️ Simulate',   badge: null },
+  { to: '/simulate',     label: '⚔️ Simulate',    badge: null },
   { to: '/settings',     label: 'Settings' },
   { to: '/docs',         label: 'Docs' },
 ];
@@ -34,6 +32,7 @@ const BASE_LINKS = [
 export default function Navbar() {
   const [unreadAlerts, setUnreadAlerts] = useState(0);
   const [pendingQueue, setPendingQueue] = useState(0);
+  const [blockedCount, setBlockedCount] = useState(0);
 
   useEffect(() => {
     getAlerts(200)
@@ -41,6 +40,9 @@ export default function Navbar() {
       .catch(() => {});
     getPendingActions()
       .then(data => setPendingQueue((data || []).length))
+      .catch(() => {});
+    getBlocklist()
+      .then(data => setBlockedCount((data || []).length))
       .catch(() => {});
   }, []);
 
@@ -57,6 +59,8 @@ export default function Navbar() {
       return <span style={styles.badgeRed}>{unreadAlerts > 99 ? '99+' : unreadAlerts}</span>;
     if (key === 'queue' && pendingQueue > 0)
       return <span style={styles.badgeOrange}>{pendingQueue > 99 ? '99+' : pendingQueue}</span>;
+    if (key === 'blocklist' && blockedCount > 0)
+      return <span style={styles.badgeRed}>{blockedCount > 99 ? '99+' : blockedCount}</span>;
     return null;
   };
 
@@ -71,6 +75,8 @@ export default function Navbar() {
             ...styles.link,
             color: l.to === '/simulate'
               ? (isActive ? '#ff4444' : '#ff8888')
+              : l.to === '/blocklist'
+              ? (isActive ? '#f87171' : '#fca5a5')
               : l.highlight
               ? (isActive ? '#00d4aa' : '#00b894')
               : (isActive ? '#00d4aa' : '#aaa'),
@@ -83,8 +89,6 @@ export default function Navbar() {
             border:       l.highlight ? '1px solid rgba(0,212,170,0.2)' : '1px solid transparent',
           })}
         >
-          {/* FIX 1: Explicit <span> wrapper prevents React Router misreading
-              children as a render-prop function when style prop is also a function */}
           <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
             {l.label}
             {l.badge ? getBadge(l.badge) : null}
@@ -95,8 +99,6 @@ export default function Navbar() {
   );
 }
 
-// FIX 2: NO @media rules here — inline styles do not support media queries.
-// All values are static or computed in JSX above.
 const styles = {
   nav: {
     padding: '10px 20px',

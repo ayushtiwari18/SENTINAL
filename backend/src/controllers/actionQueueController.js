@@ -1,17 +1,14 @@
 /**
  * actionQueueController
  *
- * CRITICAL FIX: approveAction now EXECUTES the action, not just marks it approved.
+ * CRITICAL FIX v2: Handle both 'rate_limit_ip' AND 'permanent_ban_ip' actions.
  *
- * Previously: approve only saved status='approved' to ActionQueue + wrote AuditLog.
- *             The actual block NEVER happened — executor.py was never called.
+ * Nexus queues two types of IP block actions:
+ *   - rate_limit_ip     → temporary block (BLOCK_DURATION_MINUTES, default 60min)
+ *   - permanent_ban_ip  → permanent block (expiresAt: null, never auto-deleted)
  *
- * Now: if action === 'rate_limit_ip', we directly write to BlockedIP (MongoDB)
- *      so the block appears on /blocklist immediately and middleware enforces it.
- *      All other actions log + audit as before.
- *
- * This fix is intentionally Gateway-only (no Python process required) so it works
- * even when the Nexus/Response Engine service is NOT running.
+ * Both now write directly to BlockedIP MongoDB collection inside the Gateway.
+ * No Python / Response Engine process required.
  */
 const ActionQueue = require('../models/ActionQueue');
 const AuditLog    = require('../models/AuditLog');
@@ -19,7 +16,7 @@ const BlockedIP   = require('../models/BlockedIP');
 const emitter     = require('../utils/eventEmitter');
 const logger      = require('../utils/logger');
 
-// Default block duration when human approves rate_limit_ip (minutes). 0 = permanent.
+// Duration for temporary rate-limit blocks (minutes). 0 = permanent.
 const BLOCK_DURATION_MINUTES = parseInt(process.env.BLOCK_DURATION_MINUTES || '60', 10);
 
 /**
@@ -27,23 +24,29 @@ const BLOCK_DURATION_MINUTES = parseInt(process.env.BLOCK_DURATION_MINUTES || '6
  * Returns { success: bool, detail: string }
  */
 async function _executeApprovedAction(item) {
-  const { action, ip, attackId } = item;
+  const { action, ip, attackId, agentReason } = item;
 
-  if (action === 'rate_limit_ip') {
+  // ── IP blocking actions ───────────────────────────────────────────────────
+  if (action === 'rate_limit_ip' || action === 'permanent_ban_ip') {
     if (!ip || ip === 'unknown') {
-      return { success: false, detail: 'No IP to block on this action' };
+      return { success: false, detail: `No valid IP to block for action '${action}'` };
     }
 
-    const expiresAt = BLOCK_DURATION_MINUTES > 0
-      ? new Date(Date.now() + BLOCK_DURATION_MINUTES * 60 * 1000)
-      : null;
+    // permanent_ban_ip  → expiresAt: null  (MongoDB TTL index ignores null, so never deleted)
+    // rate_limit_ip     → expiresAt: now + BLOCK_DURATION_MINUTES
+    const isPermanent = action === 'permanent_ban_ip';
+    const expiresAt   = isPermanent
+      ? null
+      : BLOCK_DURATION_MINUTES > 0
+        ? new Date(Date.now() + BLOCK_DURATION_MINUTES * 60 * 1000)
+        : null;
 
     await BlockedIP.findOneAndUpdate(
       { ip },
       {
         ip,
-        reason:     `Human approved rate_limit_ip via Action Queue`,
-        attackType: item.attackId ? 'human-approved' : '',
+        reason:     agentReason || `${action} approved via Action Queue`,
+        attackType: 'nexus-approved',
         attackId:   attackId ? String(attackId) : '',
         expiresAt,
         blockedAt:  new Date(),
@@ -52,16 +55,19 @@ async function _executeApprovedAction(item) {
       { upsert: true, new: true, setDefaultsOnInsert: true }
     );
 
+    const expiryLabel = expiresAt ? expiresAt.toISOString() : 'never (permanent)';
     logger.info(
-      `[ACTIONS] ✓ rate_limit_ip executed: ${ip} blocked in MongoDB ` +
-      `(expires=${expiresAt ? expiresAt.toISOString() : 'never'})`
+      `[ACTIONS] ✓ ${action} executed: ${ip} blocked in MongoDB (expires=${expiryLabel})`
     );
-    return { success: true, detail: `${ip} written to BlockedIP collection` };
+    return {
+      success: true,
+      detail:  `${ip} written to BlockedIP — ${isPermanent ? 'PERMANENT' : `expires in ${BLOCK_DURATION_MINUTES}min`}`,
+    };
   }
 
-  // For all other actions (send_alert, log_attack, flag_for_review, generate_report)
-  // — these are handled by the Response Engine when it’s running.
-  // We log the approval and let the audit trail serve as the record.
+  // ── All other actions ─────────────────────────────────────────────────────
+  // send_alert, log_attack, flag_for_review, generate_report, shutdown_endpoint
+  // are handled by the Response Engine when running; acknowledge here.
   logger.info(`[ACTIONS] action='${action}' approved — no Gateway-side execution needed`);
   return { success: true, detail: `${action} acknowledged (no Gateway-side execution)` };
 }
@@ -94,7 +100,7 @@ const approveAction = async (req, res) => {
     item.approvedAt = new Date();
     await item.save();
 
-    // ── CRITICAL FIX: actually execute the action ───────────────────────────────
+    // Actually execute the action
     const execResult = await _executeApprovedAction(item);
     if (!execResult.success) {
       logger.warn(`[ACTIONS] Execution warning for ${item.action}: ${execResult.detail}`);
@@ -103,7 +109,7 @@ const approveAction = async (req, res) => {
     await AuditLog.create({
       action:            item.action,
       status:            'APPROVED',
-      reason:            `Human approved pending action. Execution: ${execResult.detail}`,
+      reason:            `Human approved. Execution: ${execResult.detail}`,
       policy_rule_id:    'HUMAN_OVERRIDE',
       enforcement_level: 'nexus-policy-v1',
       triggeredBy:       'human',
@@ -114,9 +120,9 @@ const approveAction = async (req, res) => {
 
     logger.info(`[ACTIONS] APPROVED + EXECUTED: ${item.action} for ip=${item.ip} attackId=${item.attackId}`);
     res.json({
-      success: true,
-      message: 'Action approved and executed',
-      data:    item,
+      success:   true,
+      message:   'Action approved and executed',
+      data:      item,
       execution: execResult,
     });
   } catch (err) {

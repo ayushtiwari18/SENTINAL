@@ -1,5 +1,26 @@
 const mongoose = require('mongoose');
 
+// ── NEW: Geo-IP sub-schema ────────────────────────────────────────────────────
+const GeoIntelSchema = new mongoose.Schema({
+  country:                { type: String,  default: 'Unknown' },
+  country_code:           { type: String,  default: 'XX' },
+  region:                 { type: String,  default: '' },
+  city:                   { type: String,  default: '' },
+  latitude:               { type: Number,  default: 0 },
+  longitude:              { type: Number,  default: 0 },
+  isp:                    { type: String,  default: '' },
+  org:                    { type: String,  default: '' },
+  asn:                    { type: String,  default: '' },
+  is_proxy:               { type: Boolean, default: false },
+  is_hosting:             { type: Boolean, default: false },
+  is_tor:                 { type: Boolean, default: false },
+  is_whitelisted:         { type: Boolean, default: false },
+  abuse_confidence_score: { type: Number,  default: 0, min: 0, max: 100 },
+  total_reports:          { type: Number,  default: 0 },
+  last_reported_at:       { type: Date,    default: null },
+}, { _id: false });
+// ─────────────────────────────────────────────────────────────────────────────
+
 const AttackEventSchema = new mongoose.Schema({
   requestId: {
     type: mongoose.Schema.Types.ObjectId,
@@ -60,10 +81,21 @@ const AttackEventSchema = new mongoose.Schema({
   responseCode: {
     type: Number,
     default: null
+  },
+  // ── NEW: embedded Geo-IP intelligence ──────────────────────────────────────
+  geoIntel: {
+    type: GeoIntelSchema,
+    default: null
   }
+  // ───────────────────────────────────────────────────────────────────────────
 }, {
   timestamps: true,
   collection: 'attackevents'
 });
+
+// ── NEW: compound index for country-based queries (heatmap API) ──────────────
+AttackEventSchema.index({ 'geoIntel.country_code': 1, createdAt: -1 });
+AttackEventSchema.index({ 'geoIntel.abuse_confidence_score': -1 });
+// ─────────────────────────────────────────────────────────────────────────────
 
 module.exports = mongoose.model('AttackEvent', AttackEventSchema);

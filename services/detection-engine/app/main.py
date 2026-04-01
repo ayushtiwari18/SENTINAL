@@ -32,9 +32,10 @@ from app.classifier import score_request
 from app.explainer import explain
 from app.decoder import decode_and_scan
 from app.features import extract_features
-# ── NEW: PolicyGuard webhook router ────────────────────────────────────────────────────
+from app.geo_intel import enrich_ip          # ← NEW: Geo-IP enrichment
+# ── PolicyGuard webhook router ───────────────────────────────────────────────
 from app.webhook_router import router as webhook_router, fire_alert_background
-# ──────────────────────────────────────────────────────────────────────────────
+# ────────────────────────────────────────────────────────────────────────────
 import json
 import logging
 
@@ -46,7 +47,7 @@ logger.info(f"[DETECTION-ENGINE] Loading env from: {_env_path}")
 logger.info(f"[DETECTION-ENGINE] .env found: {_env_path.exists()}")
 logger.info(f"[DETECTION-ENGINE] Port: {os.getenv('DETECTION_PORT', '8002')}")
 
-app = FastAPI(title="SENTINAL Detection Engine", version="1.1.0")
+app = FastAPI(title="SENTINAL Detection Engine", version="1.2.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -57,7 +58,7 @@ app.add_middleware(
 
 # ── Register webhook router (adds POST /webhook/alert) ──────────────────────
 app.include_router(webhook_router)
-# ──────────────────────────────────────────────────────────────────────────────
+# ────────────────────────────────────────────────────────────────────────────
 
 
 @app.middleware("http")
@@ -75,7 +76,7 @@ def health():
     return {
         "status":      "ok",
         "service":     "detection-engine",
-        "version":     "1.1.0",
+        "version":     "1.2.0",
         "uptime":      int(time.time() - _start_time),
         "port":        int(os.getenv("DETECTION_PORT", "8002")),
         "environment": os.getenv("NODE_ENV", os.getenv("ENVIRONMENT", "development")),
@@ -115,37 +116,35 @@ def analyze(request: AnalyzeRequest):
         else:
             attack_status = "unknown"
 
-        # ── CHANGE: pass url= so ML classifier can run predict_proba ────────────
         request_data = {"method": request.method, "body": request.body}
         score = score_request(request_data, rule_match, url=request.url or "")
+
+        # ── NEW: Geo-IP enrichment (runs for every request) ───────────────────
+        geo_info = enrich_ip(request.ip or "unknown")
         # ──────────────────────────────────────────────────────────────────────
 
-        # ── Determine if this is an attack ──────────────────────────────────────
-        # A threat is confirmed if:
-        #   (a) a rule matched, OR
-        #   (b) ML model scored above threshold (severity != 'none')
         is_attack = rule_match is not None or score["severity"] != "none"
 
         if is_attack:
-            # ── CHANGE: pass url= so Gemini can produce contextual explanation ─
             explanation = explain(
                 threat_type=rule_match["threat_type"] if rule_match else "ml_detected",
                 rule_id=rule_match["rule_id"] if rule_match else "ML",
                 severity=score["severity"],
                 ip=request.ip or "unknown",
-                url=request.url or "",        # ← new: enables Gemini LLM path
+                url=request.url or "",
             )
-            # ────────────────────────────────────────────────────────────────
 
             if rule_match:
                 logger.warning(
                     f"THREAT: {rule_match['threat_type']} from {request.ip} "
+                    f"[{geo_info.get('country_code','XX')}] "
                     f"confidence={score['confidence']} scored_by={score['scored_by']} "
                     f"encoded={adversarial_decoded}"
                 )
             else:
                 logger.warning(
                     f"THREAT (ML-only): ml_detected from {request.ip} "
+                    f"[{geo_info.get('country_code','XX')}] "
                     f"confidence={score['confidence']} scored_by={score['scored_by']}"
                 )
 
@@ -156,11 +155,12 @@ def analyze(request: AnalyzeRequest):
                 "rule_id":             rule_match["rule_id"] if rule_match else "ML",
                 "confidence":          score["confidence"],
                 "severity":            score["severity"],
-                "scored_by":           score["scored_by"],   # 'hybrid' | 'ml_model' | 'rule_engine'
+                "scored_by":           score["scored_by"],
                 "status":              attack_status,
                 "adversarial_decoded": adversarial_decoded,
                 "features":            features,
                 "explanation":         explanation,
+                "geo_intel":           geo_info,    # ← NEW
                 "message":             (
                     f"Rule {rule_match['rule_id']} matched: {rule_match['threat_type']}"
                     if rule_match else
@@ -178,6 +178,7 @@ def analyze(request: AnalyzeRequest):
                 "severity":            score["severity"],
                 "status":              attack_status,
                 "adversarial_decoded": adversarial_decoded,
+                "geo_intel":           geo_info,    # ← NEW: pass geo to Nexus
             })
 
             return result
@@ -195,6 +196,7 @@ def analyze(request: AnalyzeRequest):
             "adversarial_decoded": False,
             "features":            features,
             "explanation":         None,
+            "geo_intel":           geo_info,    # ← NEW: include even for clean requests
             "message":             "No threats detected"
         }
 
@@ -210,5 +212,30 @@ def analyze(request: AnalyzeRequest):
             "scored_by":       "error",
             "status":          "unknown",
             "explanation":     None,
+            "geo_intel":       None,
             "message":         "Analysis error — request logged"
         }
+
+
+# ── NEW: Geo-IP heatmap aggregation endpoint ──────────────────────────────────
+@app.get("/geo/heatmap")
+def geo_heatmap():
+    """
+    Returns aggregated attack counts per country from the in-memory cache.
+    The Node.js backend calls this and serves it to the dashboard.
+    Note: for production use, persist geo_info in MongoDB via the Node.js
+    AttackEvent model and aggregate there instead.
+    """
+    from app.geo_intel import _cache, _cache_lock
+    with _cache_lock:
+        snapshot = dict(_cache)
+
+    country_counts: dict = {}
+    for ip, (ts, data) in snapshot.items():
+        cc = data.get("country_code", "XX")
+        country = data.get("country", "Unknown")
+        if cc not in country_counts:
+            country_counts[cc] = {"country": country, "count": 0, "lat": data.get("latitude", 0), "lng": data.get("longitude", 0)}
+        country_counts[cc]["count"] += 1
+
+    return {"heatmap": list(country_counts.values())}

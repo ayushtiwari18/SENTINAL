@@ -5,6 +5,7 @@
 export const ROUTES = {
   LANDING:      '/',
   DASHBOARD:    '/dashboard',
+  EXPLORE:      '/explore',
   ATTACKS:      '/attacks',
   FORENSICS:    (id) => `/attacks/${id}`,
   ALERTS:       '/alerts',
@@ -12,6 +13,8 @@ export const ROUTES = {
   PCAP:         '/pcap',
   ACTION_QUEUE: '/action-queue',
   AUDIT:        '/audit',
+  BLOCKLIST:    '/blocklist',
+  GEO:          '/geo',
   SERVICES:     '/services',
   SETTINGS:     '/settings',
   SIMULATE:     '/simulate',
@@ -75,25 +78,41 @@ export const LOG_LIMIT     = 100;
 export const ALERT_LIMIT   = 100;
 export const AUDIT_LIMIT   = 100;
 
+// ── NAV_LINKS — single source of truth for Navbar & mobile menu ──────────────
+// Consumed by: dashboard/src/components/layout/Navbar.jsx
+// icon values must match keys in the `icons` map inside Navbar.jsx
 export const NAV_LINKS = [
-  { to: ROUTES.DASHBOARD,   label: 'Dashboard',   icon: 'LayoutDashboard' },
-  { to: ROUTES.ATTACKS,     label: 'Attacks',     icon: 'Zap',          badge: null },
-  { to: ROUTES.ALERTS,      label: 'Alerts',      icon: 'Bell',         badge: 'alerts' },
-  { to: ROUTES.LOGS,        label: 'Logs',        icon: 'ScrollText' },
-  { to: ROUTES.PCAP,        label: 'PCAP',        icon: 'FileSearch' },
-  { to: ROUTES.ACTION_QUEUE,label: 'Actions',     icon: 'ListChecks',   badge: 'queue' },
-  { to: ROUTES.AUDIT,       label: 'Audit',       icon: 'ClipboardList' },
-  { to: ROUTES.SERVICES,    label: 'Services',    icon: 'Activity' },
-  { to: ROUTES.COPILOT,     label: 'AI Copilot',  icon: 'Bot',          ai: true },
-  { to: ROUTES.CORRELATION, label: 'Correlation', icon: 'Network',      ai: true },
-  { to: ROUTES.SIMULATE,    label: 'Simulate',    icon: 'Sword',        danger: true },
-  { to: ROUTES.SETTINGS,    label: 'Settings',    icon: 'Settings' },
+  // ── Monitor ────────────────────────────────────────────────────────────────
+  { to: ROUTES.DASHBOARD,    label: 'Dashboard',   icon: 'LayoutDashboard' },
+  { to: ROUTES.ATTACKS,      label: 'Attacks',     icon: 'Zap' },
+  { to: ROUTES.ALERTS,       label: 'Alerts',      icon: 'Bell',         badge: 'alerts' },
+  { to: ROUTES.LOGS,         label: 'Logs',        icon: 'ScrollText' },
+  { to: ROUTES.GEO,          label: 'Geo IP Map',  icon: 'Globe' },
+
+  // ── Investigate ────────────────────────────────────────────────────────────
+  { to: ROUTES.EXPLORE,      label: 'Explore',     icon: 'Compass' },
+  { to: ROUTES.PCAP,         label: 'PCAP',        icon: 'FileSearch' },
+
+  // ── Enforce ────────────────────────────────────────────────────────────────
+  { to: ROUTES.BLOCKLIST,    label: 'Blocklist',   icon: 'ShieldOff',    badge: 'blocklist' },
+  { to: ROUTES.ACTION_QUEUE, label: 'Actions',     icon: 'ListChecks',   badge: 'queue' },
+  { to: ROUTES.AUDIT,        label: 'Audit',       icon: 'ClipboardList' },
+  { to: ROUTES.SIMULATE,     label: 'Simulate',    icon: 'Sword',        danger: true },
+
+  // ── AI ─────────────────────────────────────────────────────────────────────
+  { to: ROUTES.COPILOT,      label: 'AI Copilot',  icon: 'Bot',          ai: true },
+  { to: ROUTES.CORRELATION,  label: 'Correlation', icon: 'Network',      ai: true },
+
+  // ── System ─────────────────────────────────────────────────────────────────
+  { to: ROUTES.SERVICES,     label: 'Services',    icon: 'Activity' },
+  { to: ROUTES.SETTINGS,     label: 'Settings',    icon: 'Settings' },
+  { to: ROUTES.DOCS,         label: 'Docs',        icon: 'BookOpen' },
 ];
 
 export const SERVICE_NAMES = {
   gateway:   'Gateway API',
   detection: 'Detection Engine',
-  Nexus:   'SENTINAL Response Engine',
+  nexus:     'Nexus Agent',
   pcap:      'PCAP Processor',
   mongodb:   'MongoDB Atlas',
 };
